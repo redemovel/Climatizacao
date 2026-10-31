@@ -7,7 +7,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, orderBy,
-  limit, startAfter, serverTimestamp, Timestamp, runTransaction,
+  limit, startAfter, serverTimestamp, Timestamp, runTransaction, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = '@@ENV@@';          // 'prod' ou 'dev'

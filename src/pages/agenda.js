@@ -31,8 +31,33 @@ function marcarVista() {
     : `${fmtData(ini, { day: 'numeric', month: 'short' })} – ${fmtData(addDias(fim, -1), { day: 'numeric', month: 'short' })}`;
 }
 
+// Trabalhos de dias anteriores que ainda não foram concluídos (só quando o período inclui hoje).
+const cacheAtrasos = {};
+async function carregarAtrasos() {
+  const box = $('#atrasos');
+  const { ini, fim } = intervalo();
+  const hoje = inicioDia(new Date());
+  if (!(hoje >= ini && hoje < fim)) { box.innerHTML = ''; return; }
+  const tec = staff ? filtroTec : sessao.uid;
+  const chave = tec || '*';
+  if (!(chave in cacheAtrasos)) {
+    const c = [];
+    if (tec) c.push(where('tecnicoUid', '==', tec));
+    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '<', Timestamp.fromDate(hoje)), orderBy('dataPrevista'), limit(20));
+    try {
+      const snap = await getDocs(query(collection(db, 'folhas'), ...c));
+      const l = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      cacheAtrasos[chave] = l.length ? `<details class="atrasos" ${l.length <= 3 ? 'open' : ''}>
+        <summary>Em atraso <span class="badge estado-pendente-material">${l.length}${l.length === 20 ? '+' : ''}</span></summary>
+        ${l.map((f) => cartao(f, true)).join('')}</details>` : '';
+    } catch (e) { cacheAtrasos[chave] = ''; console.error(e); toast(erroFirebase(e), 'erro'); }
+  }
+  if ((staff ? filtroTec : sessao.uid) === tec) box.innerHTML = cacheAtrasos[chave];
+}
+
 async function carregar(mais = false) {
   marcarVista();
+  if (!mais) carregarAtrasos();
   if (!mais) { itens = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
   const { ini, fim } = intervalo();
   const tec = staff ? filtroTec : sessao.uid;
@@ -52,13 +77,13 @@ async function carregar(mais = false) {
   }
 }
 
-function cartao(f) {
+function cartao(f, comData = false) {
   const est = classeEstado(f.estado).replace('estado-', 'b-');
   const tel = linkTel(f.telefone);
   const mapa = linkMapa(f);
   return `<div class="lista-item ${est}" data-id="${esc(f.id)}">
     <div class="ag-item">
-      <div class="hora">${esc(fmtHora(f.dataPrevista))}</div>
+      <div class="hora">${comData ? `<small class="hora-data">${esc(fmtData(f.dataPrevista, { day: '2-digit', month: '2-digit' }))}</small>` : ''}${esc(fmtHora(f.dataPrevista))}</div>
       <div class="ag-corpo">
         <div class="li-topo"><span class="li-titulo">${esc(f.clienteNome)}</span>${badgeEstado(f.estado)}</div>
         <div class="li-sub">${esc([f.morada, f.localidade].filter(Boolean).join(', ') || 'Sem morada')}</div>
@@ -86,16 +111,18 @@ function render() {
     const fimDeSemana = d.getDay() === 0 || d.getDay() === 6;
     if (vista === 'semana' && fimDeSemana && !lista.length) continue;
     if (vista === 'semana') html += `<div class="dia-cab ${k === hoje ? 'hoje' : ''}"><span>${esc(fmtDiaSemana(d))}</span><span class="muted">${lista.length || ''}</span></div>`;
-    html += lista.length ? lista.map(cartao).join('') : `<div class="vazio" style="padding:${vista === 'dia' ? 28 : 8}px">Sem trabalhos agendados.</div>`;
+    html += lista.length ? lista.map((f) => cartao(f)).join('') : `<div class="vazio" style="padding:${vista === 'dia' ? 28 : 8}px">Sem trabalhos agendados.</div>`;
   }
   $('#lista').innerHTML = html;
 }
 
-$('#lista').addEventListener('click', (ev) => {
+const abrirCartao = (ev) => {
   if (ev.target.closest('[data-ext]')) return;
   const it = ev.target.closest('[data-id]');
   if (it) location.href = pagina('folhas', { id: it.dataset.id });
-});
+};
+$('#lista').addEventListener('click', abrirCartao);
+$('#atrasos').addEventListener('click', abrirCartao);
 $$('#segVista button').forEach((b) => b.onclick = () => {
   vista = b.dataset.v;
   try { localStorage.setItem('agenda.vista', vista); } catch (e) { /* sem storage */ }

@@ -80,6 +80,7 @@ function gerar() {
     [-3, 14, T1, 3, 'Instalação', 'Concluída'],
   ];
   for (let i = 0; i < 14; i++) F.push([-(4 + i), 9 + (i % 6), i % 2 ? T1 : T2, 10 + (i % 15), 'Manutenção', 'Concluída']);
+  F.push([-5, 10, T1, 4, 'AT', 'Pendente material']); // fo027: em atraso do João
 
   const ano = new Date().getFullYear();
   F.forEach((f, i) => {

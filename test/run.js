@@ -203,8 +203,33 @@ teste('agenda técnico: hoje mostra só os seus 3 trabalhos, ordenados por hora,
   igual(horas.join(' '), '09:00 11:00 15:00', 'ordem por hora');
   assert(await page.locator('#barraTec').isHidden(), 'técnico não vê seletor de técnicos');
   const leituras = await fake(page, () => window.__fake.leituras());
-  assert(leituras <= 4, 'leituras ao abrir a agenda: ' + leituras);
+  assert(leituras <= 6, 'leituras ao abrir a agenda: ' + leituras);
   for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'agenda ' + vp.width); await captura(page, 'agenda-tecnico-' + vp.width); }
+  semErros(page); await ctx.close();
+});
+
+teste('agenda: trabalhos em atraso aparecem no topo quando o período inclui hoje', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.evaluate(() => localStorage.setItem('agenda.vista', 'dia'));
+  await page.reload();
+  await page.waitForSelector('#atrasos .atrasos');
+  igual(await contar(page, '#atrasos .lista-item'), 1, 'um trabalho em atraso do João');
+  assert((await page.textContent('#atrasos')).includes('Ginásio FitPorto'), 'é a folha pendente');
+  await semOverflow(page, 'agenda com atrasos');
+  await captura(page, 'agenda-atrasos-375');
+  await page.click('#seg');
+  await page.waitForFunction(() => document.querySelector('#atrasos').innerHTML === '');
+  await page.click('#hoje');
+  await page.waitForSelector('#atrasos .atrasos');
+  await page.click('#atrasos .lista-item .li-titulo');
+  await page.waitForURL(/folhas\.html\?id=fo027/);
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'tecnico2');
+  await page.waitForSelector('#lista .lista-item');
+  await page.waitForTimeout(200);
+  igual(await contar(page, '#atrasos .lista-item'), 0, 'Pedro sem atrasos');
   semErros(page); await ctx.close();
 });
 
@@ -319,7 +344,7 @@ teste('folhas backoffice: filtros, paginação e pesquisa por número', async ()
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   assert(await page.locator('#maisWrap').isVisible(), 'botão carregar mais');
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 26);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 27);
   await page.selectOption('#fEstado', 'Concluída');
   await page.waitForFunction(() => [...document.querySelectorAll('#lista .badge')].every((b) => b.textContent === 'Concluída'));
   await page.selectOption('#fTec', 'u-tec2');
@@ -360,7 +385,7 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   await page.click('#ffGuardar');
   await page.waitForSelector('#detNumero');
   const num = await page.textContent('#detNumero');
-  igual(num, `FO-${new Date().getFullYear()}-0027`, 'número sequencial');
+  igual(num, `FO-${new Date().getFullYear()}-0028`, 'número sequencial');
   const id = new URL(page.url()).searchParams.get('id');
   const f = await fake(page, (id) => window.__fake.doc('folhas/' + id), id);
   igual(f.estado, 'Agendada', 'estado inicial');
@@ -464,6 +489,45 @@ teste('clientes: NIF obrigatório, validado e único; criar e editar', async () 
   await page.waitForSelector('.cliente-escolhido');
   assert((await page.textContent('.cliente-escolhido')).includes('Teste Climatização Lda'), 'cliente pré-escolhido');
   await semOverflow(page, 'ficha cliente');
+  semErros(page); await ctx.close();
+});
+
+teste('clientes: importação de CSV do PHC (ignora existentes, inválidos e repetidos)', async () => {
+  const { ctx, page } = await contexto({ viewport: MOVEIS[1] });
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/clientes.html');
+  await page.waitForSelector('#lista .lista-item');
+  const csv = [
+    'Nº;Nome;Nº Contribuinte;Morada;Cód.Postal;Local;Telefone;Email',
+    '101;"Café Central, Lda";501234560;Rua A 1;3700-001;São João da Madeira;256000001;cafe@x.pt',
+    '102;Oficina Ribeiro;504000004;Rua B;3800-002;Aveiro;;',
+    '103;Hotel Meliá Ria (repetido na BD);503198749;;;;;',
+    '104;NIF errado;123456780;;;;;',
+    '105;Consumidor final;999999990;;;;;',
+    '106;Café Central filial;501234560;;;;;',
+    '107;Empresa Espanhola;ES B12345678;;;Vigo;;',
+    ';;;;;;;',
+  ].join('\r\n');
+  // ficheiro em Windows-1252 (como o Excel/PHC costumam gravar)
+  const buf = Buffer.from(csv, 'latin1');
+  await page.click('#btnImportar');
+  await page.setInputFiles('#impFich', { name: 'clientes.csv', mimeType: 'text/csv', buffer: buf });
+  await page.waitForSelector('#impNovos');
+  igual(await page.textContent('#impNovos'), '3', 'clientes novos');
+  igual(await contar(page, '#impErros li'), 2, 'linhas com problemas (NIF errado + consumidor final)');
+  await captura(page, 'clientes-importar-414');
+  await page.click('#impOk');
+  await page.waitForSelector('.toast-ok >> text=3 clientes importados.');
+  const r = await fake(page, () => Object.values(window.__fake.db()).filter((c) => c.origem === 'importacao'));
+  igual(r.length, 3, 'gravados');
+  const cafe = r.find((c) => c.nif === '501234560');
+  igual(cafe.nome, 'Café Central, Lda', 'acentos e vírgula entre aspas');
+  igual(cafe.localidade, 'São João da Madeira', 'localidade');
+  igual(cafe.phcId, '101', 'n.º PHC');
+  assert(r.some((c) => c.nif === 'ESB12345678'), 'NIF estrangeiro');
+  await page.fill('#q', 'oficina');
+  await page.click('#fPesq button');
+  await page.waitForFunction(() => document.querySelector('#lista').textContent.includes('Oficina Ribeiro'));
   semErros(page); await ctx.close();
 });
 

@@ -4,41 +4,106 @@
       "collectionGroup": "folhas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tecnicoUid", "order": "ASCENDING" },
-        { "fieldPath": "dataPrevista", "order": "ASCENDING" }
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrevista",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "folhas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "estado", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "estado",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "folhas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tecnicoUid", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "folhas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tecnicoUid", "order": "ASCENDING" },
-        { "fieldPath": "estado", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "estado",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "folhas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "folhas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "estado",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrevista",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "folhas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "estado",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrevista",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

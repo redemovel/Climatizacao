@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 13:51 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 13:59 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -149,6 +149,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .ag-corpo { flex: 1; min-width: 0; }
 .ag-acoes { display: flex; gap: 8px; margin-top: 8px; }
 .ag-acoes .btn { flex: 1; }
+.hora-data { display: block; font-size: .72rem; font-weight: 600; color: var(--laranja); }
+.atrasos { background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 8px 8px 0; margin-bottom: 12px; }
+.atrasos summary { cursor: pointer; font-weight: 700; color: var(--laranja); padding: 4px 6px 8px; display: flex; gap: 8px; align-items: center; list-style: none; }
+.atrasos summary::-webkit-details-marker { display: none; }
+.atrasos summary::before { content: "▸"; transition: transform .15s; }
+.atrasos[open] summary::before { transform: rotate(90deg); }
 
 /* --- Modal (folha inferior no telemóvel) --- */
 .modal-fundo { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; justify-content: center; }
@@ -201,11 +207,11 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, orderBy,
-  limit, startAfter, serverTimestamp, Timestamp, runTransaction,
+  limit, startAfter, serverTimestamp, Timestamp, runTransaction, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-10-31 13:51 UTC';
+const BUILD = '2026-10-31 13:59 UTC';
 const PAGINA = 'index';
 
 const FIREBASE_CONFIG = {

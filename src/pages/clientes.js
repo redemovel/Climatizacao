@@ -48,6 +48,7 @@ $('#fPesq').onsubmit = async (ev) => {
 };
 $('#btnMais').onclick = () => comBotao($('#btnMais'), () => carregarLista(true));
 $('#btnNovo').onclick = () => abrirForm(null);
+$('#btnImportar').onclick = () => abrirImportacao();
 $('#lista').addEventListener('click', (ev) => {
   const a = ev.target.closest('a[data-id]');
   if (!a) return;
@@ -218,6 +219,137 @@ function abrirForm(c) {
       } catch (e) { erro(erroFirebase(e)); }
     });
   };
+}
+
+// ---------- Importação de clientes (CSV exportado do PHC ou do Excel) ----------
+const COLUNAS = {
+  nome: ['nome', 'name', 'designacao', 'cliente', 'nomecliente', 'razaosocial'],
+  nif: ['nif', 'ncont', 'contribuinte', 'ncontribuinte', 'nocontribuinte', 'numerocontribuinte', 'nipc', 'nifcliente', 'vat'],
+  morada: ['morada', 'endereco', 'address', 'morada1'],
+  codigoPostal: ['codpost', 'codigopostal', 'codpostal', 'cp'],
+  localidade: ['local', 'localidade', 'cidade', 'concelho'],
+  telefone: ['telefone', 'tlf', 'telef', 'telemovel', 'tlmvl', 'phone', 'tel'],
+  email: ['email', 'emailcliente'],
+  contacto: ['contacto', 'contato', 'pessoacontacto'],
+  phcId: ['no', 'n', 'numero', 'ncliente', 'numerocliente', 'nocliente', 'codcliente', 'codigo'],
+};
+
+function lerCSV(txt) {
+  const linha1 = txt.split(/\r?\n/)[0] || '';
+  const sep = [';', '\t', ','].map((c) => [c, linha1.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const linhas = [];
+  let campo = '', linha = [], aspas = false;
+  for (let i = 0; i < txt.length; i++) {
+    const ch = txt[i];
+    if (aspas) {
+      if (ch === '"') { if (txt[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += ch;
+    } else if (ch === '"') aspas = true;
+    else if (ch === sep) { linha.push(campo); campo = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && txt[i + 1] === '\n') i++;
+      linha.push(campo); campo = '';
+      if (linha.some((c) => c.trim())) linhas.push(linha);
+      linha = [];
+    } else campo += ch;
+  }
+  linha.push(campo);
+  if (linha.some((c) => c.trim())) linhas.push(linha);
+  return linhas;
+}
+
+async function lerFicheiroTexto(f) {
+  const buf = await f.arrayBuffer();
+  const utf8 = new TextDecoder('utf-8').decode(buf);
+  return utf8.includes('�') ? new TextDecoder('windows-1252').decode(buf) : utf8.replace(/^﻿/, '');
+}
+
+function abrirImportacao() {
+  const corpo = abrirModal('Importar clientes', `
+    <p class="muted">Ficheiro <b>CSV</b> exportado do PHC ou do Excel (Ficheiro → Guardar como → CSV).
+      A 1.ª linha tem os nomes das colunas: <b>Nome</b> e <b>NIF</b> (ou N.º Contribuinte) obrigatórios;
+      Morada, Código Postal, Localidade, Telefone, Email, Contacto e N.º cliente PHC opcionais.
+      Clientes com NIF já registado são ignorados.</p>
+    <input type="file" id="impFich" accept=".csv,.txt,text/csv">
+    <div id="impRes" style="margin-top:12px"></div>`);
+  $('#impFich', corpo).onchange = async (ev) => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const res = $('#impRes', corpo);
+    res.innerHTML = '<div class="vazio">A analisar…</div>';
+    try { await analisarImportacao(await lerFicheiroTexto(f), res); }
+    catch (e) { res.innerHTML = `<p class="msg-erro">${esc(erroFirebase(e))}</p>`; }
+  };
+}
+
+async function analisarImportacao(txt, res) {
+  const linhas = lerCSV(txt);
+  if (linhas.length < 2) { res.innerHTML = '<p class="msg-erro">O ficheiro não tem dados.</p>'; return; }
+  const cab = linhas[0].map((h) => normalizar(h).replace(/[^a-z0-9]/g, ''));
+  const col = {};
+  for (const [campo, nomes] of Object.entries(COLUNAS)) {
+    const i = cab.findIndex((h) => nomes.includes(h));
+    if (i >= 0) col[campo] = i;
+  }
+  if (col.nome === undefined || col.nif === undefined) {
+    res.innerHTML = `<p class="msg-erro">Não encontrei as colunas ${col.nome === undefined ? '«Nome»' : ''} ${col.nif === undefined ? '«NIF»' : ''}.
+      Colunas do ficheiro: ${esc(linhas[0].join(', '))}</p>`;
+    return;
+  }
+  const val = (l, c) => (col[c] === undefined ? '' : String(l[col[c]] || '').trim());
+  const novos = [], erros = [], vistos = new Set();
+  let repetidosFicheiro = 0;
+  linhas.slice(1).forEach((l, k) => {
+    const n = k + 2;
+    const nome = val(l, 'nome').replace(/\s+/g, ' ');
+    if (!nome && !val(l, 'nif')) return;
+    if (nome.length < 2) { erros.push(`Linha ${n}: sem nome`); return; }
+    const r = validarNIF(val(l, 'nif'));
+    if (!r.ok) { erros.push(`Linha ${n} (${nome}): ${r.erro}`); return; }
+    if (r.nif === '999999990') { erros.push(`Linha ${n} (${nome}): consumidor final — ignorado`); return; }
+    if (vistos.has(r.nif)) { repetidosFicheiro++; return; }
+    vistos.add(r.nif);
+    const loc = val(l, 'localidade');
+    novos.push({
+      nome, nomePesquisa: normalizar(nome), pesquisa: tokensPesquisa(nome, loc), nif: r.nif, nifPais: r.pais,
+      morada: val(l, 'morada'), codigoPostal: val(l, 'codigoPostal'), localidade: loc,
+      telefone: val(l, 'telefone'), email: val(l, 'email'), contacto: val(l, 'contacto'), observacoes: '',
+      origem: 'importacao', phcId: val(l, 'phcId') || null,
+    });
+  });
+  // NIF já existentes (consultas de 30 em 30)
+  const existentes = new Set();
+  const nifs = novos.map((c) => c.nif);
+  for (let i = 0; i < nifs.length; i += 30) {
+    res.innerHTML = `<div class="vazio">A verificar duplicados… ${Math.min(i + 30, nifs.length)}/${nifs.length}</div>`;
+    const snap = await getDocs(query(collection(db, 'clientes'), where('nif', 'in', nifs.slice(i, i + 30))));
+    snap.docs.forEach((d) => existentes.add(d.data().nif));
+  }
+  const aImportar = novos.filter((c) => !existentes.has(c.nif));
+  res.innerHTML = `
+    <div class="cartao" style="box-shadow:none;border:1px solid var(--linha)">
+      <div><b id="impNovos">${aImportar.length}</b> clientes novos para importar</div>
+      <div class="muted">${existentes.size} já existem · ${repetidosFicheiro} NIF repetidos no ficheiro · ${erros.length} linhas com problemas</div>
+    </div>
+    ${erros.length ? `<details><summary class="muted">Ver linhas com problemas</summary><ul class="muted" id="impErros">${erros.slice(0, 200).map((e) => `<li>${esc(e)}</li>`).join('')}</ul></details>` : ''}
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button>
+      ${aImportar.length ? `<button class="btn btn-primario" id="impOk">Importar ${aImportar.length} clientes</button>` : ''}</div>`;
+  if (!aImportar.length) return;
+  $('#impOk').onclick = () => comBotao($('#impOk'), async () => {
+    let feitos = 0;
+    for (let i = 0; i < aImportar.length; i += 400) {
+      const lote = writeBatch(db);
+      for (const c of aImportar.slice(i, i + 400)) {
+        lote.set(doc(collection(db, 'clientes')), { ...c, criadoEm: serverTimestamp(), criadoPor: sessao.uid, atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+      }
+      await lote.commit();
+      feitos += Math.min(400, aImportar.length - i);
+      $('#impNovos').textContent = `${feitos}/${aImportar.length}`;
+    }
+    fecharModal();
+    toast(`${feitos} clientes importados.`, 'ok', 5000);
+    listaCarregada = false;
+    carregarLista();
+  });
 }
 
 rota();
