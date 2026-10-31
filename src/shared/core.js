@@ -199,7 +199,7 @@ const MENU = [
 function montarCabecalho() {
   const nome = (SESSAO.nome || SESSAO.email || '').split(' ')[0];
   $('#topo').innerHTML = `
-    <a class="marca" href="${pagina('agenda')}">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
+    <a class="marca" href="${pagina('agenda')}"><img src="img/arvore-branca.png" alt="">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
     <div class="utilizador"><span class="u-nome">${esc(nome)}</span><span class="u-perfil">${esc(PERFIS[SESSAO.perfil] || SESSAO.perfil)}</span></div>
     <button class="btn-sair" id="btnSair" title="Terminar sessão">Sair</button>`;
   $('#btnSair').onclick = async () => { await signOut(auth); location.replace(pagina('index')); };

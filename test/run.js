@@ -38,7 +38,7 @@ for (const p of PAGINAS) for (const suf of ['', '-dev']) {
 console.log('✔ sintaxe OK (' + PAGINAS.length * 2 + ' páginas)');
 
 // ---------- servidor estático ----------
-const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.json': 'application/json', '.css': 'text/css' };
+const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.json': 'application/json', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 const servidor = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   const f = path.join(ROOT, u === '/' ? 'index.html' : u);
@@ -120,6 +120,11 @@ teste('login: palavra-passe errada mostra erro', async () => {
   await page.click('#btnEntrar');
   await page.waitForFunction(() => document.querySelector('#erro').textContent.length > 0);
   igual(await page.textContent('#erro'), 'Email ou palavra-passe incorretos.', 'mensagem de erro');
+  assert(await page.$eval('.login .logo img', (i) => i.complete && i.naturalWidth > 0), 'logótipo carregado');
+  for (const href of await page.$$eval('link[rel~=icon], link[rel=apple-touch-icon], link[rel=manifest]', (l) => l.map((x) => x.href))) {
+    const r = await page.request.get(href);
+    igual(r.status(), 200, 'ícone/manifest ' + href);
+  }
   await semOverflow(page, 'login');
   await captura(page, 'login-375');
   semErros(page); await ctx.close();

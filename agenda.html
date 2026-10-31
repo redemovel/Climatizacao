@@ -1,18 +1,22 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 12:14 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 13:51 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#0b5f87">
+<meta name="theme-color" content="#008080">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Climatização">
-<title>Agenda · Climatização</title>
+<link rel="icon" type="image/png" sizes="32x32" href="img/icone-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="img/icone-192.png">
+<link rel="apple-touch-icon" href="img/icone-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Agenda · Arpuro Climatização</title>
 <style>
 /* ===== style.css — partilhado (mobile-first) ===== */
 :root {
-  --azul: #0b5f87; --azul-esc: #084766; --azul-claro: #e6f2f8;
+  --azul: #008080; --azul-esc: #005f5f; --azul-claro: #e0f2f1;
   --texto: #1b2530; --texto-2: #5b6775; --linha: #dde3ea; --fundo: #f4f6f9; --branco: #fff;
   --verde: #1f8a4c; --ambar: #b7791f; --laranja: #c2410c; --vermelho: #b42318; --cinza: #6b7280; --roxo: #6d28d9;
   --raio: 12px; --sombra: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
@@ -33,7 +37,8 @@ h3 { font-size: 1rem; margin: 16px 0 8px; }
 /* --- Topo --- */
 #topo { position: sticky; top: 0; z-index: 20; height: var(--topo-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--azul); color: #fff; }
 #topo:empty { display: none; }
-.marca { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05rem; flex: 1; white-space: nowrap; }
+.marca { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05rem; flex: 1; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.marca img { width: 28px; height: 28px; }
 .tag-dev { background: #facc15; color: #000; border-radius: 4px; padding: 1px 6px; font-size: .7rem; vertical-align: middle; }
 .env-dev #topo { background: #7c3aed; }
 .utilizador { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
@@ -165,7 +170,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 /* --- Login --- */
 .login { max-width: 380px; margin: 8vh auto 0; }
 .login .logo { text-align: center; margin-bottom: 20px; }
-.login .logo b { display: block; font-size: 1.5rem; color: var(--azul); }
+.login .logo img { width: 220px; max-width: 70%; height: auto; display: block; margin: 0 auto 6px; }
+.login .logo b { display: block; font-size: 1.35rem; color: var(--azul); letter-spacing: .02em; }
 .login .logo small { color: var(--texto-2); }
 .uid { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f5f9; padding: 8px; border-radius: 8px; word-break: break-all; user-select: all; display: block; margin: 8px 0; }
 .rodape-versao { text-align: center; font-size: .72rem; color: #9aa4b2; margin-top: 24px; }
@@ -209,7 +215,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-10-31 12:14 UTC';
+const BUILD = '2026-10-31 13:51 UTC';
 const PAGINA = 'agenda';
 
 const FIREBASE_CONFIG = {
@@ -397,7 +403,7 @@ const MENU = [
 function montarCabecalho() {
   const nome = (SESSAO.nome || SESSAO.email || '').split(' ')[0];
   $('#topo').innerHTML = `
-    <a class="marca" href="${pagina('agenda')}">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
+    <a class="marca" href="${pagina('agenda')}"><img src="img/arvore-branca.png" alt="">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
     <div class="utilizador"><span class="u-nome">${esc(nome)}</span><span class="u-perfil">${esc(PERFIS[SESSAO.perfil] || SESSAO.perfil)}</span></div>
     <button class="btn-sair" id="btnSair" title="Terminar sessão">Sair</button>`;
   $('#btnSair').onclick = async () => { await signOut(auth); location.replace(pagina('index')); };
