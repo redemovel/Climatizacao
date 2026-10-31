@@ -1,0 +1,14 @@
+{
+  "name": "climatizacao",
+  "private": true,
+  "description": "Plataforma de climatização e ventilação mecânica — ARPURO & REDEMÓVEL",
+  "scripts": {
+    "build": "node build.js",
+    "build:dev": "node build.js --dev",
+    "test": "node test/run.js",
+    "test:capturas": "node test/run.js --capturas"
+  },
+  "devDependencies": {
+    "firebase": "12.19.0"
+  }
+}

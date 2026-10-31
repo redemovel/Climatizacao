@@ -1,0 +1,139 @@
+rules_version = '2';
+// Atualizado: 2026-10-31 — Fase 1 (utilizadores, clientes, folhas de obra, contadores)
+//
+// Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
+// Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
+// Preços de custo e margens (fases seguintes) ficarão em documentos/subcoleções próprias
+// só legíveis pelo master — as regras não conseguem esconder campos dentro de um documento.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Sessão e perfil ----------
+    function autenticado() { return request.auth != null; }
+    function caminhoPerfil() { return /databases/$(database)/documents/utilizadores/$(request.auth.uid); }
+    function ativo() {
+      return autenticado() && exists(caminhoPerfil()) && get(caminhoPerfil()).data.ativo == true;
+    }
+    function perfil() { return get(caminhoPerfil()).data.perfil; }
+    function eMaster() { return ativo() && perfil() == 'master'; }
+    function eStaff() { return ativo() && perfil() in ['master', 'backoffice']; }
+    function eTecnico() { return ativo() && perfil() == 'tecnico'; }
+    function alterados() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function quemAlterouCerto() {
+      return !alterados().hasAny(['atualizadoPor']) || request.resource.data.atualizadoPor == request.auth.uid;
+    }
+
+    // ---------- Utilizadores (perfis) ----------
+    function utilizadorValido(d) {
+      return d.nome is string && d.nome.size() >= 2 && d.nome.size() <= 120
+        && d.email is string && d.email.matches('^[^@ ]+@[^@ ]+$')
+        && d.perfil in ['master', 'backoffice', 'tecnico', 'comercial']
+        && d.ativo is bool;
+    }
+    match /utilizadores/{uid} {
+      // cada um lê o seu perfil; master e backoffice leem todos (lista de técnicos)
+      allow get: if autenticado() && (request.auth.uid == uid || eStaff());
+      allow list: if eStaff();
+      allow create: if eMaster() && utilizadorValido(request.resource.data);
+      // o master não pode mudar o próprio perfil/estado (evita ficar sem acesso)
+      allow update: if eMaster() && utilizadorValido(request.resource.data)
+        && (uid != request.auth.uid || !alterados().hasAny(['perfil', 'ativo', 'email']));
+      allow delete: if false; // desativar em vez de apagar
+    }
+
+    // ---------- Clientes ----------
+    function clienteValido(d) {
+      return d.nome is string && d.nome.size() >= 2 && d.nome.size() <= 200
+        && d.nif is string && d.nif.matches('^([0-9]{9}|[A-Z]{2}[A-Z0-9]{2,13})$')
+        && (!('pesquisa' in d) || (d.pesquisa is list && d.pesquisa.size() <= 400));
+    }
+    match /clientes/{id} {
+      allow read: if eStaff();
+      allow create: if eStaff() && clienteValido(request.resource.data)
+        && (!('atualizadoPor' in request.resource.data) || request.resource.data.atualizadoPor == request.auth.uid);
+      allow update: if eStaff() && clienteValido(request.resource.data) && quemAlterouCerto();
+      allow delete: if eMaster();
+    }
+
+    // ---------- Contadores (numeração sequencial FO-AAAA-NNNN) ----------
+    match /contadores/{id} {
+      allow read: if eStaff();
+      allow create: if eStaff() && request.resource.data.valor == 1;
+      allow update: if eStaff() && request.resource.data.valor == resource.data.valor + 1;
+      allow delete: if false;
+    }
+
+    // ---------- Folhas de obra ----------
+    function folhaValida(d) {
+      return d.keys().hasAll(['numero', 'clienteId', 'clienteNome', 'tipo', 'tecnicoUid', 'tecnicoNome',
+                              'dataPrevista', 'estado', 'historico', 'criadoEm', 'criadoPor'])
+        && d.numero is string && d.numero.matches('^FO-[0-9]{4}-[0-9]{4,}$')
+        && d.clienteId is string && d.clienteNome is string && d.clienteNome.size() > 0
+        && d.tipo in ['Instalação', 'Manutenção', 'AT']
+        && d.tecnicoUid is string && d.tecnicoUid.size() > 0
+        && d.dataPrevista is timestamp
+        && d.estado in ['Agendada', 'Em curso', 'Pendente material', 'Concluída', 'Faturada']
+        && d.historico is list && d.historico.size() <= 500
+        && (!('observacoesTecnico' in d) || (d.observacoesTecnico is string && d.observacoesTecnico.size() <= 5000))
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 5000));
+    }
+    function folhaNovaValida(d) {
+      return d.estado == 'Agendada'
+        && d.historico.size() == 1
+        && d.historico[0].estado == 'Agendada'
+        && d.historico[0].uid == request.auth.uid
+        && d.criadoPor == request.auth.uid
+        && d.criadoEm == request.time
+        && exists(/databases/$(database)/documents/clientes/$(d.clienteId))
+        && exists(/databases/$(database)/documents/utilizadores/$(d.tecnicoUid));
+    }
+    // Cada mudança de estado acrescenta exatamente um registo ao histórico (utilizador + hora).
+    function historicoValido() {
+      let a = resource.data;
+      let d = request.resource.data;
+      let n = a.historico.size();
+      return (d.estado == a.estado && d.historico == a.historico)
+        || (d.estado != a.estado
+            && d.historico.size() == n + 1
+            && d.historico[0:n] == a.historico
+            && d.historico[n].estado == d.estado
+            && d.historico[n].uid == request.auth.uid
+            && d.historico[n].em is timestamp
+            && d.estadoAlteradoEm == request.time);
+    }
+    function transicaoTecnico(de, para) {
+      return (de == 'Agendada' && para == 'Em curso')
+        || (de == 'Em curso' && para in ['Pendente material', 'Concluída'])
+        || (de == 'Pendente material' && para == 'Em curso');
+    }
+    function atualizacaoStaff() {
+      // folha faturada: só o master pode voltar a mexer
+      return eStaff() && (resource.data.estado != 'Faturada' || eMaster());
+    }
+    function atualizacaoTecnico() {
+      return eTecnico()
+        && resource.data.tecnicoUid == request.auth.uid
+        && resource.data.estado != 'Faturada'
+        && alterados().hasOnly(['estado', 'historico', 'estadoAlteradoEm', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'])
+        && (request.resource.data.estado == resource.data.estado
+            || transicaoTecnico(resource.data.estado, request.resource.data.estado));
+    }
+    match /folhas/{id} {
+      // técnico: só as folhas atribuídas a si (as consultas têm de filtrar por tecnicoUid)
+      allow get, list: if eStaff() || (eTecnico() && resource.data.tecnicoUid == request.auth.uid);
+      allow create: if eStaff() && folhaValida(request.resource.data) && folhaNovaValida(request.resource.data);
+      allow update: if folhaValida(request.resource.data)
+        && !alterados().hasAny(['numero', 'criadoEm', 'criadoPor', 'criadoPorNome', 'clienteId'])
+        && historicoValido()
+        && quemAlterouCerto()
+        && (atualizacaoStaff() || atualizacaoTecnico());
+      allow delete: if eMaster() && resource.data.estado == 'Agendada';
+    }
+
+    // Tudo o resto: recusado.
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}

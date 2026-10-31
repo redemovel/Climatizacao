@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 12:14 UTC -->
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0b5f87">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Climatização">
+<title>Folhas de obra [DEV] · Climatização</title>
+<style>
+/* ===== style.css — partilhado (mobile-first) ===== */
+:root {
+  --azul: #0b5f87; --azul-esc: #084766; --azul-claro: #e6f2f8;
+  --texto: #1b2530; --texto-2: #5b6775; --linha: #dde3ea; --fundo: #f4f6f9; --branco: #fff;
+  --verde: #1f8a4c; --ambar: #b7791f; --laranja: #c2410c; --vermelho: #b42318; --cinza: #6b7280; --roxo: #6d28d9;
+  --raio: 12px; --sombra: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --nav-h: 64px; --topo-h: 52px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--texto); background: var(--fundo); }
+body.com-modal { overflow: hidden; }
+a { color: var(--azul); }
+h1 { font-size: 1.25rem; margin: 0 0 12px; }
+h2 { font-size: 1.1rem; margin: 0; }
+h3 { font-size: 1rem; margin: 16px 0 8px; }
+.oculto { display: none !important; }
+.muted { color: var(--texto-2); font-size: .9rem; }
+
+/* --- Topo --- */
+#topo { position: sticky; top: 0; z-index: 20; height: var(--topo-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--azul); color: #fff; }
+#topo:empty { display: none; }
+.marca { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05rem; flex: 1; white-space: nowrap; }
+.tag-dev { background: #facc15; color: #000; border-radius: 4px; padding: 1px 6px; font-size: .7rem; vertical-align: middle; }
+.env-dev #topo { background: #7c3aed; }
+.utilizador { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.u-nome { font-weight: 600; font-size: .9rem; }
+.u-perfil { font-size: .72rem; opacity: .85; }
+.btn-sair { background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; font-size: .85rem; cursor: pointer; }
+
+/* --- Menu inferior (telemóvel) / lateral superior (desktop) --- */
+#nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--branco); border-top: 1px solid var(--linha); padding-bottom: var(--safe-b); }
+#nav:empty { display: none; }
+#nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--nav-h); text-decoration: none; color: var(--texto-2); font-size: .72rem; }
+#nav a svg { width: 24px; height: 24px; fill: currentColor; }
+#nav a.ativo { color: var(--azul); font-weight: 600; }
+main { padding: 14px 12px calc(var(--nav-h) + var(--safe-b) + 20px); max-width: 1100px; margin: 0 auto; }
+
+@media (min-width: 900px) {
+  #nav { top: var(--topo-h); bottom: auto; justify-content: center; border-top: 0; border-bottom: 1px solid var(--linha); padding: 0; }
+  #nav a { flex: 0 0 auto; flex-direction: row; gap: 8px; height: 46px; padding: 0 18px; font-size: .95rem; }
+  #nav a.ativo { box-shadow: inset 0 -3px 0 var(--azul); }
+  main { padding: 64px 20px 40px; }
+}
+
+/* --- Botões e formulários --- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--linha); background: var(--branco); color: var(--texto); font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primario { background: var(--azul); border-color: var(--azul); color: #fff; }
+.btn-perigo { background: var(--vermelho); border-color: var(--vermelho); color: #fff; }
+.btn-sec { background: var(--azul-claro); border-color: transparent; color: var(--azul-esc); }
+.btn-bloco { width: 100%; }
+.btn-peq { min-height: 36px; padding: 0 12px; font-size: .85rem; }
+.btn-icone { border: 0; background: transparent; font-size: 1.2rem; width: 40px; height: 40px; cursor: pointer; color: var(--texto-2); }
+.a-carregar { position: relative; color: transparent !important; }
+.a-carregar::after { content: ""; position: absolute; width: 18px; height: 18px; border: 2px solid currentColor; border-color: #999 transparent #999 transparent; border-radius: 50%; animation: rodar .8s linear infinite; }
+@keyframes rodar { to { transform: rotate(360deg); } }
+.acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 16px; }
+.acoes .btn { flex: 1 1 auto; }
+
+.campo { display: block; margin-bottom: 12px; }
+.campo > span { display: block; font-size: .85rem; font-weight: 600; color: var(--texto-2); margin-bottom: 4px; }
+input, select, textarea { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; background: var(--branco); color: var(--texto); min-height: 44px; }
+textarea { min-height: 90px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outline-offset: -1px; border-color: var(--azul); }
+.campo-erro input, .campo-erro select { border-color: var(--vermelho); }
+.msg-erro { color: var(--vermelho); font-size: .85rem; margin-top: 4px; }
+.linha2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips label { flex: 1 1 auto; }
+.chips input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chips span { display: flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 12px; border: 1px solid var(--linha); border-radius: 999px; background: var(--branco); font-size: .9rem; cursor: pointer; }
+.chips input:checked + span { background: var(--azul); border-color: var(--azul); color: #fff; }
+
+/* --- Barra de ferramentas --- */
+.barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.barra > * { flex: 1 1 140px; }
+.barra .btn { flex: 0 0 auto; }
+.titulo-pag { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.titulo-pag h1 { margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; background: var(--branco); }
+.seg button { border: 0; background: transparent; min-height: 40px; padding: 0 14px; font: inherit; font-size: .9rem; cursor: pointer; color: var(--texto-2); }
+.seg button.ativo { background: var(--azul); color: #fff; font-weight: 600; }
+
+/* --- Cartões e listas --- */
+.cartao { background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 14px; margin-bottom: 10px; }
+.lista-item { display: block; background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 12px 14px; margin-bottom: 8px; color: inherit; text-decoration: none; cursor: pointer; border-left: 4px solid transparent; }
+.lista-item:active { background: #f8fafc; }
+.li-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.li-titulo { font-weight: 700; }
+.li-sub { color: var(--texto-2); font-size: .9rem; margin-top: 2px; overflow-wrap: anywhere; }
+.li-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: .82rem; color: var(--texto-2); align-items: center; }
+.vazio { text-align: center; color: var(--texto-2); padding: 28px 12px; }
+.mais { display: flex; justify-content: center; margin: 12px 0; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; background: #eef2f6; color: var(--texto-2); }
+.estado-agendada { background: #e0efff; color: #0b4f8a; }
+.estado-em-curso { background: #fff4d6; color: #8a5a00; }
+.estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-concluida { background: #dcf5e6; color: var(--verde); }
+.estado-faturada { background: #ede9fe; color: var(--roxo); }
+.lista-item.b-agendada { border-left-color: #3b82f6; }
+.lista-item.b-em-curso { border-left-color: #f59e0b; }
+.lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-concluida { border-left-color: #22c55e; }
+.lista-item.b-faturada { border-left-color: #8b5cf6; }
+.tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
+
+/* --- Detalhe --- */
+.det-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.det-cab h1 { margin: 0; }
+.dl { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0 0; }
+.dl div { min-width: 0; }
+.dl dt { font-size: .78rem; color: var(--texto-2); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+.dl dd { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (min-width: 600px) { .dl { grid-template-columns: 1fr 1fr; } }
+.acoes-rapidas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.estados-acoes { display: grid; gap: 8px; }
+.hist { list-style: none; padding: 0; margin: 0; }
+.hist li { padding: 8px 0; border-bottom: 1px solid var(--linha); font-size: .9rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hist li:last-child { border-bottom: 0; }
+.voltar { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 10px; text-decoration: none; font-weight: 600; background: none; border: 0; color: var(--azul); font-size: .95rem; padding: 6px 0; cursor: pointer; }
+
+/* --- Agenda --- */
+.agenda-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.agenda-nav .periodo { flex: 1; text-align: center; font-weight: 700; }
+.dia-cab { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 6px; font-weight: 700; }
+.dia-cab.hoje { color: var(--azul); }
+.hora { font-weight: 800; font-size: 1.05rem; min-width: 52px; }
+.ag-item { display: flex; gap: 10px; }
+.ag-corpo { flex: 1; min-width: 0; }
+.ag-acoes { display: flex; gap: 8px; margin-top: 8px; }
+.ag-acoes .btn { flex: 1; }
+
+/* --- Modal (folha inferior no telemóvel) --- */
+.modal-fundo { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; justify-content: center; }
+.modal { background: var(--branco); width: 100%; max-width: 560px; max-height: 92vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; }
+.modal-topo { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 6px 16px; border-bottom: 1px solid var(--linha); }
+.modal-corpo { padding: 14px 16px calc(16px + var(--safe-b)); overflow-y: auto; }
+@media (min-width: 600px) { .modal-fundo { align-items: center; } .modal { border-radius: 16px; } }
+.resultados { max-height: 240px; overflow-y: auto; border: 1px solid var(--linha); border-radius: 10px; margin-top: 6px; }
+.resultados button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--linha); background: var(--branco); padding: 10px 12px; font: inherit; cursor: pointer; }
+.resultados button:last-child { border-bottom: 0; }
+.cliente-escolhido { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--azul-claro); border-radius: 10px; padding: 10px 12px; }
+
+/* --- Toast --- */
+#toasts { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + var(--safe-b) + 12px); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.toast { background: #1f2937; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.2); max-width: 520px; }
+.toast-erro { background: var(--vermelho); }
+.toast-ok { background: var(--verde); }
+
+/* --- Login --- */
+.login { max-width: 380px; margin: 8vh auto 0; }
+.login .logo { text-align: center; margin-bottom: 20px; }
+.login .logo b { display: block; font-size: 1.5rem; color: var(--azul); }
+.login .logo small { color: var(--texto-2); }
+.uid { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f5f9; padding: 8px; border-radius: 8px; word-break: break-all; user-select: all; display: block; margin: 8px 0; }
+.rodape-versao { text-align: center; font-size: .72rem; color: #9aa4b2; margin-top: 24px; }
+
+</style>
+</head>
+<body class="env-dev pagina-folhas">
+<header id="topo"></header>
+<main id="main">
+<!-- titulo: Folhas de obra -->
+<section id="vLista">
+  <div class="titulo-pag">
+    <h1 id="tituloLista">Folhas de obra</h1>
+    <button class="btn btn-primario oculto" id="btnNova">+ Nova</button>
+  </div>
+  <div class="barra">
+    <select id="fEstado" aria-label="Estado">
+      <option value="abertas">Abertas</option>
+      <option value="">Todas</option>
+    </select>
+    <select id="fTec" class="oculto" aria-label="Técnico"><option value="">Todos os técnicos</option></select>
+  </div>
+  <form class="barra" id="fPesq">
+    <input id="pNum" placeholder="N.º da folha (ex.: 12)" inputmode="search" aria-label="Número da folha">
+    <button class="btn" type="submit">Procurar</button>
+  </form>
+  <div id="lista"><div class="vazio">A carregar…</div></div>
+  <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>
+</section>
+<section id="vDetalhe" class="oculto"></section>
+
+</main>
+<nav id="nav" aria-label="Menu principal"></nav>
+<div id="toasts" aria-live="polite"></div>
+<script type="module">
+// ===== core.js — código partilhado por todas as páginas (inserido pelo build.js) =====
+import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
+  sendPasswordResetEmail, createUserWithEmailAndPassword,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, orderBy,
+  limit, startAfter, serverTimestamp, Timestamp, runTransaction,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+
+const ENV = 'dev';          // 'prod' ou 'dev'
+const BUILD = '2026-10-31 12:14 UTC';
+const PAGINA = 'folhas';
+
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDFAu5HWTkNOMX79TGbk14HJ-37wywVUyA',
+  authDomain: 'climatizacao-c482a.firebaseapp.com',
+  projectId: 'climatizacao-c482a',
+  storageBucket: 'climatizacao-c482a.firebasestorage.app',
+  messagingSenderId: '31045556625',
+  appId: '1:31045556625:web:a03ccd9fe4d2b141542230',
+};
+
+const fbApp = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(fbApp);
+auth.languageCode = 'pt';
+// Cache local persistente: a agenda continua visível sem rede e poupa leituras repetidas.
+const db = initializeFirestore(fbApp, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
+// ---------- Constantes de negócio ----------
+const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
+const ESTADOS = ['Agendada', 'Em curso', 'Pendente material', 'Concluída', 'Faturada'];
+const ESTADOS_ABERTOS = ['Agendada', 'Em curso', 'Pendente material'];
+const TIPOS = ['Instalação', 'Manutenção', 'AT'];
+const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
+// Transições "normais" (botões principais). Têm de bater com firestore.rules.
+const TRANSICOES = {
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente material', 'Concluída'],
+  'Pendente material': ['Em curso'],
+  'Concluída': ['Faturada'],
+  'Faturada': [],
+};
+const PAGINA_TAM = 20;
+
+const ehStaff = (p) => p === 'master' || p === 'backoffice';
+
+// Estados para onde o perfil pode mudar a folha (o servidor valida o mesmo nas regras).
+function transicoesPermitidas(perfil, estado) {
+  if (perfil === 'tecnico') return (TRANSICOES[estado] || []).filter((e) => e !== 'Faturada');
+  if (perfil === 'master') return ESTADOS.filter((e) => e !== estado);
+  if (perfil === 'backoffice') return estado === 'Faturada' ? [] : ESTADOS.filter((e) => e !== estado);
+  return [];
+}
+
+// ---------- Utilitários ----------
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function pagina(nome, params) {
+  let u = nome + (ENV === 'dev' ? '-dev' : '') + '.html';
+  if (params) {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
+    if ([...q].length) u += '?' + q;
+  }
+  return u;
+}
+
+function paraData(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (typeof v.toDate === 'function') return v.toDate();
+  return new Date(v);
+}
+const fmtData = (v, o = { day: '2-digit', month: '2-digit', year: 'numeric' }) => { const d = paraData(v); return d ? d.toLocaleDateString('pt-PT', o) : '—'; };
+const fmtHora = (v) => { const d = paraData(v); return d ? d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : ''; };
+const fmtDataHora = (v) => { const d = paraData(v); return d ? fmtData(d) + ' ' + fmtHora(d) : '—'; };
+const fmtDiaSemana = (d) => { const t = d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+function inicioDia(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function addDias(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function inicioSemana(d) { const x = inicioDia(d); const dow = (x.getDay() + 6) % 7; return addDias(x, -dow); } // segunda-feira
+function isoLocal(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function deIsoLocal(s, hora = '00:00') { const [y, m, d] = s.split('-').map(Number); const [h, mi] = hora.split(':').map(Number); return new Date(y, m - 1, d, h || 0, mi || 0); }
+
+function linkMapa(f) {
+  const q = [f.morada, f.codigoPostal, f.localidade].filter(Boolean).join(', ');
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
+}
+const linkTel = (t) => (t ? 'tel:' + String(t).replace(/[^\d+]/g, '') : '');
+const classeEstado = (e) => 'estado-' + String(e || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-');
+const badgeEstado = (e) => `<span class="badge ${classeEstado(e)}">${esc(e)}</span>`;
+
+// NIF: português com dígito de controlo; estrangeiro com indicativo do país (ex.: ES B12345678).
+function validarNIF(entrada) {
+  const v = String(entrada || '').toUpperCase().replace(/[\s.\-/]/g, '');
+  if (!v) return { ok: false, erro: 'O NIF é obrigatório.' };
+  const pt = v.startsWith('PT') ? v.slice(2) : v;
+  if (/^\d+$/.test(pt)) {
+    if (pt.length !== 9) return { ok: false, erro: 'O NIF português tem 9 dígitos.' };
+    if (!/^([1235689]|45|7[0-9])/.test(pt)) return { ok: false, erro: 'NIF português com início inválido.' };
+    let soma = 0;
+    for (let i = 0; i < 8; i++) soma += Number(pt[i]) * (9 - i);
+    let ctrl = 11 - (soma % 11);
+    if (ctrl >= 10) ctrl = 0;
+    if (ctrl !== Number(pt[8])) return { ok: false, erro: 'NIF inválido (dígito de controlo errado).' };
+    return { ok: true, nif: pt, pais: 'PT' };
+  }
+  const m = v.match(/^([A-Z]{2})([A-Z0-9]{2,13})$/);
+  if (m && m[1] !== 'PT' && /\d/.test(m[2])) return { ok: true, nif: v, pais: m[1] };
+  return { ok: false, erro: 'NIF inválido. Estrangeiro: indicativo do país + número (ex.: ES B12345678).' };
+}
+
+function erroFirebase(e) {
+  const c = (e && e.code) || '';
+  const mapa = {
+    'auth/invalid-credential': 'Email ou palavra-passe incorretos.',
+    'auth/wrong-password': 'Email ou palavra-passe incorretos.',
+    'auth/user-not-found': 'Email ou palavra-passe incorretos.',
+    'auth/invalid-email': 'Email inválido.',
+    'auth/too-many-requests': 'Demasiadas tentativas. Aguarde uns minutos.',
+    'auth/network-request-failed': 'Sem ligação à internet.',
+    'auth/email-already-in-use': 'Já existe uma conta com este email.',
+    'auth/user-disabled': 'Esta conta está desativada.',
+    'permission-denied': 'Sem permissão para esta operação.',
+    'unavailable': 'Sem ligação ao servidor. Tente de novo.',
+    'failed-precondition': 'Falta um índice na base de dados (ver consola do browser).',
+  };
+  if (c === 'failed-precondition') console.error('[Firestore] índice em falta:', e.message);
+  return mapa[c] || (e && e.message) || 'Erro inesperado.';
+}
+
+function toast(msg, tipo = 'info', ms = 3500) {
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + tipo;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+
+// Modal genérico (folha inferior no telemóvel). Devolve o elemento do conteúdo.
+function abrirModal(titulo, html, { aoFechar } = {}) {
+  fecharModal();
+  const fundo = document.createElement('div');
+  fundo.className = 'modal-fundo';
+  fundo.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(titulo)}">
+    <div class="modal-topo"><h2>${esc(titulo)}</h2><button class="btn-icone" data-fechar aria-label="Fechar">✕</button></div>
+    <div class="modal-corpo">${html}</div></div>`;
+  fundo.addEventListener('click', (ev) => { if (ev.target === fundo || ev.target.closest('[data-fechar]')) { fecharModal(); aoFechar && aoFechar(); } });
+  document.body.appendChild(fundo);
+  document.body.classList.add('com-modal');
+  return $('.modal-corpo', fundo);
+}
+function fecharModal() { $$('.modal-fundo').forEach((m) => m.remove()); document.body.classList.remove('com-modal'); }
+
+function confirmar(msg, { ok = 'Confirmar', perigo = false } = {}) {
+  return new Promise((resolve) => {
+    const c = abrirModal('Confirmar', `<p>${esc(msg)}</p><div class="acoes">
+      <button class="btn" data-r="0">Cancelar</button>
+      <button class="btn ${perigo ? 'btn-perigo' : 'btn-primario'}" data-r="1">${esc(ok)}</button></div>`,
+    { aoFechar: () => resolve(false) });
+    c.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-r]');
+      if (!b) return;
+      fecharModal();
+      resolve(b.dataset.r === '1');
+    });
+  });
+}
+
+async function comBotao(btn, fn) {
+  if (btn.disabled) return;
+  const txt = btn.textContent;
+  btn.disabled = true; btn.classList.add('a-carregar');
+  try { return await fn(); }
+  finally { btn.disabled = false; btn.classList.remove('a-carregar'); btn.textContent = txt; }
+}
+
+// ---------- Sessão, cabeçalho e menu ----------
+let SESSAO = null;
+
+const ICONES = {
+  agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
+  folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
+  clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
+};
+const MENU = [
+  { id: 'agenda', label: 'Agenda', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'folhas', label: 'Folhas de obra', curto: 'Folhas', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
+  { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
+];
+
+function montarCabecalho() {
+  const nome = (SESSAO.nome || SESSAO.email || '').split(' ')[0];
+  $('#topo').innerHTML = `
+    <a class="marca" href="${pagina('agenda')}">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
+    <div class="utilizador"><span class="u-nome">${esc(nome)}</span><span class="u-perfil">${esc(PERFIS[SESSAO.perfil] || SESSAO.perfil)}</span></div>
+    <button class="btn-sair" id="btnSair" title="Terminar sessão">Sair</button>`;
+  $('#btnSair').onclick = async () => { await signOut(auth); location.replace(pagina('index')); };
+  $('#nav').innerHTML = MENU.filter((m) => m.perfis.includes(SESSAO.perfil)).map((m) =>
+    `<a href="${pagina(m.id)}" class="${m.id === PAGINA ? 'ativo' : ''}" data-menu="${m.id}">${ICONES[m.id]}<span>${esc(m.curto || m.label)}</span></a>`).join('');
+}
+
+// Garante sessão iniciada com perfil ativo. Sem sessão → login. Sem perfil → login (mostra o UID).
+function iniciarPagina({ perfis = null } = {}) {
+  return new Promise((resolve) => {
+    let feito = false;
+    onAuthStateChanged(auth, async (user) => {
+      if (feito) return;
+      feito = true;
+      if (!user) { location.replace(pagina('index')); return; }
+      try {
+        const snap = await getDoc(doc(db, 'utilizadores', user.uid));
+        if (!snap.exists() || snap.data().ativo !== true) { location.replace(pagina('index')); return; }
+        SESSAO = { uid: user.uid, email: user.email, ...snap.data() };
+      } catch (e) {
+        $('#main').innerHTML = `<div class="vazio">Não foi possível carregar o perfil: ${esc(erroFirebase(e))}</div>`;
+        return;
+      }
+      montarCabecalho();
+      if (perfis && !perfis.includes(SESSAO.perfil)) {
+        $('#main').innerHTML = '<div class="vazio">Não tem acesso a esta página.</div>';
+        return;
+      }
+      document.body.classList.add('perfil-' + SESSAO.perfil);
+      resolve(SESSAO);
+    });
+  });
+}
+
+// ---------- Pesquisa de clientes ----------
+// Cada cliente guarda `pesquisa`: prefixos (2+ letras) de cada palavra do nome e da localidade.
+// Assim "hot" encontra "Hotel Meliá" e "meli" também, com uma só consulta (array-contains).
+const normalizar = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function tokensPesquisa(...textos) {
+  const set = new Set();
+  for (const t of textos) {
+    for (const p of normalizar(t).split(/[^a-z0-9]+/)) {
+      for (let i = 2; i <= Math.min(p.length, 15); i++) set.add(p.slice(0, i));
+    }
+  }
+  return [...set];
+}
+
+async function pesquisarClientes(texto) {
+  const t = String(texto || '').trim();
+  const n = validarNIF(t);
+  let snap;
+  if (n.ok) {
+    snap = await getDocs(query(collection(db, 'clientes'), where('nif', '==', n.nif), limit(10)));
+  } else {
+    const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+    if (!palavras.length) return [];
+    const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+    snap = await getDocs(query(collection(db, 'clientes'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  }
+  const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+}
+
+// Lista de técnicos ativos (coleção pequena; lida uma vez por página).
+let _tecnicos = null;
+async function carregarTecnicos() {
+  if (_tecnicos) return _tecnicos;
+  const snap = await getDocs(query(collection(db, 'utilizadores'), where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50)));
+  _tecnicos = snap.docs.map((d) => ({ uid: d.id, ...d.data() })).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+  return _tecnicos;
+}
+
+// ===== página: folhas =====
+const sessao = await iniciarPagina({ perfis: ['master', 'backoffice', 'tecnico'] });
+const staff = ehStaff(sessao.perfil);
+const tecnico = sessao.perfil === 'tecnico';
+
+let lista = [];            // folhas carregadas (cache da lista para não reler ao voltar do detalhe)
+let cursor = null;
+let listaCarregada = false;
+let atual = null;          // folha aberta no detalhe
+
+// ---------- Filtros ----------
+$('#fEstado').insertAdjacentHTML('beforeend', ESTADOS.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join(''));
+if (tecnico) $('#tituloLista').textContent = 'As minhas folhas';
+if (staff) {
+  $('#btnNova').classList.remove('oculto');
+  $('#fTec').classList.remove('oculto');
+  carregarTecnicos().then((tecs) => {
+    $('#fTec').insertAdjacentHTML('beforeend', tecs.map((t) => `<option value="${esc(t.uid)}">${esc(t.nome)}</option>`).join(''));
+  }).catch((e) => toast(erroFirebase(e), 'erro'));
+}
+$('#fEstado').onchange = () => carregarLista();
+$('#fTec').onchange = () => carregarLista();
+$('#btnNova').onclick = () => abrirForm(null);
+$('#btnMais').onclick = () => comBotao($('#btnMais'), () => carregarLista(true));
+
+$('#fPesq').onsubmit = async (ev) => {
+  ev.preventDefault();
+  let v = $('#pNum').value.trim().toUpperCase();
+  if (!v) { carregarLista(); return; }
+  if (/^\d+$/.test(v)) v = `FO-${new Date().getFullYear()}-${v.padStart(4, '0')}`;
+  else if (/^\d{4}-\d+$/.test(v)) { const [a, n] = v.split('-'); v = `FO-${a}-${n.padStart(4, '0')}`; }
+  const c = [where('numero', '==', v)];
+  if (tecnico) c.unshift(where('tecnicoUid', '==', sessao.uid));
+  try {
+    const snap = await getDocs(query(collection(db, 'folhas'), ...c, limit(5)));
+    lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    cursor = null;
+    $('#maisWrap').classList.add('oculto');
+    renderLista(`Nenhuma folha com o número ${v}.`);
+  } catch (e) { toast(erroFirebase(e), 'erro'); }
+};
+
+// ---------- Lista ----------
+function consultaLista() {
+  const c = [];
+  const est = $('#fEstado').value;
+  if (tecnico) c.push(where('tecnicoUid', '==', sessao.uid));
+  else if ($('#fTec').value) c.push(where('tecnicoUid', '==', $('#fTec').value));
+  if (est === 'abertas') c.push(where('estado', 'in', ESTADOS_ABERTOS));
+  else if (est) c.push(where('estado', '==', est));
+  c.push(orderBy('criadoEm', 'desc'));
+  if (cursor) c.push(startAfter(cursor));
+  c.push(limit(PAGINA_TAM));
+  return query(collection(db, 'folhas'), ...c);
+}
+
+async function carregarLista(mais = false) {
+  if (!mais) { lista = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
+  try {
+    const snap = await getDocs(consultaLista());
+    lista = lista.concat(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    cursor = snap.docs[snap.docs.length - 1] || cursor;
+    $('#maisWrap').classList.toggle('oculto', snap.docs.length < PAGINA_TAM);
+    listaCarregada = true;
+    renderLista();
+  } catch (e) {
+    $('#lista').innerHTML = `<div class="vazio">${esc(erroFirebase(e))}</div>`;
+  }
+}
+
+function renderLista(msgVazio = 'Não há folhas de obra com estes filtros.') {
+  if (!lista.length) { $('#lista').innerHTML = `<div class="vazio">${esc(msgVazio)}</div>`; return; }
+  $('#lista').innerHTML = lista.map((f) => `
+    <a class="lista-item ${classeEstado(f.estado).replace('estado-', 'b-')}" href="${pagina('folhas', { id: f.id })}" data-id="${esc(f.id)}">
+      <div class="li-topo"><span class="li-titulo">${esc(f.numero || '')} · ${esc(f.clienteNome || '')}</span>${badgeEstado(f.estado)}</div>
+      <div class="li-sub">${esc(f.localidade || f.morada || '')}</div>
+      <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span>
+        <span>${esc(fmtDataHora(f.dataPrevista))}</span>${staff ? `<span>· ${esc(f.tecnicoNome || '')}</span>` : ''}</div>
+    </a>`).join('');
+}
+$('#lista').addEventListener('click', (ev) => {
+  const a = ev.target.closest('a[data-id]');
+  if (!a) return;
+  ev.preventDefault();
+  irPara({ id: a.dataset.id });
+});
+
+// ---------- Navegação lista ⇄ detalhe ----------
+function irPara(params) { history.pushState({}, '', pagina('folhas', params)); rota(); }
+window.addEventListener('popstate', rota);
+function rota() {
+  const p = new URLSearchParams(location.search);
+  fecharModal();
+  if (p.get('id')) { abrirDetalhe(p.get('id')); return; }
+  $('#vDetalhe').classList.add('oculto');
+  $('#vLista').classList.remove('oculto');
+  if (!listaCarregada) carregarLista(); else renderLista();
+  if (p.get('nova') && staff) abrirForm(null, p.get('cliente'));
+}
+
+// ---------- Detalhe ----------
+async function abrirDetalhe(id) {
+  $('#vLista').classList.add('oculto');
+  const v = $('#vDetalhe');
+  v.classList.remove('oculto');
+  v.innerHTML = '<div class="vazio">A carregar…</div>';
+  window.scrollTo(0, 0);
+  try {
+    const snap = await getDoc(doc(db, 'folhas', id));
+    if (!snap.exists()) { v.innerHTML = botaoVoltar() + '<div class="vazio">Folha de obra não encontrada.</div>'; ligarVoltar(); return; }
+    atual = { id: snap.id, ...snap.data() };
+    renderDetalhe();
+  } catch (e) {
+    v.innerHTML = botaoVoltar() + `<div class="vazio">${esc(erroFirebase(e))}</div>`;
+    ligarVoltar();
+  }
+}
+const botaoVoltar = () => `<button class="voltar" id="btnVoltar">‹ ${tecnico ? 'As minhas folhas' : 'Folhas de obra'}</button>`;
+function ligarVoltar() {
+  $('#btnVoltar').onclick = () => {
+    const vemDaAgenda = history.state === null && /agenda/.test(document.referrer);
+    if ((history.state !== null || vemDaAgenda) && history.length > 1) history.back();
+    else irPara(null);
+  };
+}
+
+function renderDetalhe() {
+  const f = atual;
+  const tel = linkTel(f.telefone);
+  const mapa = linkMapa(f);
+  const proximos = (TRANSICOES[f.estado] || []).filter((e) => transicoesPermitidas(sessao.perfil, f.estado).includes(e));
+  const outros = staff ? transicoesPermitidas(sessao.perfil, f.estado).filter((e) => !proximos.includes(e)) : [];
+  const rotulo = { 'Em curso': f.estado === 'Agendada' ? 'Iniciar trabalho' : 'Retomar trabalho', 'Pendente material': 'Pendente material', 'Concluída': 'Concluir', 'Faturada': 'Marcar como faturada' };
+  const podeObs = staff || (tecnico && f.estado !== 'Faturada');
+  const obsPorGravar = $('#obs') ? $('#obs').value : null; // não perder texto escrito ao re-desenhar
+  $('#vDetalhe').innerHTML = `
+    ${botaoVoltar()}
+    <div class="cartao">
+      <div class="det-cab"><div><h1 id="detNumero">${esc(f.numero)}</h1><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span></div>
+        <div style="text-align:right">${badgeEstado(f.estado)}${staff ? '<br><button class="btn btn-peq" id="btnEditar" style="margin-top:8px">Editar</button>' : ''}</div></div>
+      <dl class="dl">
+        <div><dt>Cliente</dt><dd>${esc(f.clienteNome)}${f.clienteNif ? `<br><span class="muted">NIF ${esc(f.clienteNif)}</span>` : ''}</dd></div>
+        <div><dt>Data prevista</dt><dd>${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}</dd></div>
+        <div><dt>Morada da obra</dt><dd>${esc([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
+        <div><dt>Contacto no local</dt><dd>${esc([f.contacto, f.telefone].filter(Boolean).join(' · ') || '—')}</dd></div>
+        <div><dt>Técnico responsável</dt><dd>${esc(f.tecnicoNome || '—')}</dd></div>
+        <div><dt>Descrição do trabalho</dt><dd>${esc(f.descricao || '—')}</dd></div>
+      </dl>
+      ${(tel || mapa) ? `<div class="acoes-rapidas">
+        ${tel ? `<a class="btn btn-sec" href="${esc(tel)}">Ligar</a>` : '<span></span>'}
+        ${mapa ? `<a class="btn btn-sec" href="${esc(mapa)}" target="_blank" rel="noopener">Navegar</a>` : ''}</div>` : ''}
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0">Estado</h3>
+      <div class="estados-acoes">
+        ${proximos.map((e) => `<button class="btn ${e === 'Pendente material' ? '' : 'btn-primario'}" data-estado="${esc(e)}">${esc(rotulo[e] || e)}</button>`).join('')
+          || '<div class="muted">Sem ações disponíveis neste estado.</div>'}
+        ${outros.length ? `<label class="campo" style="margin:4px 0 0"><span>Corrigir estado</span>
+          <select id="selCorrigir"><option value="">—</option>${outros.map((e) => `<option>${esc(e)}</option>`).join('')}</select></label>` : ''}
+      </div>
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0">Observações do técnico</h3>
+      ${podeObs
+        ? `<textarea id="obs" placeholder="Notas sobre o trabalho realizado, anomalias, material em falta…">${esc(f.observacoesTecnico || '')}</textarea>
+           <div class="acoes"><button class="btn" id="btnObs">Guardar observações</button></div>`
+        : `<p>${esc(f.observacoesTecnico || '—')}</p>`}
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0">Histórico</h3>
+      <ul class="hist">${(f.historico || []).slice().reverse().map((h) => `
+        <li>${badgeEstado(h.estado)}<span>${esc(h.nome || '')}</span><span class="muted">${esc(fmtDataHora(h.em))}</span></li>`).join('')}</ul>
+      <p class="muted" style="margin-bottom:0">Criada por ${esc(f.criadoPorNome || '—')} em ${esc(fmtDataHora(f.criadoEm))}</p>
+    </div>`;
+  ligarVoltar();
+  if (obsPorGravar !== null && $('#obs')) $('#obs').value = obsPorGravar;
+  $$('[data-estado]').forEach((b) => b.onclick = () => mudarEstado(b.dataset.estado, b));
+  if ($('#selCorrigir')) $('#selCorrigir').onchange = (ev) => { const e = ev.target.value; ev.target.value = ''; if (e) mudarEstado(e, null); };
+  if ($('#btnObs')) $('#btnObs').onclick = () => comBotao($('#btnObs'), guardarObs);
+  if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
+}
+
+async function mudarEstado(novo, btn) {
+  const f = atual;
+  if (novo === 'Concluída' && !(await confirmar('Marcar esta folha de obra como concluída?', { ok: 'Concluir' }))) return;
+  if (novo === 'Faturada' && !(await confirmar('Marcar como faturada? Depois disso só o Master pode alterar o estado.', { ok: 'Faturada' }))) return;
+  const exec = async () => {
+    const ref = doc(db, 'folhas', f.id);
+    try {
+      const resultado = await runTransaction(db, async (tx) => {
+        const s = await tx.get(ref);
+        const d = s.data();
+        if (d.estado !== f.estado) throw Object.assign(new Error('A folha foi alterada por outra pessoa. Atualize a página.'), { code: 'alterada' });
+        const entrada = { estado: novo, de: d.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+        const alt = {
+          estado: novo, historico: [...(d.historico || []), entrada],
+          estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+        };
+        tx.update(ref, alt);
+        return { ...d, ...alt, estadoAlteradoEm: Timestamp.now(), atualizadoEm: Timestamp.now() };
+      });
+      atual = { id: f.id, ...resultado };
+      const i = lista.findIndex((x) => x.id === f.id);
+      if (i >= 0) lista[i] = atual;
+      toast('Estado alterado para «' + novo + '».', 'ok');
+      renderDetalhe();
+    } catch (e) {
+      toast(e.code === 'alterada' ? e.message : erroFirebase(e), 'erro', 5000);
+    }
+  };
+  if (btn) await comBotao(btn, exec); else await exec();
+}
+
+async function guardarObs() {
+  const txt = $('#obs').value.trim();
+  try {
+    await updateDoc(doc(db, 'folhas', atual.id), { observacoesTecnico: txt, atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+    atual.observacoesTecnico = txt;
+    toast('Observações guardadas.', 'ok');
+  } catch (e) { toast(erroFirebase(e), 'erro'); }
+}
+
+// ---------- Formulário nova / editar (só master e backoffice) ----------
+async function abrirForm(folha, clienteIdInicial) {
+  const ed = !!folha;
+  let cliente = ed ? { id: folha.clienteId, nome: folha.clienteNome, nif: folha.clienteNif } : null;
+  const dp = ed ? paraData(folha.dataPrevista) : addDias(inicioDia(new Date()), 1);
+  const horaIni = ed ? fmtHora(folha.dataPrevista) : '09:00';
+  const corpo = abrirModal(ed ? 'Editar ' + folha.numero : 'Nova folha de obra', `
+    <form id="fFolha" novalidate>
+      <div class="campo"><span>Cliente *</span><div id="cliBox"></div></div>
+      <div class="campo"><span>Tipo *</span><div class="chips">${TIPOS.map((t) => `
+        <label><input type="radio" name="tipo" value="${esc(t)}" ${(ed ? folha.tipo === t : t === 'Instalação') ? 'checked' : ''}><span>${esc(TIPO_NOME[t])}</span></label>`).join('')}</div></div>
+      <label class="campo"><span>Técnico responsável *</span><select id="ffTec" required><option value="">A carregar…</option></select></label>
+      <div class="linha2">
+        <label class="campo"><span>Data prevista *</span><input type="date" id="ffData" value="${isoLocal(dp)}" required></label>
+        <label class="campo"><span>Hora</span><input type="time" id="ffHora" value="${esc(horaIni)}" step="900"></label>
+      </div>
+      <label class="campo"><span>Morada da obra</span><input id="ffMorada" value="${esc(folha?.morada || '')}" autocomplete="off"></label>
+      <div class="linha2">
+        <label class="campo"><span>Código postal</span><input id="ffCP" value="${esc(folha?.codigoPostal || '')}" inputmode="numeric" placeholder="0000-000"></label>
+        <label class="campo"><span>Localidade</span><input id="ffLoc" value="${esc(folha?.localidade || '')}"></label>
+      </div>
+      <div class="linha2">
+        <label class="campo"><span>Contacto no local</span><input id="ffContacto" value="${esc(folha?.contacto || '')}"></label>
+        <label class="campo"><span>Telefone</span><input id="ffTel" type="tel" value="${esc(folha?.telefone || '')}"></label>
+      </div>
+      <label class="campo"><span>Descrição do trabalho</span><textarea id="ffDesc">${esc(folha?.descricao || '')}</textarea></label>
+      <div class="msg-erro" id="ffErro"></div>
+      <div class="acoes"><button type="button" class="btn" data-fechar>Cancelar</button>
+        <button type="submit" class="btn btn-primario" id="ffGuardar">${ed ? 'Guardar' : 'Criar folha'}</button></div>
+    </form>`);
+
+  // Técnicos
+  carregarTecnicos().then((tecs) => {
+    const sel = $('#ffTec', corpo);
+    sel.innerHTML = '<option value="">Escolher…</option>' + tecs.map((t) => `<option value="${esc(t.uid)}">${esc(t.nome)}</option>`).join('');
+    if (ed) {
+      if (!tecs.some((t) => t.uid === folha.tecnicoUid)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(folha.tecnicoUid)}">${esc(folha.tecnicoNome)} (inativo)</option>`);
+      sel.value = folha.tecnicoUid;
+    }
+  }).catch((e) => { $('#ffErro', corpo).textContent = erroFirebase(e); });
+
+  // Escolha de cliente
+  function preencherDoCliente(c) {
+    if ($('#ffMorada', corpo).value) return; // não apaga o que já foi escrito
+    $('#ffMorada', corpo).value = c.morada || '';
+    $('#ffCP', corpo).value = c.codigoPostal || '';
+    $('#ffLoc', corpo).value = c.localidade || '';
+    $('#ffContacto', corpo).value = c.contacto || '';
+    $('#ffTel', corpo).value = c.telefone || '';
+  }
+  function renderCliente() {
+    const box = $('#cliBox', corpo);
+    if (cliente) {
+      box.innerHTML = `<div class="cliente-escolhido"><div><b>${esc(cliente.nome)}</b><br><span class="muted">NIF ${esc(cliente.nif || '—')}</span></div>
+        ${ed ? '' : '<button type="button" class="btn btn-peq" id="cliTrocar">Trocar</button>'}</div>`;
+      if (!ed) $('#cliTrocar', corpo).onclick = () => { cliente = null; renderCliente(); };
+      return;
+    }
+    box.innerHTML = `<div class="barra" style="margin:0"><input id="cliQ" placeholder="Nome, localidade ou NIF" autocomplete="off">
+      <button type="button" class="btn" id="cliProcurar">Procurar</button></div><div id="cliRes"></div>`;
+    const procurar = () => comBotao($('#cliProcurar', corpo), async () => {
+      const q = $('#cliQ', corpo).value;
+      if (q.trim().length < 2) { $('#cliRes', corpo).innerHTML = '<p class="muted">Escreva pelo menos 2 letras.</p>'; return; }
+      try {
+        const res = await pesquisarClientes(q);
+        $('#cliRes', corpo).innerHTML = res.length
+          ? `<div class="resultados">${res.map((c, i) => `<button type="button" data-i="${i}"><b>${esc(c.nome)}</b><br><span class="muted">${esc(c.nif)} · ${esc(c.localidade || '')}</span></button>`).join('')}</div>`
+          : `<p class="muted">Nenhum cliente encontrado. <a href="${pagina('clientes', { novo: 1 })}">Criar cliente</a></p>`;
+        $$('#cliRes [data-i]', corpo).forEach((b) => b.onclick = () => { cliente = res[+b.dataset.i]; preencherDoCliente(cliente); renderCliente(); });
+      } catch (e) { $('#cliRes', corpo).innerHTML = `<p class="msg-erro">${esc(erroFirebase(e))}</p>`; }
+    });
+    $('#cliProcurar', corpo).onclick = procurar;
+    $('#cliQ', corpo).onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); procurar(); } };
+  }
+  renderCliente();
+  if (!ed && clienteIdInicial) {
+    getDoc(doc(db, 'clientes', clienteIdInicial)).then((s) => { if (s.exists()) { cliente = { id: s.id, ...s.data() }; preencherDoCliente(cliente); renderCliente(); } });
+  }
+
+  $('#fFolha', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const erro = (m) => { $('#ffErro', corpo).textContent = m; };
+    const tecUid = $('#ffTec', corpo).value;
+    const tipo = ($('input[name=tipo]:checked', corpo) || {}).value;
+    const data = $('#ffData', corpo).value;
+    if (!cliente) return erro('Escolha o cliente.');
+    if (!tipo) return erro('Escolha o tipo.');
+    if (!tecUid) return erro('Escolha o técnico responsável.');
+    if (!data) return erro('Indique a data prevista.');
+    const tecOpt = $('#ffTec', corpo).selectedOptions[0];
+    const dados = {
+      tipo, tecnicoUid: tecUid, tecnicoNome: tecOpt.textContent.replace(/ \(inativo\)$/, ''),
+      dataPrevista: Timestamp.fromDate(deIsoLocal(data, $('#ffHora', corpo).value || '09:00')),
+      morada: $('#ffMorada', corpo).value.trim(), codigoPostal: $('#ffCP', corpo).value.trim(), localidade: $('#ffLoc', corpo).value.trim(),
+      contacto: $('#ffContacto', corpo).value.trim(), telefone: $('#ffTel', corpo).value.trim(),
+      descricao: $('#ffDesc', corpo).value.trim(),
+      atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+    };
+    comBotao($('#ffGuardar', corpo), async () => {
+      try {
+        if (ed) {
+          await updateDoc(doc(db, 'folhas', folha.id), dados);
+          atual = { ...atual, ...dados, atualizadoEm: Timestamp.now() };
+          const i = lista.findIndex((x) => x.id === folha.id);
+          if (i >= 0) lista[i] = atual;
+          fecharModal();
+          toast('Folha atualizada.', 'ok');
+          renderDetalhe();
+        } else {
+          const id = await criarFolha(cliente, dados);
+          fecharModal();
+          toast('Folha criada.', 'ok');
+          listaCarregada = false;
+          history.replaceState({}, '', pagina('folhas'));
+          irPara({ id });
+        }
+      } catch (e) { erro(erroFirebase(e)); }
+    });
+  };
+}
+
+async function criarFolha(cliente, dados) {
+  const ano = new Date().getFullYear();
+  const cRef = doc(db, 'contadores', 'folhas-' + ano);
+  const fRef = doc(collection(db, 'folhas'));
+  await runTransaction(db, async (tx) => {
+    const c = await tx.get(cRef);
+    const n = (c.exists() ? c.data().valor : 0) + 1;
+    tx.set(cRef, { valor: n });
+    tx.set(fRef, {
+      ...dados,
+      numero: `FO-${ano}-${String(n).padStart(4, '0')}`,
+      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '',
+      estado: 'Agendada',
+      historico: [{ estado: 'Agendada', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
+      observacoesTecnico: '',
+      criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email,
+      estadoAlteradoEm: serverTimestamp(),
+    });
+  });
+  return fRef.id;
+}
+
+rota();
+
+</script>
+</body>
+</html>

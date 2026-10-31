@@ -1,0 +1,21 @@
+<!-- titulo: Folhas de obra -->
+<section id="vLista">
+  <div class="titulo-pag">
+    <h1 id="tituloLista">Folhas de obra</h1>
+    <button class="btn btn-primario oculto" id="btnNova">+ Nova</button>
+  </div>
+  <div class="barra">
+    <select id="fEstado" aria-label="Estado">
+      <option value="abertas">Abertas</option>
+      <option value="">Todas</option>
+    </select>
+    <select id="fTec" class="oculto" aria-label="Técnico"><option value="">Todos os técnicos</option></select>
+  </div>
+  <form class="barra" id="fPesq">
+    <input id="pNum" placeholder="N.º da folha (ex.: 12)" inputmode="search" aria-label="Número da folha">
+    <button class="btn" type="submit">Procurar</button>
+  </form>
+  <div id="lista"><div class="vazio">A carregar…</div></div>
+  <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>
+</section>
+<section id="vDetalhe" class="oculto"></section>
