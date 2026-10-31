@@ -1,0 +1,35 @@
+PontePHC - liga o PHC ao Firebase da plataforma de Climatizacao
+==================================================================
+
+O que faz (fase atual)
+  De X em X minutos le no PHC os clientes criados ou alterados (tabela cl, estab 0)
+  e envia-os para o Firebase (colecao clientes, documentos phc-<numero>).
+  No PHC so LE: nunca escreve nada. E independente do GuiasAT.
+
+Ficheiros
+  PontePHC.cs             codigo do programa
+  PontePHC.ini            configuracao
+  BouncyCastle.Crypto.dll biblioteca de encriptacao (copiar de C:\GuiasAT)
+  chave-servico.json      chave do Firebase (CONFIDENCIAL, nao enviar a ninguem)
+  compilar.bat            cria o PontePHC.exe
+  instalar_servico.bat    instala e arranca o servico Windows
+  remover_servico.bat     para e remove o servico
+
+Comandos (numa linha de comandos, na pasta do programa)
+  PontePHC.exe                    corre na consola (Ctrl+C para parar)
+  PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado
+  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado
+  PontePHC.exe /sincronizar       faz uma sincronizacao agora (respeita Simular)
+  PontePHC.exe /recomecar         volta a enviar todos os clientes na proxima vez
+  PontePHC.exe /senha SqlSenha    grava a senha do SQL, cifrada
+
+O que o programa escreve
+  logs\PontePHC_AAAAMM.log   registo de tudo o que faz
+  PontePHC_ERROS.txt         so os erros
+  estado_clientes.txt        ate onde ja sincronizou (data/hora de alteracao no PHC)
+  estado_escritas.txt        escritas no Firebase feitas hoje (limite MaxEscritasPorDia)
+
+Seguranca
+  - So liga para fora (firestore.googleapis.com e oauth2.googleapis.com, porta 443).
+  - O certificado dos servidores tem de pertencer a Google (raizes fixas no programa).
+  - A senha do SQL fica cifrada (/senha). A chave do Firebase so deve estar nesta pasta.

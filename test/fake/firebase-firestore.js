@@ -200,6 +200,7 @@ function regraEscrever(dbRaw, path, antes, depois) {
   if (colecao === 'clientes') {
     if (!staff) negar('clientes');
     if (!depois) { if (s.perfil !== 'master') negar('apagar cliente'); return; }
+    if ((antes && antes.origem === 'phc') || depois.origem === 'phc') negar('cliente do PHC só é escrito pela PontePHC');
     if (typeof depois.nome !== 'string' || depois.nome.length < 2 || !/^([0-9]{9}|[A-Z]{2}[A-Z0-9]{2,13})$/.test(depois.nif || '')) negar('cliente inválido');
     return;
   }

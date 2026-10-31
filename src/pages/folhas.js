@@ -283,7 +283,7 @@ async function abrirForm(folha, clienteIdInicial) {
       const q = $('#cliQ', corpo).value;
       if (q.trim().length < 2) { $('#cliRes', corpo).innerHTML = '<p class="muted">Escreva pelo menos 2 letras.</p>'; return; }
       try {
-        const res = await pesquisarClientes(q);
+        const res = await pesquisarClientes(q, { soAtivos: true });
         $('#cliRes', corpo).innerHTML = res.length
           ? `<div class="resultados">${res.map((c, i) => `<button type="button" data-i="${i}"><b>${esc(c.nome)}</b><br><span class="muted">${esc(c.nif)} · ${esc(c.localidade || '')}</span></button>`).join('')}</div>`
           : `<p class="muted">Nenhum cliente encontrado. <a href="${pagina('clientes', { novo: 1 })}">Criar cliente</a></p>`;

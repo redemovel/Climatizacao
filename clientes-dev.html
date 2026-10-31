@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 13:59 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-10-31 19:07 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -221,7 +221,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-10-31 13:59 UTC';
+const BUILD = '2026-10-31 19:07 UTC';
 const PAGINA = 'clientes';
 
 const FIREBASE_CONFIG = {
@@ -458,7 +458,7 @@ function tokensPesquisa(...textos) {
   return [...set];
 }
 
-async function pesquisarClientes(texto) {
+async function pesquisarClientes(texto, { soAtivos = false } = {}) {
   const t = String(texto || '').trim();
   const n = validarNIF(t);
   let snap;
@@ -473,6 +473,7 @@ async function pesquisarClientes(texto) {
   const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
+    .filter((c) => !soAtivos || c.ativo !== false)
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
 }
 
@@ -518,6 +519,7 @@ function renderLista(vazio) {
     <a class="lista-item" href="${pagina('clientes', { id: c.id })}" data-id="${esc(c.id)}">
       <div class="li-topo"><span class="li-titulo">${esc(c.nome)}</span><span class="muted">${esc(c.nif)}</span></div>
       <div class="li-sub">${esc([c.localidade, c.telefone].filter(Boolean).join(' · '))}</div>
+      ${c.origem === 'phc' || c.ativo === false ? `<div class="li-meta">${c.origem === 'phc' ? `<span class="badge">PHC ${esc(c.phcId)}</span>` : ''}${c.ativo === false ? '<span class="badge estado-pendente-material">Inativo</span>' : ''}</div>` : ''}
     </a>`).join('') : `<div class="vazio">${esc(vazio)}</div>`;
 }
 
@@ -578,13 +580,16 @@ function ligarVoltar() {
 
 function renderFicha() {
   const c = atual;
+  const phc = c.origem === 'phc';
   const tel = linkTel(c.telefone);
   const mapa = linkMapa(c);
   $('#vFicha').innerHTML = `
     <button class="voltar" id="btnVoltar">‹ Clientes</button>
     <div class="cartao">
-      <div class="det-cab"><div><h1 id="fichaNome">${esc(c.nome)}</h1><span class="muted">NIF ${esc(c.nif)}${c.phcId ? ' · PHC ' + esc(c.phcId) : ''}</span></div>
-        <button class="btn btn-peq" id="btnEditar">Editar</button></div>
+      <div class="det-cab"><div><h1 id="fichaNome">${esc(c.nome)}</h1><span class="muted">NIF ${esc(c.nif || '—')}${c.phcId ? ' · PHC ' + esc(c.phcId) : ''}</span>
+          ${c.ativo === false ? ' <span class="badge estado-pendente-material">Inativo no PHC</span>' : ''}</div>
+        ${phc ? '' : '<button class="btn btn-peq" id="btnEditar">Editar</button>'}</div>
+      ${phc ? `<p class="muted" id="avisoPhc" style="margin:8px 0 0">Ficha gerida no PHC: as alterações fazem-se no PHC e chegam aqui automaticamente.${c.nifValido === false ? ' <b>O NIF no PHC não é válido.</b>' : ''}</p>` : ''}
       <dl class="dl">
         <div><dt>Morada</dt><dd>${esc([c.morada, [c.codigoPostal, c.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
         <div><dt>Contacto</dt><dd>${esc(c.contacto || '—')}</dd></div>
@@ -602,7 +607,7 @@ function renderFicha() {
       <div id="folhasCli"><button class="btn btn-sec btn-bloco" id="btnVerFolhas">Ver folhas deste cliente</button></div>
     </div>`;
   ligarVoltar();
-  $('#btnEditar').onclick = () => abrirForm(atual);
+  if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
   $('#btnVerFolhas').onclick = () => carregarFolhasCliente();
 }
 

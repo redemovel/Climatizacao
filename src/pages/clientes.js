@@ -30,6 +30,7 @@ function renderLista(vazio) {
     <a class="lista-item" href="${pagina('clientes', { id: c.id })}" data-id="${esc(c.id)}">
       <div class="li-topo"><span class="li-titulo">${esc(c.nome)}</span><span class="muted">${esc(c.nif)}</span></div>
       <div class="li-sub">${esc([c.localidade, c.telefone].filter(Boolean).join(' · '))}</div>
+      ${c.origem === 'phc' || c.ativo === false ? `<div class="li-meta">${c.origem === 'phc' ? `<span class="badge">PHC ${esc(c.phcId)}</span>` : ''}${c.ativo === false ? '<span class="badge estado-pendente-material">Inativo</span>' : ''}</div>` : ''}
     </a>`).join('') : `<div class="vazio">${esc(vazio)}</div>`;
 }
 
@@ -90,13 +91,16 @@ function ligarVoltar() {
 
 function renderFicha() {
   const c = atual;
+  const phc = c.origem === 'phc';
   const tel = linkTel(c.telefone);
   const mapa = linkMapa(c);
   $('#vFicha').innerHTML = `
     <button class="voltar" id="btnVoltar">‹ Clientes</button>
     <div class="cartao">
-      <div class="det-cab"><div><h1 id="fichaNome">${esc(c.nome)}</h1><span class="muted">NIF ${esc(c.nif)}${c.phcId ? ' · PHC ' + esc(c.phcId) : ''}</span></div>
-        <button class="btn btn-peq" id="btnEditar">Editar</button></div>
+      <div class="det-cab"><div><h1 id="fichaNome">${esc(c.nome)}</h1><span class="muted">NIF ${esc(c.nif || '—')}${c.phcId ? ' · PHC ' + esc(c.phcId) : ''}</span>
+          ${c.ativo === false ? ' <span class="badge estado-pendente-material">Inativo no PHC</span>' : ''}</div>
+        ${phc ? '' : '<button class="btn btn-peq" id="btnEditar">Editar</button>'}</div>
+      ${phc ? `<p class="muted" id="avisoPhc" style="margin:8px 0 0">Ficha gerida no PHC: as alterações fazem-se no PHC e chegam aqui automaticamente.${c.nifValido === false ? ' <b>O NIF no PHC não é válido.</b>' : ''}</p>` : ''}
       <dl class="dl">
         <div><dt>Morada</dt><dd>${esc([c.morada, [c.codigoPostal, c.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
         <div><dt>Contacto</dt><dd>${esc(c.contacto || '—')}</dd></div>
@@ -114,7 +118,7 @@ function renderFicha() {
       <div id="folhasCli"><button class="btn btn-sec btn-bloco" id="btnVerFolhas">Ver folhas deste cliente</button></div>
     </div>`;
   ligarVoltar();
-  $('#btnEditar').onclick = () => abrirForm(atual);
+  if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
   $('#btnVerFolhas').onclick = () => carregarFolhasCliente();
 }
 

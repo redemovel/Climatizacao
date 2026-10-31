@@ -61,6 +61,13 @@ function gerar() {
     return { id, nome: c[0], nif: n, morada: c[2], cp: c[3], loc: c[1], tel: c[4], contacto: c[5] };
   });
 
+  // clientes sincronizados do PHC pela PontePHC
+  db['clientes/phc-1234'] = { nome: 'Lar de Idosos Santa Clara', nomePesquisa: 'lar de idosos santa clara', pesquisa: tokens('Lar de Idosos Santa Clara', 'Feira'),
+    nif: '506000001', nifPais: 'PT', nifValido: true, morada: 'Rua do Lar 5', codigoPostal: '4520-000', localidade: 'Feira', telefone: '256111222',
+    email: '', contacto: 'Diretora', ativo: true, origem: 'phc', phcId: '1234' };
+  db['clientes/phc-999'] = { nome: 'Santa Clara Antiga Lda', nomePesquisa: 'santa clara antiga lda', pesquisa: tokens('Santa Clara Antiga Lda', 'Feira'),
+    nif: '123456780', nifPais: 'PT', nifValido: false, morada: '', codigoPostal: '', localidade: 'Feira', telefone: '', email: '', contacto: '',
+    ativo: false, origem: 'phc', phcId: '999' };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const dia = (n, h, m = 0) => { const d = new Date(hoje); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d; };
   const T1 = USERS.tecnico1, T2 = USERS.tecnico2;

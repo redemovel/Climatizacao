@@ -248,7 +248,7 @@ function tokensPesquisa(...textos) {
   return [...set];
 }
 
-async function pesquisarClientes(texto) {
+async function pesquisarClientes(texto, { soAtivos = false } = {}) {
   const t = String(texto || '').trim();
   const n = validarNIF(t);
   let snap;
@@ -263,6 +263,7 @@ async function pesquisarClientes(texto) {
   const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
+    .filter((c) => !soAtivos || c.ativo !== false)
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
 }
 

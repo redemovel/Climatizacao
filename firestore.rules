@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-10-31 — Fase 1 (utilizadores, clientes, folhas de obra, contadores)
+// Atualizado: 2026-10-31 (2) — Fase 1 + clientes vindos do PHC (só leitura na plataforma)
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -50,9 +50,12 @@ service cloud.firestore {
     }
     match /clientes/{id} {
       allow read: if eStaff();
+      // Clientes com origem 'phc' são escritos só pela PontePHC (conta de serviço, fora destas regras).
       allow create: if eStaff() && clienteValido(request.resource.data)
+        && request.resource.data.get('origem', '') != 'phc'
         && (!('atualizadoPor' in request.resource.data) || request.resource.data.atualizadoPor == request.auth.uid);
-      allow update: if eStaff() && clienteValido(request.resource.data) && quemAlterouCerto();
+      allow update: if eStaff() && clienteValido(request.resource.data) && quemAlterouCerto()
+        && resource.data.get('origem', '') != 'phc' && request.resource.data.get('origem', '') != 'phc';
       allow delete: if eMaster();
     }
 

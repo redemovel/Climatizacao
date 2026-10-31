@@ -436,7 +436,7 @@ teste('clientes: lista paginada, pesquisa por nome/localidade/NIF', async () => 
   await page.goto(BASE + '/clientes.html');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 25);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 27);
   await page.fill('#q', 'ovar');
   await page.click('#fPesq button');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 1);
@@ -528,6 +528,36 @@ teste('clientes: importação de CSV do PHC (ignora existentes, inválidos e rep
   await page.fill('#q', 'oficina');
   await page.click('#fPesq button');
   await page.waitForFunction(() => document.querySelector('#lista').textContent.includes('Oficina Ribeiro'));
+  semErros(page); await ctx.close();
+});
+
+teste('clientes do PHC: só leitura na plataforma; inativos não aparecem ao criar folha', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/clientes.html');
+  await page.fill('#q', 'santa clara');
+  await page.click('#fPesq button');
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 2);
+  assert((await page.textContent('#lista')).includes('Inativo'), 'inativo assinalado na lista');
+  await page.goto(BASE + '/clientes.html?id=phc-1234');
+  await page.waitForSelector('#avisoPhc');
+  igual(await contar(page, '#btnEditar'), 0, 'sem botão Editar');
+  assert((await page.textContent('.det-cab')).includes('PHC 1234'), 'mostra n.º PHC');
+  await captura(page, 'cliente-phc-375');
+  // as regras (simuladas) também recusam alterar um cliente do PHC
+  const erro = await page.evaluate(async () => {
+    const m = await import('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js');
+    try { await m.updateDoc(m.doc({ type: 'firestore' }, 'clientes', 'phc-1234'), { nome: 'Alterado' }); return 'gravou'; } catch (e) { return e.code; }
+  });
+  igual(erro, 'permission-denied', 'regras recusam editar cliente do PHC');
+  // ao criar folha, o inativo não aparece
+  await page.goto(BASE + '/folhas.html?nova=1');
+  await page.waitForSelector('#cliQ');
+  await page.fill('#cliQ', 'santa clara');
+  await page.click('#cliProcurar');
+  await page.waitForSelector('#cliRes [data-i]');
+  igual(await contar(page, '#cliRes [data-i]'), 1, 'só o cliente ativo');
+  assert((await page.textContent('#cliRes')).includes('Lar de Idosos'), 'é o Lar de Idosos');
   semErros(page); await ctx.close();
 });
 
