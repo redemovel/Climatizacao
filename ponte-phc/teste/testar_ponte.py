@@ -138,17 +138,17 @@ verifica(cod == 0 and 'acessivel' in out, '/testar-firebase: TLS 1.2 + JWT assin
 cod, out = ponte('/sincronizar')
 verifica(cod == 0, '/sincronizar terminou sem erro ' + out[-400:])
 ids = sorted(BD)
-verifica(ids == ['clientes/phc-1', 'clientes/phc-2', 'clientes/phc-3', 'clientes/phc-4', 'clientes/phc-5', 'clientes/phc-7'], 'documentos criados: ' + ', '.join(ids))
+verifica(ids == ['clientes/phc-1', 'clientes/phc-2', 'clientes/phc-3', 'clientes/phc-4', 'clientes/phc-7'], 'documentos criados (inativo antigo ignorado): ' + ', '.join(ids))
 verifica(campo('clientes/phc-1', 'nome') == 'ARPURO & REDEMÓVEL, LDA' and campo('clientes/phc-1', 'localidade') == 'São João da Madeira', 'acentos preservados')
 verifica(campo('clientes/phc-2', 'nif') == '501234560' and campo('clientes/phc-2', 'nifValido') is True, 'NIF «PT 501 234 560» normalizado e válido')
 verifica(campo('clientes/phc-3', 'nifValido') is False, 'NIF errado marcado como inválido (mas cliente enviado)')
 verifica(campo('clientes/phc-4', 'nif') == 'ESB12345678' and campo('clientes/phc-4', 'nifPais') == 'ES', 'NIF estrangeiro')
-verifica(campo('clientes/phc-5', 'ativo') is False, 'cliente inativo enviado com ativo=false')
+verifica('clientes/phc-5' not in BD, 'cliente inativo antigo não é enviado')
 pesq = [x['stringValue'] for x in BD['clientes/phc-7']['pesquisa']['arrayValue']['values']]
 verifica('cond' in pesq and 'condominio' in pesq and 'ga' in pesq, 'prefixos de pesquisa iguais aos da plataforma')
 verifica(campo('clientes/phc-1', 'origem') == 'phc' and campo('clientes/phc-1', 'phcId') == '1' and 'sincronizadoEm' in BD['clientes/phc-1'], 'origem, n.º PHC e data de sincronização')
 commits = [p for p in PEDIDOS if p[0].endswith(':commit')]
-verifica(len(commits) == 3, f'enviado em lotes de 3 ({len(commits)} pedidos)')
+verifica(len(commits) == 2, f'enviado em lotes de 3 ({len(commits)} pedidos)')
 verifica(open(os.path.join(d, 'estado_clientes.txt')).read() == '2026-01-12|08:00:00|7', 'marca gravada no último cliente')
 
 # 4) segunda passagem: nada de novo → nenhum envio
@@ -165,6 +165,13 @@ cod, out = ponte('/sincronizar')
 novos = [json.loads(p[2]) for p in PEDIDOS[n:] if p[0].endswith(':commit')]
 verifica(len(novos) == 1 and len(novos[0]['writes']) == 1, 'só o cliente alterado é reenviado')
 verifica(campo('clientes/phc-2', 'nome') == 'Hotel Meliá Ria Aveiro' and campo('clientes/phc-2', 'observacoes') == 'nota feita na plataforma', 'atualiza nome sem apagar campos da plataforma')
+
+# 5b) cliente desativado no PHC depois do arranque → enviado com ativo=false
+hoje = datetime.date.today().isoformat()
+linhas[1] = linhas[1].replace(';0;2026-01-10;10:00:00', f';1;{hoje};18:00:00')
+open(os.path.join(d, 'clientes_teste.csv'), 'w', encoding='utf-8').write('\n'.join(linhas) + '\n')
+cod, out = ponte('/sincronizar')
+verifica(campo('clientes/phc-1', 'ativo') is False, 'cliente desativado depois do arranque é enviado como inativo')
 
 # 6) limite diário de escritas
 open(os.path.join(d, 'estado_escritas.txt'), 'w').write(datetime.date.today().isoformat() + '|100')

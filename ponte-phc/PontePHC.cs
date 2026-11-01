@@ -648,7 +648,16 @@ class PhcSql : IFonteClientes
 
     string Opcional(string col) { return colunas.Contains(col) ? "cl." + col : "''"; }
 
-    string Filtro() { return " " + cfg.Get("ClientesFiltro", "") + " "; }
+    // Data de arranque da sincronizacao: inativos alterados depois dela sao enviados (ficam ativo=false na plataforma).
+    public DateTime Inicio = DateTime.Today;
+
+    string Filtro()
+    {
+        string f = " " + cfg.Get("ClientesFiltro", "") + " ";
+        if (cfg.GetBool("IgnorarInativos", true) && colunas != null && colunas.Contains("inactivo"))
+            f += "AND (cl.inactivo = 0 OR cl.usrdata >= '" + Inicio.ToString("yyyyMMdd") + "') ";
+        return f;
+    }
 
     public int Total()
     {
@@ -739,8 +748,12 @@ class FonteCsv : IFonteClientes
 {
     List<ClientePHC> todos = new List<ClientePHC>();
 
-    public FonteCsv(string f)
+    bool ignorarInativos;
+    public DateTime Inicio = DateTime.Today;
+
+    public FonteCsv(string f, bool ignorar)
     {
+        ignorarInativos = ignorar;
         string[] ls = File.ReadAllLines(f, Encoding.UTF8);
         string[] cab = ls[0].Split(';');
         for (int i = 1; i < ls.Length; i++)
@@ -765,6 +778,7 @@ class FonteCsv : IFonteClientes
         List<ClientePHC> l = todos.FindAll(delegate(ClientePHC c)
         {
             if (c.Estab != 0) return false;
+            if (ignorarInativos && c.Inativo && c.Data < Inicio) return false;
             int a = c.Data.CompareTo(m.Data);
             if (a != 0) return a > 0;
             int b = string.CompareOrdinal(c.Hora, m.Hora);
@@ -842,16 +856,20 @@ class Motor
     Config cfg;
     IFonteClientes fonte;
     Firestore fs;
-    string fMarca, fQuota;
+    string fMarca, fQuota, fInicio;
     string ultimoErro = "";
 
     public Motor(Config c)
     {
         cfg = c;
         string teste = cfg.Caminho("FonteTeste");
-        fonte = teste != "" ? (IFonteClientes)new FonteCsv(teste) : new PhcSql(c);
+        fonte = teste != "" ? (IFonteClientes)new FonteCsv(teste, cfg.GetBool("IgnorarInativos", true)) : new PhcSql(c);
         fMarca = Path.Combine(cfg.Pasta, "estado_clientes.txt");
         fQuota = Path.Combine(cfg.Pasta, "estado_escritas.txt");
+        fInicio = Path.Combine(cfg.Pasta, "estado_inicio.txt");
+        PhcSql sql = fonte as PhcSql;
+        if (sql != null && File.Exists(fInicio))
+            sql.Inicio = DateTime.ParseExact(File.ReadAllText(fInicio).Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     public IFonteClientes Fonte { get { return fonte; } }
@@ -931,6 +949,7 @@ class Motor
                 }
                 else
                 {
+                    if (!File.Exists(fInicio)) File.WriteAllText(fInicio, DateTime.Today.ToString("yyyy-MM-dd"));
                     fs.Gravar("clientes", docs);
                     ContarEscritas(docs.Count);
                 }
@@ -964,6 +983,7 @@ class Motor
     public void Recomecar()
     {
         if (File.Exists(fMarca)) File.Delete(fMarca);
+        if (File.Exists(fInicio)) File.Delete(fInicio);
     }
 }
 
@@ -1096,7 +1116,8 @@ static class Programa
             {
                 PhcSql sql = m.Fonte as PhcSql;
                 if (sql != null) Console.WriteLine("Colunas da tabela cl: " + string.Join(", ", sql.ListaColunas().ToArray()));
-                Console.WriteLine("Clientes (estab 0" + (cfg.Get("ClientesFiltro", "") != "" ? ", com filtro" : "") + "): " + m.Fonte.Total());
+                Console.WriteLine("Clientes a enviar (estab 0" + (cfg.GetBool("IgnorarInativos", true) ? ", sem inativos" : "") +
+                                  (cfg.Get("ClientesFiltro", "") != "" ? ", com o filtro " + cfg.Get("ClientesFiltro", "") : "") + "): " + m.Fonte.Total());
                 List<ClientePHC> l = m.Fonte.Seguintes(new Marca(), 5);
                 foreach (ClientePHC c in l)
                 {
