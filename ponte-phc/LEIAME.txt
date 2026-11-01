@@ -20,6 +20,7 @@ Comandos (numa linha de comandos, na pasta do programa)
   PontePHC.exe                    corre na consola (Ctrl+C para parar)
   PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado
   PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)
+  PontePHC.exe /dossier SERIE [N]  mostra um dossier completo (o ultimo, ou o numero N)
   PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)
   PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado
   PontePHC.exe /sincronizar       faz uma sincronizacao agora (respeita Simular)

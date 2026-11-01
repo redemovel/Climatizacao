@@ -761,6 +761,93 @@ class PhcSql : IFonteClientes
         return l;
     }
 
+    // Diagnostico: mostra um dossier interno completo (campos preenchidos de bo/bo2/bo3 e linhas bi) e um resumo da serie.
+    public List<string> VerDossier(int ndos, long numero)
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            using (SqlCommand c = new SqlCommand("SELECT COUNT(*) AS n, SUM(CASE WHEN fechada = 1 THEN 1 ELSE 0 END) AS fechadas, " +
+                "MIN(dataobra) AS d1, MAX(dataobra) AS d2 FROM bo WITH (NOLOCK) WHERE ndos = @n", cn))
+            {
+                c.Parameters.AddWithValue("@n", ndos);
+                using (SqlDataReader r = c.ExecuteReader())
+                    if (r.Read())
+                        l.Add("Serie " + ndos + ": " + r["n"] + " documentos, " + r["fechadas"] + " fechados, de " +
+                              (r["d1"] == DBNull.Value ? "-" : Convert.ToDateTime(r["d1"]).ToString("yyyy-MM-dd")) + " a " +
+                              (r["d2"] == DBNull.Value ? "-" : Convert.ToDateTime(r["d2"]).ToString("yyyy-MM-dd")));
+            }
+            string stamp = null;
+            using (SqlCommand c = new SqlCommand(numero > 0
+                ? "SELECT TOP 1 bostamp FROM bo WITH (NOLOCK) WHERE ndos = @n AND obrano = @o ORDER BY boano DESC"
+                : "SELECT TOP 1 bostamp FROM bo WITH (NOLOCK) WHERE ndos = @n ORDER BY dataobra DESC, obrano DESC", cn))
+            {
+                c.Parameters.AddWithValue("@n", ndos);
+                c.Parameters.AddWithValue("@o", numero);
+                object o = c.ExecuteScalar();
+                if (o != null) stamp = o.ToString().Trim();
+            }
+            if (stamp == null) { l.Add("Documento nao encontrado."); return l; }
+            foreach (string t in new string[] { "bo", "bo2", "bo3" })
+            {
+                l.Add("");
+                l.Add("--- " + t + " (so campos preenchidos)");
+                using (SqlCommand c = new SqlCommand("SELECT * FROM " + t + " WITH (NOLOCK) WHERE " + t + "stamp = @s", cn))
+                {
+                    c.Parameters.AddWithValue("@s", stamp);
+                    try
+                    {
+                        using (SqlDataReader r = c.ExecuteReader())
+                            if (r.Read())
+                                for (int i = 0; i < r.FieldCount; i++)
+                                {
+                                    string v = Valor(r[i]);
+                                    if (v != "") l.Add("  " + r.GetName(i) + " = " + v);
+                                }
+                    }
+                    catch (Exception e) { l.Add("  (" + e.Message + ")"); }
+                }
+            }
+            l.Add("");
+            l.Add("--- linhas (bi, so campos preenchidos)");
+            using (SqlCommand c = new SqlCommand("SELECT * FROM bi WITH (NOLOCK) WHERE bostamp = @s ORDER BY lordem", cn))
+            {
+                c.Parameters.AddWithValue("@s", stamp);
+                using (SqlDataReader r = c.ExecuteReader())
+                {
+                    int k = 0;
+                    while (r.Read() && k < 30)
+                    {
+                        k++;
+                        StringBuilder sb = new StringBuilder("  #" + k + ":");
+                        for (int i = 0; i < r.FieldCount; i++)
+                        {
+                            string n = r.GetName(i);
+                            if (n.EndsWith("stamp")) continue;
+                            string v = Valor(r[i]);
+                            if (v != "") sb.Append(" " + n + "=" + v + ";");
+                        }
+                        l.Add(sb.ToString());
+                    }
+                }
+            }
+        }
+        return l;
+    }
+
+    static string Valor(object o)
+    {
+        if (o == null || o == DBNull.Value) return "";
+        if (o is DateTime) { DateTime d = (DateTime)o; return d.Year <= 1900 ? "" : d.ToString(d.TimeOfDay.Ticks == 0 ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm"); }
+        if (o is bool) return (bool)o ? "1" : "";
+        if (o is byte[]) return "";
+        string s = Convert.ToString(o, CultureInfo.InvariantCulture).Trim();
+        if (s == "0" || s == "0.00" || s == "0.000000" || s == "0.0") return "";
+        decimal dec;
+        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out dec) && dec == 0) return "";
+        return s.Length > 300 ? s.Substring(0, 300) + "..." : s.Replace("\r", " ").Replace("\n", " ");
+    }
+
     static string Linha(SqlDataReader r)
     {
         string u = r["u"] == DBNull.Value ? "-" : Convert.ToDateTime(r["u"]).ToString("yyyy-MM-dd");
@@ -1288,6 +1375,14 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/dossier" && args.Length >= 2)
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.VerDossier(int.Parse(args[1]), args.Length >= 3 ? long.Parse(args[2]) : 0)) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/testar-firebase")
             {
                 Console.WriteLine(m.TestarFirebase());
@@ -1313,6 +1408,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe                    corre na consola (Ctrl+C para parar)");
                 Console.WriteLine("  PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado");
                 Console.WriteLine("  PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)");
+                Console.WriteLine("  PontePHC.exe /dossier SERIE [N]  mostra um dossier completo (o ultimo, ou o numero N)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
                 Console.WriteLine("  PontePHC.exe /sincronizar       faz uma sincronizacao agora");
