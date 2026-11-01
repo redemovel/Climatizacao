@@ -156,6 +156,18 @@ n = len(PEDIDOS)
 cod, out = ponte('/sincronizar')
 verifica(cod == 0 and not [p for p in PEDIDOS[n:] if p[0].endswith(':commit')], 'sem alterações no PHC → nada enviado')
 
+# 4b) cliente antigo (ficha sem alterações) que recebe agora uma fatura de climatização → enviado uma vez
+linhas.append('8;0;Cliente Fatura Nova;503504564;;Espinho;;;;;0;2025-01-01;08:00:00')
+open(os.path.join(d, 'clientes_teste.csv'), 'w', encoding='utf-8').write('\n'.join(linhas) + '\n')
+open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nFonteTesteDocumentos=3,8\n')
+n = len(PEDIDOS)
+cod, out = ponte('/sincronizar')
+w = [x for p in PEDIDOS[n:] if p[0].endswith(':commit') for x in json.loads(p[2])['writes']]
+verifica([x['update']['name'].split('/')[-1] for x in w] == ['phc-8'], 'cliente com documento recente enviado (só ele, o 3 já tinha ido)')
+n = len(PEDIDOS)
+cod, out = ponte('/sincronizar')
+verifica(not [p for p in PEDIDOS[n:] if p[0].endswith(':commit')], 'não reenvia o mesmo cliente a cada ciclo')
+
 # 5) cliente alterado no PHC → só ele é enviado; campos da plataforma não são apagados
 BD['clientes/phc-2']['observacoes'] = {'stringValue': 'nota feita na plataforma'}
 linhas[2] = linhas[2].replace('Hotel Meliá Ria', 'Hotel Meliá Ria Aveiro').replace('2026-01-10;10:00:00', '2026-02-01;12:00:00')

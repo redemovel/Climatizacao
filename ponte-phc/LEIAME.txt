@@ -2,7 +2,8 @@ PontePHC - liga o PHC ao Firebase da plataforma de Climatizacao
 ==================================================================
 
 O que faz (fase atual)
-  De X em X minutos le no PHC os clientes criados ou alterados (tabela cl, estab 0)
+  De X em X minutos le no PHC os clientes criados ou alterados (tabela cl, estab 0),
+  ativos e com faturas/dossiers das series configuradas (ou criados depois do arranque),
   e envia-os para o Firebase (colecao clientes, documentos phc-<numero>).
   No PHC so LE: nunca escreve nada. E independente do GuiasAT.
 
@@ -18,6 +19,7 @@ Ficheiros
 Comandos (numa linha de comandos, na pasta do programa)
   PontePHC.exe                    corre na consola (Ctrl+C para parar)
   PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado
+  PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)
   PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)
   PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado
   PontePHC.exe /sincronizar       faz uma sincronizacao agora (respeita Simular)
@@ -28,6 +30,8 @@ O que o programa escreve
   logs\PontePHC_AAAAMM.log   registo de tudo o que faz
   PontePHC_ERROS.txt         so os erros
   estado_clientes.txt        ate onde ja sincronizou (data/hora de alteracao no PHC)
+  estado_enviados.txt        numeros de cliente ja enviados
+  estado_inicio.txt          data do arranque da sincronizacao
   estado_escritas.txt        escritas no Firebase feitas hoje (limite MaxEscritasPorDia)
 
 Seguranca

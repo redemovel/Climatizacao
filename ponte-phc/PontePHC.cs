@@ -609,6 +609,8 @@ class Marca
 interface IFonteClientes
 {
     List<ClientePHC> Seguintes(Marca desde, int max);
+    // Clientes com documentos (faturas/dossiers das series configuradas) desde a data, excluindo os ja enviados.
+    List<ClientePHC> ComDocumentosRecentes(DateTime desde, HashSet<long> jaEnviados, int max);
     int Total();
 }
 
@@ -651,9 +653,44 @@ class PhcSql : IFonteClientes
     // Data de arranque da sincronizacao: inativos alterados depois dela sao enviados (ficam ativo=false na plataforma).
     public DateTime Inicio = DateTime.Today;
 
+    // Lista de numeros inteiros (series) a partir da configuracao; ignora tudo o que nao for numero.
+    string Series(string chave)
+    {
+        List<string> l = new List<string>();
+        foreach (string x in cfg.Get(chave, "").Split(','))
+        {
+            int n;
+            if (int.TryParse(x.Trim(), out n)) l.Add(n.ToString());
+        }
+        return string.Join(",", l.ToArray());
+    }
+
+    // Subconsulta com os numeros de cliente que tem documentos das series configuradas (null se nao houver series).
+    string ClientesComDocumentos(string desdeSql)
+    {
+        List<string> partes = new List<string>();
+        string sf = Series("SeriesFaturas"), sd = Series("SeriesDossiers");
+        if (sf != "") partes.Add("SELECT ft.no FROM ft WITH (NOLOCK) WHERE ft.ndoc IN (" + sf + ")" + (desdeSql != null ? " AND ft.fdata >= " + desdeSql : ""));
+        if (sd != "") partes.Add("SELECT bo.no FROM bo WITH (NOLOCK) WHERE bo.ndos IN (" + sd + ")" + (desdeSql != null ? " AND bo.dataobra >= " + desdeSql : ""));
+        return partes.Count == 0 ? null : string.Join(" UNION ", partes.ToArray());
+    }
+
+    string DocumentosDesde()
+    {
+        DateTime d;
+        if (DateTime.TryParseExact(cfg.Get("DocumentosDesde", ""), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
+            return "'" + d.ToString("yyyyMMdd") + "'";
+        return null;
+    }
+
     string Filtro()
     {
         string f = " " + cfg.Get("ClientesFiltro", "") + " ";
+        string docs = ClientesComDocumentos(DocumentosDesde());
+        if (docs != null)
+            f += "AND (cl.no IN (" + docs + ")" +
+                 (cfg.GetBool("IncluirNovosClientes", true) && colunas != null && colunas.Contains("ousrdata")
+                    ? " OR cl.ousrdata >= '" + Inicio.ToString("yyyyMMdd") + "'" : "") + ") ";
         if (cfg.GetBool("IgnorarInativos", true) && colunas != null && colunas.Contains("inactivo"))
             f += "AND (cl.inactivo = 0 OR cl.usrdata >= '" + Inicio.ToString("yyyyMMdd") + "') ";
         return f;
@@ -669,6 +706,82 @@ class PhcSql : IFonteClientes
         }
     }
 
+    string Campos()
+    {
+        return "cl.no, cl.estab, cl.nome, cl.ncont, " +
+            Opcional("morada") + " AS morada, " + Opcional("local") + " AS local, " + Opcional("codpost") + " AS codpost, " +
+            Opcional("telefone") + " AS telefone, " + Opcional("tlmvl") + " AS tlmvl, " + Opcional("email") + " AS email, " +
+            Opcional("contacto") + " AS contacto, " + (colunas.Contains("inactivo") ? "cl.inactivo" : "0") + " AS inactivo, " +
+            "cl.usrdata, cl.usrhora";
+    }
+
+    public List<ClientePHC> ComDocumentosRecentes(DateTime desde, HashSet<long> jaEnviados, int max)
+    {
+        List<ClientePHC> l = new List<ClientePHC>();
+        using (SqlConnection cn = Abrir())
+        {
+            Colunas(cn);
+            string docs = ClientesComDocumentos("@desde");
+            if (docs == null) return l;
+            string sql = "SELECT " + Campos() + " FROM cl WITH (NOLOCK) WHERE cl.estab = 0 " +
+                         (colunas.Contains("inactivo") ? "AND cl.inactivo = 0 " : "") +
+                         "AND cl.no IN (" + docs + ") " + cfg.Get("ClientesFiltro", "") + " ORDER BY cl.no";
+            using (SqlCommand c = new SqlCommand(sql, cn))
+            {
+                c.Parameters.AddWithValue("@desde", desde);
+                using (SqlDataReader r = c.ExecuteReader())
+                    while (r.Read() && l.Count < max)
+                    {
+                        ClientePHC x = Ler(r);
+                        if (!jaEnviados.Contains(x.No)) l.Add(x);
+                    }
+            }
+        }
+        return l;
+    }
+
+    // Diagnostico: series de faturas (td) e de dossiers internos (ts), com n.o de documentos e ultima data.
+    public List<string> ListaSeries()
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            l.Add("FATURAS E OUTROS DOCUMENTOS DE FATURACAO (SeriesFaturas)");
+            using (SqlCommand c = new SqlCommand("SELECT td.ndoc, td.nmdoc, (SELECT COUNT(*) FROM ft WITH (NOLOCK) WHERE ft.ndoc = td.ndoc) AS n, " +
+                "(SELECT MAX(ft.fdata) FROM ft WITH (NOLOCK) WHERE ft.ndoc = td.ndoc) AS u FROM td WITH (NOLOCK) ORDER BY td.ndoc", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) l.Add(Linha(r));
+            l.Add("");
+            l.Add("DOSSIERS INTERNOS (SeriesDossiers)");
+            using (SqlCommand c = new SqlCommand("SELECT ts.ndos, ts.nmdos, (SELECT COUNT(*) FROM bo WITH (NOLOCK) WHERE bo.ndos = ts.ndos) AS n, " +
+                "(SELECT MAX(bo.dataobra) FROM bo WITH (NOLOCK) WHERE bo.ndos = ts.ndos) AS u FROM ts WITH (NOLOCK) ORDER BY ts.ndos", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) l.Add(Linha(r));
+        }
+        return l;
+    }
+
+    static string Linha(SqlDataReader r)
+    {
+        string u = r["u"] == DBNull.Value ? "-" : Convert.ToDateTime(r["u"]).ToString("yyyy-MM-dd");
+        return string.Format("  {0,4}  {1,-40} {2,9} docs  ultimo {3}", r[0], r[1].ToString().Trim(), r["n"], u);
+    }
+
+    ClientePHC Ler(SqlDataReader r)
+    {
+        ClientePHC x = new ClientePHC();
+        x.No = Convert.ToInt64(r["no"]);
+        x.Estab = Convert.ToInt32(r["estab"]);
+        x.Nome = S(r, "nome"); x.Ncont = S(r, "ncont");
+        x.Morada = S(r, "morada"); x.Local = S(r, "local"); x.CodPost = S(r, "codpost");
+        x.Telefone = S(r, "telefone"); if (x.Telefone == "") x.Telefone = S(r, "tlmvl");
+        x.Email = S(r, "email"); x.Contacto = S(r, "contacto");
+        x.Inativo = r["inactivo"] != DBNull.Value && Convert.ToBoolean(r["inactivo"]);
+        x.Data = r["usrdata"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["usrdata"]).Date;
+        x.Hora = S(r, "usrhora");
+        return x;
+    }
+
     public List<ClientePHC> Seguintes(Marca m, int max)
     {
         List<ClientePHC> l = new List<ClientePHC>();
@@ -676,11 +789,7 @@ class PhcSql : IFonteClientes
         {
             Colunas(cn);
             string sql =
-                "SELECT TOP (@max) cl.no, cl.estab, cl.nome, cl.ncont, " +
-                Opcional("morada") + " AS morada, " + Opcional("local") + " AS local, " + Opcional("codpost") + " AS codpost, " +
-                Opcional("telefone") + " AS telefone, " + Opcional("tlmvl") + " AS tlmvl, " + Opcional("email") + " AS email, " +
-                Opcional("contacto") + " AS contacto, " + (colunas.Contains("inactivo") ? "cl.inactivo" : "0") + " AS inactivo, " +
-                "cl.usrdata, cl.usrhora FROM cl WITH (NOLOCK) " +
+                "SELECT TOP (@max) " + Campos() + " FROM cl WITH (NOLOCK) " +
                 "WHERE cl.estab = 0 AND (cl.usrdata > @d OR (cl.usrdata = @d AND cl.usrhora > @h) " +
                 "OR (cl.usrdata = @d AND cl.usrhora = @h AND cl.no > @no))" + Filtro() +
                 "ORDER BY cl.usrdata, cl.usrhora, cl.no";
@@ -691,20 +800,7 @@ class PhcSql : IFonteClientes
                 c.Parameters.AddWithValue("@h", m.Hora);
                 c.Parameters.AddWithValue("@no", m.No);
                 using (SqlDataReader r = c.ExecuteReader())
-                    while (r.Read())
-                    {
-                        ClientePHC x = new ClientePHC();
-                        x.No = Convert.ToInt64(r["no"]);
-                        x.Estab = Convert.ToInt32(r["estab"]);
-                        x.Nome = S(r, "nome"); x.Ncont = S(r, "ncont");
-                        x.Morada = S(r, "morada"); x.Local = S(r, "local"); x.CodPost = S(r, "codpost");
-                        x.Telefone = S(r, "telefone"); if (x.Telefone == "") x.Telefone = S(r, "tlmvl");
-                        x.Email = S(r, "email"); x.Contacto = S(r, "contacto");
-                        x.Inativo = r["inactivo"] != DBNull.Value && Convert.ToBoolean(r["inactivo"]);
-                        x.Data = r["usrdata"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["usrdata"]).Date;
-                        x.Hora = S(r, "usrhora");
-                        l.Add(x);
-                    }
+                    while (r.Read()) l.Add(Ler(r));
             }
         }
         return l;
@@ -772,6 +868,14 @@ class FonteCsv : IFonteClientes
     }
 
     public int Total() { return todos.FindAll(delegate(ClientePHC c) { return c.Estab == 0; }).Count; }
+
+    // Nos testes, "documentos recentes" vem de uma lista de numeros em FonteTesteDocumentos.
+    public List<long> ComDocs = new List<long>();
+    public List<ClientePHC> ComDocumentosRecentes(DateTime desde, HashSet<long> jaEnviados, int max)
+    {
+        List<ClientePHC> l = todos.FindAll(delegate(ClientePHC c) { return c.Estab == 0 && !c.Inativo && ComDocs.Contains(c.No) && !jaEnviados.Contains(c.No); });
+        return l.GetRange(0, Math.Min(max, l.Count));
+    }
 
     public List<ClientePHC> Seguintes(Marca m, int max)
     {
@@ -856,7 +960,8 @@ class Motor
     Config cfg;
     IFonteClientes fonte;
     Firestore fs;
-    string fMarca, fQuota, fInicio;
+    string fMarca, fQuota, fInicio, fEnviados;
+    HashSet<long> enviados;
     string ultimoErro = "";
 
     public Motor(Config c)
@@ -867,6 +972,10 @@ class Motor
         fMarca = Path.Combine(cfg.Pasta, "estado_clientes.txt");
         fQuota = Path.Combine(cfg.Pasta, "estado_escritas.txt");
         fInicio = Path.Combine(cfg.Pasta, "estado_inicio.txt");
+        fEnviados = Path.Combine(cfg.Pasta, "estado_enviados.txt");
+        FonteCsv csv = fonte as FonteCsv;
+        if (csv != null)
+            foreach (string x in cfg.Get("FonteTesteDocumentos", "").Split(',')) { long n; if (long.TryParse(x.Trim(), out n)) csv.ComDocs.Add(n); }
         PhcSql sql = fonte as PhcSql;
         if (sql != null && File.Exists(fInicio))
             sql.Inicio = DateTime.ParseExact(File.ReadAllText(fInicio).Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -893,6 +1002,39 @@ class Motor
     void ContarEscritas(int n)
     {
         File.WriteAllText(fQuota, DateTime.Now.ToString("yyyy-MM-dd") + "|" + (EscritasHoje() + n));
+    }
+
+    HashSet<long> Enviados()
+    {
+        if (enviados != null) return enviados;
+        enviados = new HashSet<long>();
+        if (File.Exists(fEnviados))
+            foreach (string l in File.ReadAllLines(fEnviados)) { long n; if (long.TryParse(l.Trim(), out n)) enviados.Add(n); }
+        return enviados;
+    }
+
+    void MarcarEnviados(List<ClientePHC> l)
+    {
+        StringBuilder sb = new StringBuilder();
+        foreach (ClientePHC c in l) if (Enviados().Add(c.No)) sb.Append(c.No).Append("\r\n");
+        if (sb.Length > 0) File.AppendAllText(fEnviados, sb.ToString());
+    }
+
+    // Envia um lote; devolve o numero de documentos enviados.
+    int Enviar(List<ClientePHC> l)
+    {
+        List<Documento> docs = new List<Documento>();
+        foreach (ClientePHC c in l) if (c.Nome.Trim() != "") docs.Add(Converter(c));
+        if (cfg.Simular)
+        {
+            foreach (Documento d in docs) Log.Info("SIMULACAO: enviaria clientes/" + d.Id);
+            return docs.Count;
+        }
+        if (!File.Exists(fInicio)) File.WriteAllText(fInicio, DateTime.Today.ToString("yyyy-MM-dd"));
+        fs.Gravar("clientes", docs);
+        ContarEscritas(docs.Count);
+        MarcarEnviados(l);
+        return docs.Count;
     }
 
     public static Documento Converter(ClientePHC c)
@@ -941,24 +1083,24 @@ class Motor
                 }
                 List<ClientePHC> l = fonte.Seguintes(m, Math.Min(lote, livres));
                 if (l.Count == 0) break;
-                List<Documento> docs = new List<Documento>();
-                foreach (ClientePHC c in l) if (c.Nome.Trim() != "") docs.Add(Converter(c));
-                if (cfg.Simular)
-                {
-                    foreach (Documento d in docs) Log.Info("SIMULACAO: enviaria clientes/" + d.Id);
-                }
-                else
-                {
-                    if (!File.Exists(fInicio)) File.WriteAllText(fInicio, DateTime.Today.ToString("yyyy-MM-dd"));
-                    fs.Gravar("clientes", docs);
-                    ContarEscritas(docs.Count);
-                }
+                int n = Enviar(l);
                 ClientePHC u = l[l.Count - 1];
                 m.Data = u.Data; m.Hora = u.Hora; m.No = u.No;
                 if (!cfg.Simular) m.Gravar(fMarca);
-                enviados += docs.Count;
+                enviados += n;
                 if (l.Count < Math.Min(lote, livres)) break;
                 if (cfg.Simular && enviados >= 2000) { Log.Info("SIMULACAO: parado aos 2000 clientes."); break; }
+            }
+            // Clientes que passaram a ter faturas/dossiers de climatizacao nos ultimos dias (a ficha nao mudou).
+            int livres2 = limite - EscritasHoje();
+            if (livres2 > 0 && !(cfg.Simular && enviados >= 2000))
+            {
+                List<ClientePHC> novos = fonte.ComDocumentosRecentes(DateTime.Today.AddDays(-cfg.GetInt("DiasDocumentos", 3)), Enviados(), Math.Min(lote, livres2));
+                if (novos.Count > 0)
+                {
+                    enviados += Enviar(novos);
+                    Log.Info((cfg.Simular ? "SIMULACAO: " : "") + novos.Count + " clientes com documentos recentes.");
+                }
             }
             if (enviados > 0) Log.Info((cfg.Simular ? "SIMULACAO: " : "") + enviados + " clientes " + (cfg.Simular ? "seriam enviados" : "enviados") + ". Marca: " + m);
             if (ultimoErro != "quota") ultimoErro = "";
@@ -984,6 +1126,7 @@ class Motor
     {
         if (File.Exists(fMarca)) File.Delete(fMarca);
         if (File.Exists(fInicio)) File.Delete(fInicio);
+        if (File.Exists(fEnviados)) File.Delete(fEnviados);
     }
 }
 
@@ -1137,6 +1280,14 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/series")
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.ListaSeries()) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/testar-firebase")
             {
                 Console.WriteLine(m.TestarFirebase());
@@ -1161,6 +1312,7 @@ static class Programa
                 Console.WriteLine("Comandos:");
                 Console.WriteLine("  PontePHC.exe                    corre na consola (Ctrl+C para parar)");
                 Console.WriteLine("  PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado");
+                Console.WriteLine("  PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
                 Console.WriteLine("  PontePHC.exe /sincronizar       faz uma sincronizacao agora");
