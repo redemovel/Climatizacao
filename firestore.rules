@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-10-31 (2) — Fase 1 + clientes vindos do PHC (só leitura na plataforma)
+// Atualizado: 2026-11-01 — novos estados da folha (Por agendar, Pendente com motivo, Revista, Aguarda NE) e utilizadores backoffice+técnico
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -29,7 +29,8 @@ service cloud.firestore {
       return d.nome is string && d.nome.size() >= 2 && d.nome.size() <= 120
         && d.email is string && d.email.matches('^[^@ ]+@[^@ ]+$')
         && d.perfil in ['master', 'backoffice', 'tecnico', 'comercial']
-        && d.ativo is bool;
+        && d.ativo is bool
+        && (!('tecnico' in d) || d.tecnico is bool);
     }
     match /utilizadores/{uid} {
       // cada um lê o seu perfil; master e backoffice leem todos (lista de técnicos)
@@ -68,28 +69,35 @@ service cloud.firestore {
     }
 
     // ---------- Folhas de obra ----------
+    // Estados: Por agendar → Agendada → Em curso → Pendente (com motivo) → Concluída → Revista → Aguarda NE → Faturada
+    function estados() { return ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada']; }
+    function estadosMaster() { return ['Revista', 'Aguarda NE', 'Faturada']; }
     function folhaValida(d) {
       return d.keys().hasAll(['numero', 'clienteId', 'clienteNome', 'tipo', 'tecnicoUid', 'tecnicoNome',
                               'dataPrevista', 'estado', 'historico', 'criadoEm', 'criadoPor'])
         && d.numero is string && d.numero.matches('^FO-[0-9]{4}-[0-9]{4,}$')
         && d.clienteId is string && d.clienteNome is string && d.clienteNome.size() > 0
         && d.tipo in ['Instalação', 'Manutenção', 'AT']
-        && d.tecnicoUid is string && d.tecnicoUid.size() > 0
-        && d.dataPrevista is timestamp
-        && d.estado in ['Agendada', 'Em curso', 'Pendente material', 'Concluída', 'Faturada']
+        && d.tecnicoUid is string
+        && (d.dataPrevista == null || d.dataPrevista is timestamp)
+        && d.estado in estados()
+        // só "Por agendar" pode estar sem técnico ou sem data
+        && (d.estado == 'Por agendar' || (d.tecnicoUid.size() > 0 && d.dataPrevista is timestamp))
+        // "Pendente" exige motivo
+        && (d.estado != 'Pendente' || (d.get('pendencia', null) != null && d.pendencia.motivo in ['Peças', 'Orçamento', 'Cliente', 'Outro']))
         && d.historico is list && d.historico.size() <= 500
         && (!('observacoesTecnico' in d) || (d.observacoesTecnico is string && d.observacoesTecnico.size() <= 5000))
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 5000));
     }
     function folhaNovaValida(d) {
-      return d.estado == 'Agendada'
+      return d.estado in ['Por agendar', 'Agendada']
         && d.historico.size() == 1
-        && d.historico[0].estado == 'Agendada'
+        && d.historico[0].estado == d.estado
         && d.historico[0].uid == request.auth.uid
         && d.criadoPor == request.auth.uid
         && d.criadoEm == request.time
         && exists(/databases/$(database)/documents/clientes/$(d.clienteId))
-        && exists(/databases/$(database)/documents/utilizadores/$(d.tecnicoUid));
+        && (d.tecnicoUid == '' || exists(/databases/$(database)/documents/utilizadores/$(d.tecnicoUid)));
     }
     // Cada mudança de estado acrescenta exatamente um registo ao histórico (utilizador + hora).
     function historicoValido() {
@@ -107,18 +115,19 @@ service cloud.firestore {
     }
     function transicaoTecnico(de, para) {
       return (de == 'Agendada' && para == 'Em curso')
-        || (de == 'Em curso' && para in ['Pendente material', 'Concluída'])
-        || (de == 'Pendente material' && para == 'Em curso');
+        || (de == 'Em curso' && para in ['Pendente', 'Concluída'])
+        || (de == 'Pendente' && para == 'Em curso');
     }
     function atualizacaoStaff() {
-      // folha faturada: só o master pode voltar a mexer
-      return eStaff() && (resource.data.estado != 'Faturada' || eMaster());
+      // revisão, nota de encomenda e faturação: só o Master
+      return eMaster()
+        || (eStaff() && !(resource.data.estado in estadosMaster()) && !(request.resource.data.estado in estadosMaster()));
     }
     function atualizacaoTecnico() {
       return eTecnico()
         && resource.data.tecnicoUid == request.auth.uid
-        && resource.data.estado != 'Faturada'
-        && alterados().hasOnly(['estado', 'historico', 'estadoAlteradoEm', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'])
+        && !(resource.data.estado in estadosMaster())
+        && alterados().hasOnly(['estado', 'historico', 'estadoAlteradoEm', 'pendencia', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'])
         && (request.resource.data.estado == resource.data.estado
             || transicaoTecnico(resource.data.estado, request.resource.data.estado));
     }
@@ -131,7 +140,7 @@ service cloud.firestore {
         && historicoValido()
         && quemAlterouCerto()
         && (atualizacaoStaff() || atualizacaoTecnico());
-      allow delete: if eMaster() && resource.data.estado == 'Agendada';
+      allow delete: if eMaster() && resource.data.estado in ['Por agendar', 'Agendada'];
     }
 
     // Tudo o resto: recusado.

@@ -33,17 +33,27 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Agendada', 'Em curso', 'Pendente material', 'Concluída', 'Faturada'];
-const ESTADOS_ABERTOS = ['Agendada', 'Em curso', 'Pendente material'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
 // Transições "normais" (botões principais). Têm de bater com firestore.rules.
 const TRANSICOES = {
+  'Por agendar': ['Agendada'],
   'Agendada': ['Em curso'],
-  'Em curso': ['Pendente material', 'Concluída'],
-  'Pendente material': ['Em curso'],
-  'Concluída': ['Faturada'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso', 'Agendada'],
+  'Concluída': ['Revista'],
+  'Revista': ['Aguarda NE', 'Faturada'],
+  'Aguarda NE': ['Faturada'],
   'Faturada': [],
+};
+const TRANSICOES_TECNICO = {
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso'],
 };
 const PAGINA_TAM = 20;
 
@@ -51,9 +61,9 @@ const ehStaff = (p) => p === 'master' || p === 'backoffice';
 
 // Estados para onde o perfil pode mudar a folha (o servidor valida o mesmo nas regras).
 function transicoesPermitidas(perfil, estado) {
-  if (perfil === 'tecnico') return (TRANSICOES[estado] || []).filter((e) => e !== 'Faturada');
+  if (perfil === 'tecnico') return TRANSICOES_TECNICO[estado] || [];
   if (perfil === 'master') return ESTADOS.filter((e) => e !== estado);
-  if (perfil === 'backoffice') return estado === 'Faturada' ? [] : ESTADOS.filter((e) => e !== estado);
+  if (perfil === 'backoffice') return ESTADOS_MASTER.includes(estado) ? [] : ESTADOS.filter((e) => e !== estado && !ESTADOS_MASTER.includes(e));
   return [];
 }
 
@@ -271,7 +281,13 @@ async function pesquisarClientes(texto, { soAtivos = false } = {}) {
 let _tecnicos = null;
 async function carregarTecnicos() {
   if (_tecnicos) return _tecnicos;
-  const snap = await getDocs(query(collection(db, 'utilizadores'), where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50)));
-  _tecnicos = snap.docs.map((d) => ({ uid: d.id, ...d.data() })).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+  const col = collection(db, 'utilizadores');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50))),
+    getDocs(query(col, where('tecnico', '==', true), where('ativo', '==', true), limit(50))),
+  ]);
+  const mapa = new Map();
+  for (const d of [...a.docs, ...b.docs]) mapa.set(d.id, { uid: d.id, ...d.data() });
+  _tecnicos = [...mapa.values()].sort((x, y) => (x.nome || '').localeCompare(y.nome || '', 'pt'));
   return _tecnicos;
 }

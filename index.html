@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-01 21:14 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-01 22:25 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -115,12 +115,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; background: #eef2f6; color: var(--texto-2); }
 .estado-agendada { background: #e0efff; color: #0b4f8a; }
 .estado-em-curso { background: #fff4d6; color: #8a5a00; }
-.estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-por-agendar { background: #f1f5f9; color: #475569; }
+.estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-revista { background: #e0f2f1; color: #00695c; }
+.estado-aguarda-ne { background: #fef3c7; color: #92400e; }
 .estado-concluida { background: #dcf5e6; color: var(--verde); }
 .estado-faturada { background: #ede9fe; color: var(--roxo); }
 .lista-item.b-agendada { border-left-color: #3b82f6; }
 .lista-item.b-em-curso { border-left-color: #f59e0b; }
-.lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-por-agendar { border-left-color: #94a3b8; }
+.lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-revista { border-left-color: #0d9488; }
+.lista-item.b-aguarda-ne { border-left-color: #d97706; }
 .lista-item.b-concluida { border-left-color: #22c55e; }
 .lista-item.b-faturada { border-left-color: #8b5cf6; }
 .tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
@@ -135,6 +141,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 @media (min-width: 600px) { .dl { grid-template-columns: 1fr 1fr; } }
 .acoes-rapidas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .estados-acoes { display: grid; gap: 8px; }
+.pendencia { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.pendencia b { color: var(--laranja); }
 .hist { list-style: none; padding: 0; margin: 0; }
 .hist li { padding: 8px 0; border-bottom: 1px solid var(--linha); font-size: .9rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hist li:last-child { border-bottom: 0; }
@@ -212,7 +220,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-01 21:14 UTC';
+const BUILD = '2026-11-01 22:25 UTC';
 const PAGINA = 'index';
 
 const FIREBASE_CONFIG = {
@@ -234,17 +242,27 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Agendada', 'Em curso', 'Pendente material', 'Concluída', 'Faturada'];
-const ESTADOS_ABERTOS = ['Agendada', 'Em curso', 'Pendente material'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
 // Transições "normais" (botões principais). Têm de bater com firestore.rules.
 const TRANSICOES = {
+  'Por agendar': ['Agendada'],
   'Agendada': ['Em curso'],
-  'Em curso': ['Pendente material', 'Concluída'],
-  'Pendente material': ['Em curso'],
-  'Concluída': ['Faturada'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso', 'Agendada'],
+  'Concluída': ['Revista'],
+  'Revista': ['Aguarda NE', 'Faturada'],
+  'Aguarda NE': ['Faturada'],
   'Faturada': [],
+};
+const TRANSICOES_TECNICO = {
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso'],
 };
 const PAGINA_TAM = 20;
 
@@ -252,9 +270,9 @@ const ehStaff = (p) => p === 'master' || p === 'backoffice';
 
 // Estados para onde o perfil pode mudar a folha (o servidor valida o mesmo nas regras).
 function transicoesPermitidas(perfil, estado) {
-  if (perfil === 'tecnico') return (TRANSICOES[estado] || []).filter((e) => e !== 'Faturada');
+  if (perfil === 'tecnico') return TRANSICOES_TECNICO[estado] || [];
   if (perfil === 'master') return ESTADOS.filter((e) => e !== estado);
-  if (perfil === 'backoffice') return estado === 'Faturada' ? [] : ESTADOS.filter((e) => e !== estado);
+  if (perfil === 'backoffice') return ESTADOS_MASTER.includes(estado) ? [] : ESTADOS.filter((e) => e !== estado && !ESTADOS_MASTER.includes(e));
   return [];
 }
 
@@ -472,8 +490,14 @@ async function pesquisarClientes(texto, { soAtivos = false } = {}) {
 let _tecnicos = null;
 async function carregarTecnicos() {
   if (_tecnicos) return _tecnicos;
-  const snap = await getDocs(query(collection(db, 'utilizadores'), where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50)));
-  _tecnicos = snap.docs.map((d) => ({ uid: d.id, ...d.data() })).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+  const col = collection(db, 'utilizadores');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50))),
+    getDocs(query(col, where('tecnico', '==', true), where('ativo', '==', true), limit(50))),
+  ]);
+  const mapa = new Map();
+  for (const d of [...a.docs, ...b.docs]) mapa.set(d.id, { uid: d.id, ...d.data() });
+  _tecnicos = [...mapa.values()].sort((x, y) => (x.nome || '').localeCompare(y.nome || '', 'pt'));
   return _tecnicos;
 }
 

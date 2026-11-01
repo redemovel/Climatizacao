@@ -297,6 +297,19 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   await captura(page, 'folha-detalhe-tecnico-375');
   await page.click('[data-estado="Em curso"]');
   await page.waitForSelector('.badge.estado-em-curso');
+  // pendente exige motivo
+  await page.click('[data-estado="Pendente"]');
+  await page.click('#pOk');
+  igual(await page.textContent('#pErro'), 'Escolha o motivo.', 'motivo obrigatório');
+  await page.check('input[name=motivo][value="Orçamento"]', { force: true });
+  await page.fill('#pNota', 'Compressor avariado, orçamentar.');
+  await captura(page, 'folha-pendente-modal-375');
+  await page.click('#pOk');
+  await page.waitForSelector('#pendencia');
+  assert((await page.textContent('#pendencia')).includes('Pendente — Orçamento'), 'mostra motivo');
+  await page.click('[data-estado="Em curso"]');
+  await page.waitForSelector('.det-cab .estado-em-curso');
+  igual(await contar(page, '#pendencia'), 0, 'pendência fechada ao retomar');
   await page.click('[data-estado="Concluída"]');
   await page.click('.modal [data-r="1"]');
   await page.waitForSelector('.det-cab .estado-concluida');
@@ -305,9 +318,11 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   await page.waitForSelector('.toast-ok >> text=Observações guardadas.');
   const f = await fake(page, () => window.__fake.doc('folhas/fo001'));
   igual(f.estado, 'Concluída', 'estado final');
-  igual(f.historico.length, 3, 'histórico com 3 registos');
-  igual(f.historico[2].uid, 'u-tec1', 'quem mudou');
-  assert(f.historico[2].em && f.historico[2].em.seconds > 0, 'timestamp no histórico');
+  igual(f.historico.length, 5, 'histórico com 5 registos');
+  igual(f.historico[2].motivo, 'Orçamento', 'motivo no histórico');
+  igual(f.historico[4].uid, 'u-tec1', 'quem mudou');
+  assert(f.historico[4].em && f.historico[4].em.seconds > 0, 'timestamp no histórico');
+  igual(f.pendencia, null, 'pendência limpa');
   igual(f.observacoesTecnico, 'Filtros limpos. Pressões OK.', 'observações');
   // concluída: técnico já não tem ações (Faturada é só backoffice/master)
   igual(await contar(page, '[data-estado]'), 0, 'sem ações após concluída');
@@ -338,13 +353,13 @@ teste('folhas backoffice: filtros, paginação e pesquisa por número', async ()
   await entrar(page, 'backoffice');
   await page.goto(BASE + '/folhas.html');
   await page.waitForSelector('#lista .lista-item');
-  const abertas = await fake(page, () => Object.entries(window.__fake.db()).filter(([k, v]) => k.startsWith('folhas/') && ['Agendada', 'Em curso', 'Pendente material'].includes(v.estado)).length);
+  const abertas = await fake(page, () => Object.entries(window.__fake.db()).filter(([k, v]) => k.startsWith('folhas/') && ['Por agendar', 'Agendada', 'Em curso', 'Pendente'].includes(v.estado)).length);
   igual(await contar(page, '#lista .lista-item'), abertas, 'abertas');
   await page.selectOption('#fEstado', '');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   assert(await page.locator('#maisWrap').isVisible(), 'botão carregar mais');
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 27);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 28);
   await page.selectOption('#fEstado', 'Concluída');
   await page.waitForFunction(() => [...document.querySelectorAll('#lista .badge')].every((b) => b.textContent === 'Concluída'));
   await page.selectOption('#fTec', 'u-tec2');
@@ -371,8 +386,6 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   await page.waitForSelector('#cliRes [data-i]');
   await page.click('#cliRes [data-i="0"]');
   igual(await page.inputValue('#ffLoc'), 'Aveiro', 'morada preenchida do cliente');
-  await page.click('#ffGuardar');
-  igual(await page.textContent('#ffErro'), 'Escolha o técnico responsável.', 'valida técnico');
   await page.waitForFunction(() => document.querySelectorAll('#ffTec option').length > 1);
   const opts = await page.$$eval('#ffTec option', (o) => o.map((x) => x.textContent));
   assert(!opts.includes('Rui Antigo'), 'técnico inativo não aparece');
@@ -385,7 +398,7 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   await page.click('#ffGuardar');
   await page.waitForSelector('#detNumero');
   const num = await page.textContent('#detNumero');
-  igual(num, `FO-${new Date().getFullYear()}-0028`, 'número sequencial');
+  igual(num, `FO-${new Date().getFullYear()}-0029`, 'número sequencial');
   const id = new URL(page.url()).searchParams.get('id');
   const f = await fake(page, (id) => window.__fake.doc('folhas/' + id), id);
   igual(f.estado, 'Agendada', 'estado inicial');
@@ -394,14 +407,59 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   igual(f.clienteId, 'cli001', 'cliente');
   igual(f.historico.length, 1, 'histórico inicial');
   igual(new Date(f.dataPrevista.seconds * 1000).getHours(), 16, 'hora prevista');
-  // backoffice pode faturar uma concluída; depois perde ações
+  // backoffice não faz revisão nem faturação (só o Master)
   await page.goto(BASE + '/folhas.html?id=fo010');
-  await page.waitForSelector('[data-estado="Faturada"]');
+  await page.waitForSelector('#detNumero');
+  igual(await contar(page, '[data-estado]'), 0, 'backoffice sem ações numa concluída');
+  const optsC = await page.$$eval('#selCorrigir option', (o) => o.map((x) => x.value).filter(Boolean));
+  assert(!optsC.some((o) => ['Revista', 'Aguarda NE', 'Faturada'].includes(o)), 'backoffice não corrige para estados do Master: ' + optsC);
+  semErros(page); await ctx.close();
+});
+
+teste('folhas master: revê, aguarda NE e fatura com n.º de fatura', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'master');
+  await page.goto(BASE + '/folhas.html?id=fo010');
+  await page.click('[data-estado="Revista"]');
+  await page.waitForSelector('.det-cab .estado-revista');
+  await page.click('[data-estado="Aguarda NE"]');
+  await page.waitForSelector('.det-cab .estado-aguarda-ne');
   await page.click('[data-estado="Faturada"]');
-  await page.click('.modal [data-r="1"]');
+  await page.fill('#tVal', 'FT 2026/123');
+  await page.click('#tOk');
   await page.waitForSelector('.det-cab .estado-faturada');
-  igual(await contar(page, '[data-estado]'), 0, 'backoffice sem ações em faturada');
-  igual(await contar(page, '#selCorrigir'), 0, 'backoffice não corrige faturada');
+  assert((await page.textContent('#vDetalhe')).includes('Fatura FT 2026/123'), 'mostra n.º da fatura');
+  const f = await fake(page, () => window.__fake.doc('folhas/fo010'));
+  igual(f.historico.map((h) => h.estado).slice(-3).join(','), 'Revista,Aguarda NE,Faturada', 'histórico');
+  igual(f.numeroFatura, 'FT 2026/123', 'n.º da fatura gravado');
+  await captura(page, 'folha-faturada-375');
+  semErros(page); await ctx.close();
+});
+
+teste('folhas: «Por agendar» sem técnico/data; agendar ao atribuir técnico e data', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html?id=fo028');
+  await page.waitForSelector('#detNumero');
+  assert((await page.textContent('#vDetalhe')).includes('Por atribuir'), 'mostra técnico por atribuir');
+  await page.click('[data-estado="Agendada"]');
+  await page.waitForSelector('#fFolha');
+  await page.waitForFunction(() => document.querySelectorAll('#ffTec option').length > 2);
+  const nomes = await page.$$eval('#ffTec option', (o) => o.map((x) => x.textContent));
+  assert(nomes.includes('Ana Ferreira'), 'backoffice marcado como técnico aparece na lista');
+  await page.selectOption('#ffTec', 'u-tec2');
+  await page.fill('#ffData', '2030-02-01');
+  await page.click('#ffGuardar');
+  await page.waitForSelector('.det-cab .estado-agendada');
+  const f = await fake(page, () => window.__fake.doc('folhas/fo028'));
+  igual(f.estado, 'Agendada', 'agendada');
+  igual(f.historico[f.historico.length - 1].de, 'Por agendar', 'histórico');
+  // nova folha sem técnico fica «Por agendar»
+  await page.goto(BASE + '/folhas.html?nova=1&cliente=cli003');
+  await page.waitForSelector('.cliente-escolhido');
+  await page.fill('#ffData', '');
+  await page.click('#ffGuardar');
+  await page.waitForSelector('.det-cab .estado-por-agendar');
   semErros(page); await ctx.close();
 });
 

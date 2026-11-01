@@ -20,7 +20,7 @@ async function carregar(mais = false) {
 function render() {
   $('#lista').innerHTML = lista.map((u, i) => `
     <div class="lista-item" data-i="${i}" style="${u.ativo ? '' : 'opacity:.55'}">
-      <div class="li-topo"><span class="li-titulo">${esc(u.nome)}</span><span class="badge">${esc(PERFIS[u.perfil] || u.perfil)}</span></div>
+      <div class="li-topo"><span class="li-titulo">${esc(u.nome)}</span><span class="badge">${esc(PERFIS[u.perfil] || u.perfil)}${u.tecnico && u.perfil !== 'tecnico' ? ' + Técnico' : ''}</span></div>
       <div class="li-sub">${esc(u.email)}${u.telefone ? ' · ' + esc(u.telefone) : ''}</div>
       ${u.ativo ? '' : '<div class="li-meta"><span class="badge">Inativo</span></div>'}
     </div>`).join('') || '<div class="vazio">Sem utilizadores.</div>';
@@ -50,6 +50,7 @@ function abrirForm(u) {
       <label class="campo"><span>Email *</span><input id="uEmail" type="email" inputmode="email" value="${esc(u?.email || '')}" ${ed ? 'disabled' : ''} autocomplete="off"></label>
       <label class="campo"><span>Telefone</span><input id="uTel" type="tel" value="${esc(u?.telefone || '')}"></label>
       <label class="campo"><span>Perfil *</span><select id="uPerfil" ${proprio ? 'disabled' : ''}>${opcoes}</select></label>
+      <label class="campo" id="campoTec" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="uTecnico" style="width:auto;min-height:0" ${u?.tecnico ? 'checked' : ''}><span style="margin:0">Também é técnico (pode ter folhas atribuídas)</span></label>
       ${ed ? `<label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="uAtivo" style="width:auto;min-height:0" ${u.ativo ? 'checked' : ''} ${proprio ? 'disabled' : ''}><span style="margin:0">Ativo (pode entrar na plataforma)</span></label>`
         : `<details style="margin-bottom:12px"><summary class="muted">Já existe no Firebase Authentication?</summary>
             <label class="campo" style="margin-top:8px"><span>UID existente</span><input id="uUid" placeholder="Deixe vazio para criar a conta" autocomplete="off"></label></details>`}
@@ -58,6 +59,9 @@ function abrirForm(u) {
       <div class="acoes"><button type="button" class="btn" data-fechar>Cancelar</button>
         <button type="submit" class="btn btn-primario" id="uGuardar">${ed ? 'Guardar' : 'Criar e enviar convite'}</button></div>
     </form>`);
+  const verTec = () => { $('#campoTec', corpo).style.display = $('#uPerfil', corpo).value === 'tecnico' ? 'none' : 'flex'; };
+  $('#uPerfil', corpo).onchange = verTec;
+  verTec();
   $('#fU', corpo).onsubmit = (ev) => {
     ev.preventDefault();
     const erro = (m) => { $('#uErro', corpo).textContent = m; };
@@ -70,7 +74,7 @@ function abrirForm(u) {
     comBotao($('#uGuardar', corpo), async () => {
       try {
         if (ed) {
-          const alt = { nome, telefone: $('#uTel', corpo).value.trim(), atualizadoEm: serverTimestamp() };
+          const alt = { nome, telefone: $('#uTel', corpo).value.trim(), tecnico: perfil === 'tecnico' || $('#uTecnico', corpo).checked, atualizadoEm: serverTimestamp() };
           if (!proprio) { alt.perfil = perfil; alt.ativo = $('#uAtivo', corpo).checked; }
           await updateDoc(doc(db, 'utilizadores', u.uid), alt);
           Object.assign(u, alt);
@@ -91,7 +95,7 @@ function abrirForm(u) {
           }
           const existe = await getDoc(doc(db, 'utilizadores', uid));
           if (existe.exists()) return erro('Este UID já tem perfil atribuído.');
-          const novo = { nome, email, telefone: $('#uTel', corpo).value.trim(), perfil, ativo: true, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() };
+          const novo = { nome, email, telefone: $('#uTel', corpo).value.trim(), perfil, tecnico: perfil === 'tecnico' || $('#uTecnico', corpo).checked, ativo: true, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() };
           await setDoc(doc(db, 'utilizadores', uid), novo);
           if (convite) await sendPasswordResetEmail(auth, email);
           lista.push({ uid, ...novo });

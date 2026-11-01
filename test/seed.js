@@ -5,7 +5,7 @@ process.env.TZ = 'Europe/Lisbon';
 const PASS = 'teste123';
 const USERS = {
   master: { uid: 'u-master', email: 'rbastos@redemovel.pt', nome: 'Ricardo Bastos', perfil: 'master' },
-  backoffice: { uid: 'u-bo', email: 'backoffice@redemovel.pt', nome: 'Ana Ferreira', perfil: 'backoffice' },
+  backoffice: { uid: 'u-bo', email: 'backoffice@redemovel.pt', nome: 'Ana Ferreira', perfil: 'backoffice', tecnico: true },
   tecnico1: { uid: 'u-tec1', email: 'joao.silva@redemovel.pt', nome: 'João Silva', perfil: 'tecnico' },
   tecnico2: { uid: 'u-tec2', email: 'pedro.costa@redemovel.pt', nome: 'Pedro Costa', perfil: 'tecnico' },
   inativo: { uid: 'u-tec9', email: 'rui.antigo@redemovel.pt', nome: 'Rui Antigo', perfil: 'tecnico', ativo: false },
@@ -48,7 +48,7 @@ function gerar() {
   for (const u of Object.values(USERS)) {
     users.push({ uid: u.uid, email: u.email, password: PASS });
     if (u.semPerfil) continue;
-    db['utilizadores/' + u.uid] = { nome: u.nome, email: u.email, perfil: u.perfil, ativo: u.ativo !== false, telefone: '' };
+    db['utilizadores/' + u.uid] = { nome: u.nome, email: u.email, perfil: u.perfil, ativo: u.ativo !== false, telefone: '', ...(u.tecnico ? { tecnico: true } : {}) };
   }
   const clientes = CLIENTES.map((c, i) => {
     const id = 'cli' + String(i + 1).padStart(3, '0');
@@ -77,7 +77,7 @@ function gerar() {
     [0, 11, T1, 1, 'AT', 'Agendada'],
     [0, 15, T1, 2, 'Instalação', 'Em curso'],
     [0, 10, T2, 3, 'Manutenção', 'Agendada'],
-    [0, 14, T2, 4, 'AT', 'Pendente material'],
+    [0, 14, T2, 4, 'AT', 'Pendente'],
     [1, 9, T1, 5, 'Instalação', 'Agendada'],
     [1, 14, T2, 6, 'Manutenção', 'Agendada'],
     [2, 9, T1, 7, 'AT', 'Agendada'],
@@ -87,25 +87,28 @@ function gerar() {
     [-3, 14, T1, 3, 'Instalação', 'Concluída'],
   ];
   for (let i = 0; i < 14; i++) F.push([-(4 + i), 9 + (i % 6), i % 2 ? T1 : T2, 10 + (i % 15), 'Manutenção', 'Concluída']);
-  F.push([-5, 10, T1, 4, 'AT', 'Pendente material']); // fo027: em atraso do João
+  F.push([-5, 10, T1, 4, 'AT', 'Pendente']); // fo027: em atraso do João
+  F.push([null, 0, null, 5, 'Instalação', 'Por agendar']); // fo028: sem técnico nem data
 
   const ano = new Date().getFullYear();
   F.forEach((f, i) => {
-    const [n, h, tec, ci, tipo, estado] = f;
+    const [n, h, tec0, ci, tipo, estado] = f;
+    const tec = tec0 || { uid: '', nome: '' };
     const c = clientes[ci];
     const id = 'fo' + String(i + 1).padStart(3, '0');
     const criado = new Date(Date.now() - (F.length - i) * 3600e3);
-    const hist = [{ estado: 'Agendada', de: null, uid: 'u-bo', nome: 'Ana Ferreira', em: ts(criado) }];
+    const hist = [{ estado: estado === 'Por agendar' ? 'Por agendar' : 'Agendada', de: null, uid: 'u-bo', nome: 'Ana Ferreira', em: ts(criado) }];
     const seq = ['Agendada', 'Em curso', 'Concluída', 'Faturada'];
-    if (estado === 'Pendente material') hist.push({ estado: 'Em curso', de: 'Agendada', uid: tec.uid, nome: tec.nome, em: ts(criado) }, { estado: 'Pendente material', de: 'Em curso', uid: tec.uid, nome: tec.nome, em: ts(criado) });
+    if (estado === 'Pendente') hist.push({ estado: 'Em curso', de: 'Agendada', uid: tec.uid, nome: tec.nome, em: ts(criado) }, { estado: 'Pendente', de: 'Em curso', uid: tec.uid, nome: tec.nome, em: ts(criado), motivo: 'Peças' });
     else for (let k = 1; k <= seq.indexOf(estado); k++) hist.push({ estado: seq[k], de: seq[k - 1], uid: seq[k] === 'Faturada' ? 'u-bo' : tec.uid, nome: seq[k] === 'Faturada' ? 'Ana Ferreira' : tec.nome, em: ts(criado) });
     db['folhas/' + id] = {
       numero: `FO-${ano}-${String(i + 1).padStart(4, '0')}`,
       clienteId: c.id, clienteNome: c.nome, clienteNif: c.nif,
       morada: c.morada, codigoPostal: c.cp, localidade: c.loc, telefone: c.tel, contacto: c.contacto,
-      tipo, tecnicoUid: tec.uid, tecnicoNome: tec.nome, dataPrevista: ts(dia(n, h)),
+      tipo, tecnicoUid: tec.uid, tecnicoNome: tec.nome, dataPrevista: n === null ? null : ts(dia(n, h)),
       descricao: tipo === 'Manutenção' ? 'Manutenção preventiva: limpeza de filtros e verificação de pressões.' : tipo === 'AT' ? 'Equipamento não arranca, erro E5 na unidade exterior.' : 'Instalação de split 12000 BTU na sala.',
       estado, historico: hist, observacoesTecnico: '',
+      ...(estado === 'Pendente' ? { pendencia: { motivo: 'Peças', nota: 'Falta placa eletrónica', reverEm: null, uid: tec.uid, nome: tec.nome, em: ts(criado) } } : {}),
       criadoEm: ts(criado), criadoPor: 'u-bo', criadoPorNome: 'Ana Ferreira', estadoAlteradoEm: ts(criado),
     };
   });

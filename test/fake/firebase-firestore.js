@@ -164,7 +164,8 @@ function sessaoAtual(db) {
   return { uid, perfil: p && p.ativo === true ? p.perfil : null };
 }
 const STAFF = ['master', 'backoffice'];
-const TRANS_TEC = { 'Agendada': ['Em curso'], 'Em curso': ['Pendente material', 'Concluída'], 'Pendente material': ['Em curso'] };
+const TRANS_TEC = { 'Agendada': ['Em curso'], 'Em curso': ['Pendente', 'Concluída'], 'Pendente': ['Em curso'] };
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];
 const negar = (m) => { throw erro('permission-denied', 'Missing or insufficient permissions. (' + m + ')'); };
 
 function regraLer(dbRaw, colecao, id, docRaw, consulta) {
@@ -206,14 +207,17 @@ function regraEscrever(dbRaw, path, antes, depois) {
   }
   if (colecao === 'contadores') { if (!staff) negar('contadores'); return; }
   if (colecao === 'folhas') {
-    if (!depois) { if (s.perfil === 'master' && antes.estado === 'Agendada') return; negar('apagar folha'); }
-    for (const k of ['clienteId', 'clienteNome', 'tipo', 'tecnicoUid', 'tecnicoNome', 'dataPrevista', 'estado', 'historico', 'numero']) if (depois[k] === undefined || depois[k] === null || depois[k] === '') negar('folha sem ' + k);
+    if (!depois) { if (s.perfil === 'master' && ['Por agendar', 'Agendada'].includes(antes.estado)) return; negar('apagar folha'); }
+    for (const k of ['clienteId', 'clienteNome', 'tipo', 'estado', 'historico', 'numero']) if (depois[k] === undefined || depois[k] === null || depois[k] === '') negar('folha sem ' + k);
+    if (typeof depois.tecnicoUid !== 'string' || depois.dataPrevista === undefined) negar('folha sem tecnicoUid/dataPrevista');
+    if (depois.estado !== 'Por agendar' && (!depois.tecnicoUid || !depois.dataPrevista)) negar('só «Por agendar» pode estar sem técnico ou data');
+    if (depois.estado === 'Pendente' && !(depois.pendencia && ['Peças', 'Orçamento', 'Cliente', 'Outro'].includes(depois.pendencia.motivo))) negar('pendente sem motivo');
     if (!['Instalação', 'Manutenção', 'AT'].includes(depois.tipo)) negar('tipo inválido');
     if (!antes) {
       if (!staff) negar('criar folha');
-      if (depois.estado !== 'Agendada' || depois.historico.length !== 1 || depois.historico[0].uid !== s.uid) negar('folha nova inválida');
+      if (!['Por agendar', 'Agendada'].includes(depois.estado) || depois.historico.length !== 1 || depois.historico[0].estado !== depois.estado || depois.historico[0].uid !== s.uid) negar('folha nova inválida');
       if (!dbRaw['clientes/' + depois.clienteId]) negar('cliente inexistente');
-      if (!dbRaw['utilizadores/' + depois.tecnicoUid]) negar('técnico inexistente');
+      if (depois.tecnicoUid && !dbRaw['utilizadores/' + depois.tecnicoUid]) negar('técnico inexistente');
       return;
     }
     const mudou = Object.keys({ ...antes, ...depois }).filter((k) => JSON.stringify(antes[k]) !== JSON.stringify(depois[k]));
@@ -225,16 +229,16 @@ function regraEscrever(dbRaw, path, antes, depois) {
       if (ult.estado !== depois.estado || ult.uid !== s.uid) negar('histórico inconsistente');
     } else if (mudou.includes('historico')) negar('histórico só muda com o estado');
     if (staff) {
-      if (mudouEstado && antes.estado === 'Faturada' && s.perfil !== 'master') negar('só master tira de Faturada');
+      if (s.perfil !== 'master' && (ESTADOS_MASTER.includes(antes.estado) || ESTADOS_MASTER.includes(depois.estado))) negar('revisão/NE/faturação só o master');
       return;
     }
     if (s.perfil === 'tecnico') {
       if (antes.tecnicoUid !== s.uid) negar('folha de outro técnico');
-      const permitidos = ['estado', 'historico', 'estadoAlteradoEm', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'];
+      const permitidos = ['estado', 'historico', 'estadoAlteradoEm', 'pendencia', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'];
       const proibidos = mudou.filter((k) => !permitidos.includes(k));
       if (proibidos.length) negar('técnico não pode alterar ' + proibidos.join(','));
       if (mudouEstado && !(TRANS_TEC[antes.estado] || []).includes(depois.estado)) negar('transição ' + antes.estado + '→' + depois.estado);
-      if (antes.estado === 'Faturada') negar('folha faturada');
+      if (ESTADOS_MASTER.includes(antes.estado)) negar('folha em revisão/faturação');
       return;
     }
   }

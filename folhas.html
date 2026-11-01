@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-01 21:14 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-01 22:25 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -115,12 +115,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; background: #eef2f6; color: var(--texto-2); }
 .estado-agendada { background: #e0efff; color: #0b4f8a; }
 .estado-em-curso { background: #fff4d6; color: #8a5a00; }
-.estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-por-agendar { background: #f1f5f9; color: #475569; }
+.estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-revista { background: #e0f2f1; color: #00695c; }
+.estado-aguarda-ne { background: #fef3c7; color: #92400e; }
 .estado-concluida { background: #dcf5e6; color: var(--verde); }
 .estado-faturada { background: #ede9fe; color: var(--roxo); }
 .lista-item.b-agendada { border-left-color: #3b82f6; }
 .lista-item.b-em-curso { border-left-color: #f59e0b; }
-.lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-por-agendar { border-left-color: #94a3b8; }
+.lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-revista { border-left-color: #0d9488; }
+.lista-item.b-aguarda-ne { border-left-color: #d97706; }
 .lista-item.b-concluida { border-left-color: #22c55e; }
 .lista-item.b-faturada { border-left-color: #8b5cf6; }
 .tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
@@ -135,6 +141,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 @media (min-width: 600px) { .dl { grid-template-columns: 1fr 1fr; } }
 .acoes-rapidas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .estados-acoes { display: grid; gap: 8px; }
+.pendencia { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.pendencia b { color: var(--laranja); }
 .hist { list-style: none; padding: 0; margin: 0; }
 .hist li { padding: 8px 0; border-bottom: 1px solid var(--linha); font-size: .9rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hist li:last-child { border-bottom: 0; }
@@ -227,7 +235,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-01 21:14 UTC';
+const BUILD = '2026-11-01 22:25 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -249,17 +257,27 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Agendada', 'Em curso', 'Pendente material', 'Concluída', 'Faturada'];
-const ESTADOS_ABERTOS = ['Agendada', 'Em curso', 'Pendente material'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
 // Transições "normais" (botões principais). Têm de bater com firestore.rules.
 const TRANSICOES = {
+  'Por agendar': ['Agendada'],
   'Agendada': ['Em curso'],
-  'Em curso': ['Pendente material', 'Concluída'],
-  'Pendente material': ['Em curso'],
-  'Concluída': ['Faturada'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso', 'Agendada'],
+  'Concluída': ['Revista'],
+  'Revista': ['Aguarda NE', 'Faturada'],
+  'Aguarda NE': ['Faturada'],
   'Faturada': [],
+};
+const TRANSICOES_TECNICO = {
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso'],
 };
 const PAGINA_TAM = 20;
 
@@ -267,9 +285,9 @@ const ehStaff = (p) => p === 'master' || p === 'backoffice';
 
 // Estados para onde o perfil pode mudar a folha (o servidor valida o mesmo nas regras).
 function transicoesPermitidas(perfil, estado) {
-  if (perfil === 'tecnico') return (TRANSICOES[estado] || []).filter((e) => e !== 'Faturada');
+  if (perfil === 'tecnico') return TRANSICOES_TECNICO[estado] || [];
   if (perfil === 'master') return ESTADOS.filter((e) => e !== estado);
-  if (perfil === 'backoffice') return estado === 'Faturada' ? [] : ESTADOS.filter((e) => e !== estado);
+  if (perfil === 'backoffice') return ESTADOS_MASTER.includes(estado) ? [] : ESTADOS.filter((e) => e !== estado && !ESTADOS_MASTER.includes(e));
   return [];
 }
 
@@ -487,8 +505,14 @@ async function pesquisarClientes(texto, { soAtivos = false } = {}) {
 let _tecnicos = null;
 async function carregarTecnicos() {
   if (_tecnicos) return _tecnicos;
-  const snap = await getDocs(query(collection(db, 'utilizadores'), where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50)));
-  _tecnicos = snap.docs.map((d) => ({ uid: d.id, ...d.data() })).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+  const col = collection(db, 'utilizadores');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50))),
+    getDocs(query(col, where('tecnico', '==', true), where('ativo', '==', true), limit(50))),
+  ]);
+  const mapa = new Map();
+  for (const d of [...a.docs, ...b.docs]) mapa.set(d.id, { uid: d.id, ...d.data() });
+  _tecnicos = [...mapa.values()].sort((x, y) => (x.nome || '').localeCompare(y.nome || '', 'pt'));
   return _tecnicos;
 }
 
@@ -624,7 +648,14 @@ function renderDetalhe() {
   const mapa = linkMapa(f);
   const proximos = (TRANSICOES[f.estado] || []).filter((e) => transicoesPermitidas(sessao.perfil, f.estado).includes(e));
   const outros = staff ? transicoesPermitidas(sessao.perfil, f.estado).filter((e) => !proximos.includes(e)) : [];
-  const rotulo = { 'Em curso': f.estado === 'Agendada' ? 'Iniciar trabalho' : 'Retomar trabalho', 'Pendente material': 'Pendente material', 'Concluída': 'Concluir', 'Faturada': 'Marcar como faturada' };
+  const rotulo = {
+    'Agendada': f.estado === 'Por agendar' ? 'Agendar' : 'Voltar a agendar',
+    'Em curso': f.estado === 'Agendada' ? 'Iniciar trabalho' : 'Retomar trabalho',
+    'Pendente': 'Pendente…', 'Concluída': 'Concluir', 'Revista': 'Marcar como revista',
+    'Aguarda NE': 'Aguarda nota de encomenda', 'Faturada': 'Marcar como faturada',
+  };
+  const secundario = (e) => e === 'Pendente' || e === 'Aguarda NE' || (e === 'Agendada' && f.estado === 'Pendente');
+  const pend = f.estado === 'Pendente' && f.pendencia ? f.pendencia : null;
   const podeObs = staff || (tecnico && f.estado !== 'Faturada');
   const obsPorGravar = $('#obs') ? $('#obs').value : null; // não perder texto escrito ao re-desenhar
   $('#vDetalhe').innerHTML = `
@@ -634,10 +665,10 @@ function renderDetalhe() {
         <div style="text-align:right">${badgeEstado(f.estado)}${staff ? '<br><button class="btn btn-peq" id="btnEditar" style="margin-top:8px">Editar</button>' : ''}</div></div>
       <dl class="dl">
         <div><dt>Cliente</dt><dd>${esc(f.clienteNome)}${f.clienteNif ? `<br><span class="muted">NIF ${esc(f.clienteNif)}</span>` : ''}</dd></div>
-        <div><dt>Data prevista</dt><dd>${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}</dd></div>
+        <div><dt>Data prevista</dt><dd>${f.dataPrevista ? `${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}` : '<span class="muted">Por agendar</span>'}</dd></div>
         <div><dt>Morada da obra</dt><dd>${esc([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
         <div><dt>Contacto no local</dt><dd>${esc([f.contacto, f.telefone].filter(Boolean).join(' · ') || '—')}</dd></div>
-        <div><dt>Técnico responsável</dt><dd>${esc(f.tecnicoNome || '—')}</dd></div>
+        <div><dt>Técnico responsável</dt><dd>${esc(f.tecnicoNome || 'Por atribuir')}</dd></div>
         <div><dt>Descrição do trabalho</dt><dd>${esc(f.descricao || '—')}</dd></div>
       </dl>
       ${(tel || mapa) ? `<div class="acoes-rapidas">
@@ -646,8 +677,11 @@ function renderDetalhe() {
     </div>
     <div class="cartao">
       <h3 style="margin-top:0">Estado</h3>
+      ${pend ? `<div class="pendencia" id="pendencia"><b>Pendente — ${esc(pend.motivo)}</b>${pend.nota ? `<div>${esc(pend.nota)}</div>` : ''}
+        <div class="muted">${esc(pend.nome || '')}, ${esc(fmtDataHora(pend.em))}${pend.reverEm ? ` · rever em ${esc(fmtData(pend.reverEm))}` : ''}</div></div>` : ''}
+      ${f.estado === 'Faturada' && f.numeroFatura ? `<p class="muted" style="margin-top:0">Fatura ${esc(f.numeroFatura)}</p>` : ''}
       <div class="estados-acoes">
-        ${proximos.map((e) => `<button class="btn ${e === 'Pendente material' ? '' : 'btn-primario'}" data-estado="${esc(e)}">${esc(rotulo[e] || e)}</button>`).join('')
+        ${proximos.map((e) => `<button class="btn ${secundario(e) ? '' : 'btn-primario'}" data-estado="${esc(e)}">${esc(rotulo[e] || e)}</button>`).join('')
           || '<div class="muted">Sem ações disponíveis neste estado.</div>'}
         ${outros.length ? `<label class="campo" style="margin:4px 0 0"><span>Corrigir estado</span>
           <select id="selCorrigir"><option value="">—</option>${outros.map((e) => `<option>${esc(e)}</option>`).join('')}</select></label>` : ''}
@@ -663,7 +697,7 @@ function renderDetalhe() {
     <div class="cartao">
       <h3 style="margin-top:0">Histórico</h3>
       <ul class="hist">${(f.historico || []).slice().reverse().map((h) => `
-        <li>${badgeEstado(h.estado)}<span>${esc(h.nome || '')}</span><span class="muted">${esc(fmtDataHora(h.em))}</span></li>`).join('')}</ul>
+        <li>${badgeEstado(h.estado)}${h.motivo ? `<span class="muted">${esc(h.motivo)}</span>` : ''}<span>${esc(h.nome || '')}</span><span class="muted">${esc(fmtDataHora(h.em))}</span></li>`).join('')}</ul>
       <p class="muted" style="margin-bottom:0">Criada por ${esc(f.criadoPorNome || '—')} em ${esc(fmtDataHora(f.criadoEm))}</p>
     </div>`;
   ligarVoltar();
@@ -674,10 +708,56 @@ function renderDetalhe() {
   if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
 }
 
+// Pede o motivo da pendência (obrigatório), uma nota e a data para voltar a pegar.
+function pedirPendencia() {
+  return new Promise((resolve) => {
+    const c = abrirModal('Folha pendente', `
+      <div class="campo"><span>Motivo *</span><div class="chips">${MOTIVOS_PENDENCIA.map((m) => `
+        <label><input type="radio" name="motivo" value="${esc(m)}"><span>${esc(m)}</span></label>`).join('')}</div></div>
+      <label class="campo"><span>Nota</span><textarea id="pNota" placeholder="O que falta, quem está à espera de quê…"></textarea></label>
+      <label class="campo"><span>Rever em</span><input type="date" id="pRever"></label>
+      <div class="msg-erro" id="pErro"></div>
+      <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="pOk">Marcar pendente</button></div>`,
+    { aoFechar: () => resolve(null) });
+    $('#pOk', c).onclick = () => {
+      const m = ($('input[name=motivo]:checked', c) || {}).value;
+      if (!m) { $('#pErro', c).textContent = 'Escolha o motivo.'; return; }
+      const r = $('#pRever', c).value;
+      const nota = $('#pNota', c).value.trim();
+      fecharModal();
+      resolve({ motivo: m, nota, reverEm: r ? Timestamp.fromDate(deIsoLocal(r, '09:00')) : null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() });
+    };
+  });
+}
+
+function pedirTexto(titulo, rotulo) {
+  return new Promise((resolve) => {
+    const c = abrirModal(titulo, `<label class="campo"><span>${esc(rotulo)}</span><input id="tVal" autocomplete="off"></label>
+      <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="tOk">Confirmar</button></div>`,
+    { aoFechar: () => resolve(null) });
+    $('#tOk', c).onclick = () => { const v = $('#tVal', c).value.trim(); fecharModal(); resolve(v); };
+  });
+}
+
 async function mudarEstado(novo, btn) {
   const f = atual;
+  const extra = {};
+  if (novo === 'Agendada' && (!f.tecnicoUid || !f.dataPrevista)) {
+    toast('Indique o técnico e a data para agendar.', 'erro');
+    abrirForm(atual);
+    return;
+  }
+  if (novo === 'Pendente') {
+    const p = await pedirPendencia();
+    if (!p) return;
+    extra.pendencia = p;
+  }
   if (novo === 'Concluída' && !(await confirmar('Marcar esta folha de obra como concluída?', { ok: 'Concluir' }))) return;
-  if (novo === 'Faturada' && !(await confirmar('Marcar como faturada? Depois disso só o Master pode alterar o estado.', { ok: 'Faturada' }))) return;
+  if (novo === 'Faturada') {
+    const n = await pedirTexto('Marcar como faturada', 'N.º da fatura (opcional)');
+    if (n === null) return;
+    if (n) extra.numeroFatura = n;
+  }
   const exec = async () => {
     const ref = doc(db, 'folhas', f.id);
     try {
@@ -686,10 +766,13 @@ async function mudarEstado(novo, btn) {
         const d = s.data();
         if (d.estado !== f.estado) throw Object.assign(new Error('A folha foi alterada por outra pessoa. Atualize a página.'), { code: 'alterada' });
         const entrada = { estado: novo, de: d.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+        if (extra.pendencia) { entrada.motivo = extra.pendencia.motivo; if (extra.pendencia.nota) entrada.nota = extra.pendencia.nota; }
         const alt = {
+          ...extra,
           estado: novo, historico: [...(d.historico || []), entrada],
           estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
         };
+        if (novo !== 'Pendente' && d.pendencia) alt.pendencia = null;
         tx.update(ref, alt);
         return { ...d, ...alt, estadoAlteradoEm: Timestamp.now(), atualizadoEm: Timestamp.now() };
       });
@@ -719,15 +802,15 @@ async function abrirForm(folha, clienteIdInicial) {
   const ed = !!folha;
   let cliente = ed ? { id: folha.clienteId, nome: folha.clienteNome, nif: folha.clienteNif } : null;
   const dp = ed ? paraData(folha.dataPrevista) : addDias(inicioDia(new Date()), 1);
-  const horaIni = ed ? fmtHora(folha.dataPrevista) : '09:00';
+  const horaIni = ed && folha.dataPrevista ? fmtHora(folha.dataPrevista) : '09:00';
   const corpo = abrirModal(ed ? 'Editar ' + folha.numero : 'Nova folha de obra', `
     <form id="fFolha" novalidate>
       <div class="campo"><span>Cliente *</span><div id="cliBox"></div></div>
       <div class="campo"><span>Tipo *</span><div class="chips">${TIPOS.map((t) => `
         <label><input type="radio" name="tipo" value="${esc(t)}" ${(ed ? folha.tipo === t : t === 'Instalação') ? 'checked' : ''}><span>${esc(TIPO_NOME[t])}</span></label>`).join('')}</div></div>
-      <label class="campo"><span>Técnico responsável *</span><select id="ffTec" required><option value="">A carregar…</option></select></label>
+      <label class="campo"><span>Técnico responsável</span><select id="ffTec"><option value="">A carregar…</option></select></label>
       <div class="linha2">
-        <label class="campo"><span>Data prevista *</span><input type="date" id="ffData" value="${isoLocal(dp)}" required></label>
+        <label class="campo"><span>Data prevista</span><input type="date" id="ffData" value="${dp ? isoLocal(dp) : ''}"></label>
         <label class="campo"><span>Hora</span><input type="time" id="ffHora" value="${esc(horaIni)}" step="900"></label>
       </div>
       <label class="campo"><span>Morada da obra</span><input id="ffMorada" value="${esc(folha?.morada || '')}" autocomplete="off"></label>
@@ -749,7 +832,8 @@ async function abrirForm(folha, clienteIdInicial) {
   carregarTecnicos().then((tecs) => {
     const sel = $('#ffTec', corpo);
     sel.innerHTML = '<option value="">Escolher…</option>' + tecs.map((t) => `<option value="${esc(t.uid)}">${esc(t.nome)}</option>`).join('');
-    if (ed) {
+    sel.options[0].textContent = 'Por atribuir';
+    if (ed && folha.tecnicoUid) {
       if (!tecs.some((t) => t.uid === folha.tecnicoUid)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(folha.tecnicoUid)}">${esc(folha.tecnicoNome)} (inativo)</option>`);
       sel.value = folha.tecnicoUid;
     }
@@ -801,12 +885,11 @@ async function abrirForm(folha, clienteIdInicial) {
     const data = $('#ffData', corpo).value;
     if (!cliente) return erro('Escolha o cliente.');
     if (!tipo) return erro('Escolha o tipo.');
-    if (!tecUid) return erro('Escolha o técnico responsável.');
-    if (!data) return erro('Indique a data prevista.');
+    if (ed && folha.estado !== 'Por agendar' && (!tecUid || !data)) return erro('Esta folha já está agendada: indique o técnico e a data.');
     const tecOpt = $('#ffTec', corpo).selectedOptions[0];
     const dados = {
-      tipo, tecnicoUid: tecUid, tecnicoNome: tecOpt.textContent.replace(/ \(inativo\)$/, ''),
-      dataPrevista: Timestamp.fromDate(deIsoLocal(data, $('#ffHora', corpo).value || '09:00')),
+      tipo, tecnicoUid: tecUid || '', tecnicoNome: tecUid ? tecOpt.textContent.replace(/ \(inativo\)$/, '') : '',
+      dataPrevista: data ? Timestamp.fromDate(deIsoLocal(data, $('#ffHora', corpo).value || '09:00')) : null,
       morada: $('#ffMorada', corpo).value.trim(), codigoPostal: $('#ffCP', corpo).value.trim(), localidade: $('#ffLoc', corpo).value.trim(),
       contacto: $('#ffContacto', corpo).value.trim(), telefone: $('#ffTel', corpo).value.trim(),
       descricao: $('#ffDesc', corpo).value.trim(),
@@ -815,6 +898,12 @@ async function abrirForm(folha, clienteIdInicial) {
     comBotao($('#ffGuardar', corpo), async () => {
       try {
         if (ed) {
+          // Folha "Por agendar" que passa a ter técnico e data: fica Agendada (com registo no histórico).
+          if (folha.estado === 'Por agendar' && tecUid && data) {
+            dados.estado = 'Agendada';
+            dados.historico = [...(folha.historico || []), { estado: 'Agendada', de: 'Por agendar', uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }];
+            dados.estadoAlteradoEm = serverTimestamp();
+          }
           await updateDoc(doc(db, 'folhas', folha.id), dados);
           atual = { ...atual, ...dados, atualizadoEm: Timestamp.now() };
           const i = lista.findIndex((x) => x.id === folha.id);
@@ -847,8 +936,8 @@ async function criarFolha(cliente, dados) {
       ...dados,
       numero: `FO-${ano}-${String(n).padStart(4, '0')}`,
       clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '',
-      estado: 'Agendada',
-      historico: [{ estado: 'Agendada', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
+      estado: dados.tecnicoUid && dados.dataPrevista ? 'Agendada' : 'Por agendar',
+      historico: [{ estado: dados.tecnicoUid && dados.dataPrevista ? 'Agendada' : 'Por agendar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
       observacoesTecnico: '',
       criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email,
       estadoAlteradoEm: serverTimestamp(),
