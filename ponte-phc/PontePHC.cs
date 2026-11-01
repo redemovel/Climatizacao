@@ -915,6 +915,33 @@ class PhcSql : IFonteClientes
         return l;
     }
 
+    // Diagnostico: valores mais frequentes de uma coluna de um dossier interno (bo/bo2/bi), opcionalmente so de uma serie.
+    public List<string> ValoresDossier(string tabela, string coluna, int ndos)
+    {
+        if (Array.IndexOf(new string[] { "bo", "bo2", "bo3", "bi" }, tabela) < 0) throw new Exception("Tabela nao permitida: " + tabela);
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            bool existe;
+            using (SqlCommand c = new SqlCommand("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t AND COLUMN_NAME = @c", cn))
+            {
+                c.Parameters.AddWithValue("@t", tabela);
+                c.Parameters.AddWithValue("@c", coluna);
+                existe = Convert.ToInt32(c.ExecuteScalar()) > 0;
+            }
+            if (!existe) throw new Exception("A tabela " + tabela + " nao tem a coluna " + coluna + ".");
+            string junta = tabela == "bo" || tabela == "bi" ? "" : " INNER JOIN bo WITH (NOLOCK) ON bo.bostamp = x." + tabela + "stamp";
+            string sql = "SELECT TOP 40 x.[" + coluna + "] AS v, COUNT(*) AS n FROM " + tabela + " x WITH (NOLOCK)" + junta +
+                         (ndos > 0 ? " WHERE " + (junta == "" ? "x" : "bo") + ".ndos = " + ndos : "") +
+                         " GROUP BY x.[" + coluna + "] ORDER BY COUNT(*) DESC";
+            using (SqlCommand c = new SqlCommand(sql, cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read())
+                    l.Add(string.Format("{0,8}  {1}", r["n"], r["v"] == DBNull.Value ? "(vazio)" : "\"" + r["v"].ToString().Trim() + "\""));
+        }
+        return l;
+    }
+
     public List<string> ListaColunas()
     {
         using (SqlConnection cn = Abrir())
@@ -1358,6 +1385,17 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/valores" && args.Length >= 2 && args[1].Contains("."))
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                string[] tc = args[1].ToLowerInvariant().Split('.');
+                int nd = args.Length >= 3 ? int.Parse(args[2]) : 0;
+                Console.WriteLine("Valores mais frequentes de " + args[1] + (nd > 0 ? " na serie " + nd : "") + ":");
+                foreach (string v in sql.ValoresDossier(tc[0], tc[1], nd)) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/valores" && args.Length == 2)
             {
                 PhcSql sql = m.Fonte as PhcSql;
@@ -1410,6 +1448,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)");
                 Console.WriteLine("  PontePHC.exe /dossier SERIE [N]  mostra um dossier completo (o ultimo, ou o numero N)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
+                Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
                 Console.WriteLine("  PontePHC.exe /sincronizar       faz uma sincronizacao agora");
                 Console.WriteLine("  PontePHC.exe /recomecar         volta a enviar todos os clientes na proxima vez");
