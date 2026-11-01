@@ -707,6 +707,22 @@ class PhcSql : IFonteClientes
         return o == DBNull.Value ? "" : o.ToString().Trim();
     }
 
+    // Diagnostico: valores mais frequentes de uma coluna da tabela cl (para escolher o filtro).
+    public List<string> Valores(string coluna)
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            if (!Colunas(cn).Contains(coluna)) throw new Exception("A tabela cl nao tem a coluna " + coluna + ".");
+            using (SqlCommand c = new SqlCommand("SELECT TOP 40 cl.[" + coluna + "] AS v, COUNT(*) AS n FROM cl WITH (NOLOCK) " +
+                "WHERE cl.estab = 0" + Filtro() + "GROUP BY cl.[" + coluna + "] ORDER BY COUNT(*) DESC", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read())
+                    l.Add(string.Format("{0,8}  {1}", r["n"], r["v"] == DBNull.Value ? "(vazio)" : "\"" + r["v"].ToString().Trim() + "\""));
+        }
+        return l;
+    }
+
     public List<string> ListaColunas()
     {
         using (SqlConnection cn = Abrir())
@@ -1091,6 +1107,15 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/valores" && args.Length == 2)
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                Console.WriteLine("Valores mais frequentes de cl." + args[1] + (cfg.Get("ClientesFiltro", "") != "" ? " (com o filtro atual)" : "") + ":");
+                foreach (string v in sql.Valores(args[1])) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/testar-firebase")
             {
                 Console.WriteLine(m.TestarFirebase());
@@ -1115,6 +1140,7 @@ static class Programa
                 Console.WriteLine("Comandos:");
                 Console.WriteLine("  PontePHC.exe                    corre na consola (Ctrl+C para parar)");
                 Console.WriteLine("  PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado");
+                Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
                 Console.WriteLine("  PontePHC.exe /sincronizar       faz uma sincronizacao agora");
                 Console.WriteLine("  PontePHC.exe /recomecar         volta a enviar todos os clientes na proxima vez");
