@@ -9,6 +9,8 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.IO;
+using System.Net;
+using System.Net.Mail;
 using System.Net.Sockets;
 using System.ServiceProcess;
 using System.Text;
@@ -1068,6 +1070,44 @@ static class Regras
     }
 }
 
+// ---------------------------------------------------------------- email (SMTP do Exchange interno)
+static class Correio
+{
+    public static void Enviar(Config cfg, string para, string assunto, string html, string texto)
+    {
+        string servidor = cfg.Get("SmtpServidor", "");
+        if (servidor == "") throw new Exception("SmtpServidor em falta no PontePHC.ini.");
+        string de = cfg.Get("EmailDe", "noreply@arpuro.pt");
+        using (MailMessage m = new MailMessage())
+        {
+            m.From = new MailAddress(de, cfg.Get("EmailNomeDe", "Arpuro Climatizacao"), Encoding.UTF8);
+            foreach (string d in para.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)) m.To.Add(d.Trim());
+            string resp = cfg.Get("EmailResponderPara", "");
+            if (resp != "") m.ReplyToList.Add(resp);
+            foreach (string d in cfg.Get("EmailCopiaOculta", "").Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)) m.Bcc.Add(d.Trim());
+            m.Subject = assunto;
+            m.SubjectEncoding = Encoding.UTF8;
+            m.BodyEncoding = Encoding.UTF8;
+            if (texto != null)
+            {
+                m.Body = texto;
+                m.IsBodyHtml = false;
+                if (html != null) m.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(html, Encoding.UTF8, "text/html"));
+            }
+            else { m.Body = html; m.IsBodyHtml = true; }
+            using (SmtpClient c = new SmtpClient(servidor, cfg.GetInt("SmtpPorta", 25)))
+            {
+                c.EnableSsl = cfg.GetBool("SmtpSsl", false);
+                c.Timeout = 30000;
+                string u = cfg.Get("SmtpUtilizador", "");
+                if (u != "") c.Credentials = new NetworkCredential(u, cfg.GetSegredo("SmtpSenha"));
+                else c.UseDefaultCredentials = cfg.GetBool("SmtpCredenciaisWindows", false);
+                c.Send(m);
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------- motor
 class Motor
 {
@@ -1316,7 +1356,7 @@ static class Programa
 
     static int GuardarSenha(string fcfg, string chave)
     {
-        if (chave != "SqlSenha") { Console.WriteLine("Chave invalida. Use: SqlSenha"); return 1; }
+        if (chave != "SqlSenha" && chave != "SmtpSenha") { Console.WriteLine("Chave invalida. Use: SqlSenha ou SmtpSenha"); return 1; }
         Console.Write("Valor para " + chave + " (nao aparece no ecra): ");
         string a = LerOculto();
         Console.Write("Repita: ");
@@ -1421,6 +1461,14 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/testar-email" && args.Length >= 2)
+            {
+                Correio.Enviar(cfg, args[1], "Teste da plataforma Climatizacao",
+                    "<p>Este e um email de teste enviado pela <b>PontePHC</b> (servidor " + Environment.MachineName + ").</p><p>Se o recebeu, o envio de emails da plataforma esta a funcionar.</p>",
+                    "Este e um email de teste enviado pela PontePHC (servidor " + Environment.MachineName + ").\r\nSe o recebeu, o envio de emails da plataforma esta a funcionar.");
+                Console.WriteLine("Email de teste entregue ao servidor " + cfg.Get("SmtpServidor", "") + " para " + args[1] + ". Veja a caixa de correio (e o spam).");
+                return 0;
+            }
             if (cmd == "/testar-firebase")
             {
                 Console.WriteLine(m.TestarFirebase());
@@ -1450,9 +1498,10 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
+                Console.WriteLine("  PontePHC.exe /testar-email DESTINO  envia um email de teste pelo Exchange");
                 Console.WriteLine("  PontePHC.exe /sincronizar       faz uma sincronizacao agora");
                 Console.WriteLine("  PontePHC.exe /recomecar         volta a enviar todos os clientes na proxima vez");
-                Console.WriteLine("  PontePHC.exe /senha SqlSenha    grava a senha do SQL, cifrada");
+                Console.WriteLine("  PontePHC.exe /senha SqlSenha    grava a senha do SQL, cifrada (ou SmtpSenha)");
                 return 1;
             }
             Servico s = new Servico();

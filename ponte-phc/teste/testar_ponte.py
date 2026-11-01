@@ -202,6 +202,26 @@ verifica(cod != 0 and 'nao validado' in out and len(PEDIDOS) == n, 'recusa servi
 
 srv.shutdown()
 
+# 7b) email de teste por SMTP (servidor simulado, como o Exchange interno)
+try:
+    from aiosmtpd.controller import Controller
+    RECEBIDOS = []
+    class H:
+        async def handle_DATA(self, server, session, envelope):
+            RECEBIDOS.append(envelope); return '250 OK'
+    ctl = Controller(H(), hostname='127.0.0.1', port=10025); ctl.start()
+    open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nSmtpServidor=127.0.0.1\nSmtpPorta=10025\nEmailDe=noreply@arpuro.pt\nEmailResponderPara=rbastos@arpuro.pt\nEmailCopiaOculta=rbastos@arpuro.pt\n')
+    cod, out = ponte('/testar-email', 'cliente@exemplo.pt')
+    ctl.stop()
+    import email
+    msg = email.message_from_bytes(RECEBIDOS[0].content) if RECEBIDOS else None
+    verifica(cod == 0 and msg is not None, 'email de teste entregue ao SMTP ' + out[-200:])
+    if msg:
+        verifica('noreply@arpuro.pt' in msg['From'] and msg['Reply-To'] == 'rbastos@arpuro.pt', 'De noreply, responder para rbastos')
+        verifica(sorted(RECEBIDOS[0].rcpt_tos) == ['cliente@exemplo.pt', 'rbastos@arpuro.pt'], 'destinatário + cópia oculta: ' + str(RECEBIDOS[0].rcpt_tos))
+except ImportError:
+    print('  (aiosmtpd não instalado: teste de email ignorado)')
+
 # 8) validação da cadeia (como com a Google): raiz fixa no programa, servidor envia folha + intermédio
 print('  -- cadeia de certificados (raiz simulada no lugar das raízes Google)')
 from cryptography.x509 import BasicConstraints
