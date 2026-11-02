@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-02 — valores das folhas importadas do PHC (folhas/{id}/privado) só para o Master
+// Atualizado: 2026-11-02 (2) — estado «Anulada» (só Master) e fecho em lote
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -70,8 +70,8 @@ service cloud.firestore {
 
     // ---------- Folhas de obra ----------
     // Estados: Por agendar → Agendada → Em curso → Pendente (com motivo) → Concluída → Revista → Aguarda NE → Faturada
-    function estados() { return ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada']; }
-    function estadosMaster() { return ['Revista', 'Aguarda NE', 'Faturada']; }
+    function estados() { return ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada']; }
+    function estadosMaster() { return ['Revista', 'Aguarda NE', 'Faturada', 'Anulada']; }
     function folhaValida(d) {
       return d.keys().hasAll(['numero', 'clienteId', 'clienteNome', 'tipo', 'tecnicoUid', 'tecnicoNome',
                               'dataPrevista', 'estado', 'historico', 'criadoEm', 'criadoPor'])
@@ -81,8 +81,8 @@ service cloud.firestore {
         && d.tecnicoUid is string
         && (d.dataPrevista == null || d.dataPrevista is timestamp)
         && d.estado in estados()
-        // só "Por agendar" pode estar sem técnico ou sem data
-        && (d.estado == 'Por agendar' || (d.tecnicoUid.size() > 0 && d.dataPrevista is timestamp))
+        // só "Por agendar" e "Anulada" podem estar sem técnico ou sem data
+        && (d.estado in ['Por agendar', 'Anulada'] || (d.tecnicoUid.size() > 0 && d.dataPrevista is timestamp))
         // "Pendente" exige motivo
         && (d.estado != 'Pendente' || (d.get('pendencia', null) != null && d.pendencia.motivo in ['Peças', 'Orçamento', 'Cliente', 'Outro']))
         && d.historico is list && d.historico.size() <= 500

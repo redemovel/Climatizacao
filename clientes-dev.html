@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:11 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:29 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -120,6 +120,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
 .estado-revista { background: #e0f2f1; color: #00695c; }
 .estado-aguarda-ne { background: #fef3c7; color: #92400e; }
+.estado-anulada { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
 .estado-concluida { background: #dcf5e6; color: var(--verde); }
 .estado-faturada { background: #ede9fe; color: var(--roxo); }
 .lista-item.b-agendada { border-left-color: #3b82f6; }
@@ -128,6 +129,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
 .lista-item.b-revista { border-left-color: #0d9488; }
 .lista-item.b-aguarda-ne { border-left-color: #d97706; }
+.lista-item.b-anulada { border-left-color: #cbd5e1; opacity: .75; }
+.sel-lote { display: flex; align-items: center; gap: 10px; }
+.sel-lote input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.barra-lote { position: sticky; top: var(--topo-h); z-index: 5; background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 10px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.interruptor { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--texto-2); }
+.interruptor input { width: 20px; height: 20px; min-height: 0; }
 .lista-item.b-concluida { border-left-color: #22c55e; }
 .lista-item.b-faturada { border-left-color: #8b5cf6; }
 .tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
@@ -231,7 +238,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 11:11 UTC';
+const BUILD = '2026-11-02 11:29 UTC';
 const PAGINA = 'clientes';
 
 const FIREBASE_CONFIG = {
@@ -253,9 +260,10 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
 const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
-const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];   // revisão, NE, faturação e anulação: só o Master
+const DIAS_ATRASO = 60;   // «Em atraso» na agenda: só os últimos 60 dias; mais antigas vão para a lista de folhas antigas
 const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
@@ -269,6 +277,7 @@ const TRANSICOES = {
   'Revista': ['Aguarda NE', 'Faturada'],
   'Aguarda NE': ['Faturada'],
   'Faturada': [],
+  'Anulada': [],
 };
 const TRANSICOES_TECNICO = {
   'Agendada': ['Em curso'],

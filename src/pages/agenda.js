@@ -5,6 +5,8 @@ let base = inicioDia(new Date());
 let filtroTec = '';
 let itens = [];
 let cursor = null;
+let mostrarConcl = false;
+try { mostrarConcl = localStorage.getItem('agenda.concluidas') === '1'; } catch (e) { /* sem storage */ }
 
 const sessao = await iniciarPagina({ perfis: ['master', 'backoffice', 'tecnico'] });
 const staff = ehStaff(sessao.perfil);
@@ -43,13 +45,16 @@ async function carregarAtrasos() {
   if (!(chave in cacheAtrasos)) {
     const c = [];
     if (tec) c.push(where('tecnicoUid', '==', tec));
-    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '<', Timestamp.fromDate(hoje)), orderBy('dataPrevista'), limit(20));
+    const limiteAntigo = addDias(hoje, -DIAS_ATRASO);
+    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '>=', Timestamp.fromDate(limiteAntigo)),
+      where('dataPrevista', '<', Timestamp.fromDate(hoje)), orderBy('dataPrevista'), limit(20));
     try {
       const snap = await getDocs(query(collection(db, 'folhas'), ...c));
       const l = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const antigas = staff ? `<a class="muted" style="display:block;margin:0 6px 10px" href="${pagina('folhas', { filtro: 'antigas' })}">Ver folhas abertas há mais de ${DIAS_ATRASO} dias ›</a>` : '';
       cacheAtrasos[chave] = l.length ? `<details class="atrasos" ${l.length <= 3 ? 'open' : ''}>
         <summary>Em atraso <span class="badge estado-pendente-material">${l.length}${l.length === 20 ? '+' : ''}</span></summary>
-        ${l.map((f) => cartao(f, true)).join('')}</details>` : '';
+        ${l.map((f) => cartao(f, true)).join('')}${antigas}</details>` : antigas;
     } catch (e) { cacheAtrasos[chave] = ''; console.error(e); toast(erroFirebase(e), 'erro'); }
   }
   if ((staff ? filtroTec : sessao.uid) === tec) box.innerHTML = cacheAtrasos[chave];
@@ -63,6 +68,7 @@ async function carregar(mais = false) {
   const tec = staff ? filtroTec : sessao.uid;
   const c = [];
   if (tec) c.push(where('tecnicoUid', '==', tec));
+  if (!mostrarConcl) c.push(where('estado', 'in', ESTADOS_ABERTOS));   // agenda = trabalho por fazer
   c.push(where('dataPrevista', '>=', Timestamp.fromDate(ini)), where('dataPrevista', '<', Timestamp.fromDate(fim)), orderBy('dataPrevista'));
   if (cursor) c.push(startAfter(cursor));
   c.push(limit(AG_LIMITE));
@@ -128,6 +134,12 @@ $$('#segVista button').forEach((b) => b.onclick = () => {
   try { localStorage.setItem('agenda.vista', vista); } catch (e) { /* sem storage */ }
   carregar();
 });
+$('#mostrarConcl').checked = mostrarConcl;
+$('#mostrarConcl').onchange = () => {
+  mostrarConcl = $('#mostrarConcl').checked;
+  try { localStorage.setItem('agenda.concluidas', mostrarConcl ? '1' : '0'); } catch (e) { /* sem storage */ }
+  carregar();
+};
 $('#ant').onclick = () => { base = addDias(base, vista === 'dia' ? -1 : -7); carregar(); };
 $('#seg').onclick = () => { base = addDias(base, vista === 'dia' ? 1 : 7); carregar(); };
 $('#hoje').onclick = () => { base = inicioDia(new Date()); carregar(); };

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:11 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:29 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -120,6 +120,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
 .estado-revista { background: #e0f2f1; color: #00695c; }
 .estado-aguarda-ne { background: #fef3c7; color: #92400e; }
+.estado-anulada { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
 .estado-concluida { background: #dcf5e6; color: var(--verde); }
 .estado-faturada { background: #ede9fe; color: var(--roxo); }
 .lista-item.b-agendada { border-left-color: #3b82f6; }
@@ -128,6 +129,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
 .lista-item.b-revista { border-left-color: #0d9488; }
 .lista-item.b-aguarda-ne { border-left-color: #d97706; }
+.lista-item.b-anulada { border-left-color: #cbd5e1; opacity: .75; }
+.sel-lote { display: flex; align-items: center; gap: 10px; }
+.sel-lote input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.barra-lote { position: sticky; top: var(--topo-h); z-index: 5; background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 10px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.interruptor { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--texto-2); }
+.interruptor input { width: 20px; height: 20px; min-height: 0; }
 .lista-item.b-concluida { border-left-color: #22c55e; }
 .lista-item.b-faturada { border-left-color: #8b5cf6; }
 .tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
@@ -236,7 +243,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 11:11 UTC';
+const BUILD = '2026-11-02 11:29 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -258,9 +265,10 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
 const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
-const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];   // revisão, NE, faturação e anulação: só o Master
+const DIAS_ATRASO = 60;   // «Em atraso» na agenda: só os últimos 60 dias; mais antigas vão para a lista de folhas antigas
 const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
@@ -274,6 +282,7 @@ const TRANSICOES = {
   'Revista': ['Aguarda NE', 'Faturada'],
   'Aguarda NE': ['Faturada'],
   'Faturada': [],
+  'Anulada': [],
 };
 const TRANSICOES_TECNICO = {
   'Agendada': ['Em curso'],
@@ -528,7 +537,10 @@ let listaCarregada = false;
 let atual = null;          // folha aberta no detalhe
 
 // ---------- Filtros ----------
-$('#fEstado').insertAdjacentHTML('beforeend', ESTADOS.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join(''));
+$('#fEstado').insertAdjacentHTML('beforeend', `<option value="antigas">Antigas (+${DIAS_ATRASO} dias)</option>`
+  + ESTADOS.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join(''));
+if (new URLSearchParams(location.search).get('filtro') === 'antigas') $('#fEstado').value = 'antigas';
+const selecionadas = new Set();
 if (tecnico) $('#tituloLista').textContent = 'As minhas folhas';
 if (staff) {
   $('#btnNova').classList.remove('oculto');
@@ -565,16 +577,20 @@ function consultaLista() {
   const est = $('#fEstado').value;
   if (tecnico) c.push(where('tecnicoUid', '==', sessao.uid));
   else if ($('#fTec').value) c.push(where('tecnicoUid', '==', $('#fTec').value));
-  if (est === 'abertas') c.push(where('estado', 'in', ESTADOS_ABERTOS));
-  else if (est) c.push(where('estado', '==', est));
-  c.push(orderBy('criadoEm', 'desc'));
+  if (est === 'antigas') {
+    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '<', Timestamp.fromDate(addDias(inicioDia(new Date()), -DIAS_ATRASO))), orderBy('dataPrevista'));
+  } else {
+    if (est === 'abertas') c.push(where('estado', 'in', ESTADOS_ABERTOS));
+    else if (est) c.push(where('estado', '==', est));
+    c.push(orderBy('criadoEm', 'desc'));
+  }
   if (cursor) c.push(startAfter(cursor));
   c.push(limit(PAGINA_TAM));
   return query(collection(db, 'folhas'), ...c);
 }
 
 async function carregarLista(mais = false) {
-  if (!mais) { lista = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
+  if (!mais) { lista = []; cursor = null; selecionadas.clear(); $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
   try {
     const snap = await getDocs(consultaLista());
     lista = lista.concat(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -589,9 +605,13 @@ async function carregarLista(mais = false) {
 
 function renderLista(msgVazio = 'Não há folhas de obra com estes filtros.') {
   if (!lista.length) { $('#lista').innerHTML = `<div class="vazio">${esc(msgVazio)}</div>`; return; }
-  $('#lista').innerHTML = lista.map((f) => `
+  const lote = sessao.perfil === 'master' && $('#fEstado').value === 'antigas';
+  $('#lista').innerHTML = (lote ? `<div class="barra-lote" id="barraLote"><b id="nSel">0 selecionadas</b>
+      <button class="btn btn-peq" id="selTodas">Selecionar todas</button>
+      <select id="loteEstado" style="flex:1 1 140px"><option value="Concluída">Fechar como Concluída</option><option value="Faturada">Fechar como Faturada</option><option value="Anulada">Anular</option></select>
+      <button class="btn btn-peq btn-primario" id="btnLote">Aplicar</button></div>` : '') + lista.map((f) => `
     <a class="lista-item ${classeEstado(f.estado).replace('estado-', 'b-')}" href="${pagina('folhas', { id: f.id })}" data-id="${esc(f.id)}">
-      <div class="li-topo"><span class="li-titulo">${esc(f.numero || '')} · ${esc(f.clienteNome || '')}</span>${badgeEstado(f.estado)}</div>
+      <div class="li-topo"><span class="li-titulo ${lote ? 'sel-lote' : ''}">${lote ? `<input type="checkbox" data-sel="${esc(f.id)}" ${selecionadas.has(f.id) ? 'checked' : ''} aria-label="Selecionar">` : ''}${esc(f.numero || '')} · ${esc(f.clienteNome || '')}</span>${badgeEstado(f.estado)}</div>
       <div class="li-sub">${esc(f.localidade || f.morada || '')}</div>
       <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span>
         <span>${esc(fmtDataHora(f.dataPrevista))}</span>${staff ? `<span>· ${esc(f.tecnicoNome || '')}</span>` : ''}</div>
@@ -599,11 +619,53 @@ function renderLista(msgVazio = 'Não há folhas de obra com estes filtros.') {
     </a>`).join('');
 }
 $('#lista').addEventListener('click', (ev) => {
+  const cb = ev.target.closest('[data-sel]');
+  if (cb) {
+    ev.stopPropagation();
+    if (cb.checked) selecionadas.add(cb.dataset.sel); else selecionadas.delete(cb.dataset.sel);
+    $('#nSel').textContent = selecionadas.size + ' selecionadas';
+    return;
+  }
+  if (ev.target.closest('#barraLote')) {
+    if (ev.target.id === 'selTodas') { lista.forEach((f) => selecionadas.add(f.id)); renderLista(); $('#nSel').textContent = selecionadas.size + ' selecionadas'; }
+    if (ev.target.id === 'btnLote') fecharEmLote(ev.target);
+    ev.preventDefault();
+    return;
+  }
   const a = ev.target.closest('a[data-id]');
   if (!a) return;
   ev.preventDefault();
   irPara({ id: a.dataset.id });
 });
+
+// Fecho em lote das folhas antigas (só Master): cada folha fica com o registo no histórico.
+async function fecharEmLote(btn) {
+  const novo = $('#loteEstado').value;
+  const alvo = lista.filter((f) => selecionadas.has(f.id));
+  if (!alvo.length) { toast('Selecione pelo menos uma folha.'); return; }
+  // sem técnico/data só pode ser anulada (as outras exigem técnico e data)
+  const invalidas = novo === 'Anulada' ? [] : alvo.filter((f) => !f.tecnicoUid || !f.dataPrevista);
+  if (!(await confirmar(`${novo === 'Anulada' ? 'Anular' : 'Fechar como «' + novo + '»'} ${alvo.length - invalidas.length} folhas?` +
+    (invalidas.length ? ` (${invalidas.length} sem técnico ou data ficam de fora: só podem ser anuladas.)` : ''), { ok: 'Aplicar', perigo: novo === 'Anulada' }))) return;
+  await comBotao(btn, async () => {
+    const ok = alvo.filter((f) => !invalidas.includes(f));
+    try {
+      for (let i = 0; i < ok.length; i += 200) {
+        const b = writeBatch(db);
+        for (const f of ok.slice(i, i + 200)) {
+          const entrada = { estado: novo, de: f.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(), nota: 'Fecho em lote (folha antiga)' };
+          b.update(doc(db, 'folhas', f.id), {
+            estado: novo, historico: [...(f.historico || []), entrada], pendencia: null,
+            estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+          });
+        }
+        await b.commit();
+      }
+      toast(`${ok.length} folhas atualizadas.`, 'ok');
+      carregarLista();
+    } catch (e) { toast(erroFirebase(e), 'erro', 6000); }
+  });
+}
 
 // ---------- Navegação lista ⇄ detalhe ----------
 function irPara(params) { history.pushState({}, '', pagina('folhas', params)); rota(); }

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:11 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:29 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -120,6 +120,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
 .estado-revista { background: #e0f2f1; color: #00695c; }
 .estado-aguarda-ne { background: #fef3c7; color: #92400e; }
+.estado-anulada { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
 .estado-concluida { background: #dcf5e6; color: var(--verde); }
 .estado-faturada { background: #ede9fe; color: var(--roxo); }
 .lista-item.b-agendada { border-left-color: #3b82f6; }
@@ -128,6 +129,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
 .lista-item.b-revista { border-left-color: #0d9488; }
 .lista-item.b-aguarda-ne { border-left-color: #d97706; }
+.lista-item.b-anulada { border-left-color: #cbd5e1; opacity: .75; }
+.sel-lote { display: flex; align-items: center; gap: 10px; }
+.sel-lote input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.barra-lote { position: sticky; top: var(--topo-h); z-index: 5; background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 10px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.interruptor { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--texto-2); }
+.interruptor input { width: 20px; height: 20px; min-height: 0; }
 .lista-item.b-concluida { border-left-color: #22c55e; }
 .lista-item.b-faturada { border-left-color: #8b5cf6; }
 .tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
@@ -211,6 +218,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
   <button class="btn btn-peq" id="seg" aria-label="Seguinte">›</button>
   <button class="btn btn-peq btn-sec" id="hoje">Hoje</button>
 </div>
+<div class="barra" style="margin-top:-4px"><label class="interruptor"><input type="checkbox" id="mostrarConcl"> Mostrar concluídas e faturadas</label></div>
 <div id="atrasos"></div>
 <div id="lista"><div class="vazio">A carregar…</div></div>
 <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>
@@ -232,7 +240,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 11:11 UTC';
+const BUILD = '2026-11-02 11:29 UTC';
 const PAGINA = 'agenda';
 
 const FIREBASE_CONFIG = {
@@ -254,9 +262,10 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
 const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
-const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];   // revisão, NE, faturação e anulação: só o Master
+const DIAS_ATRASO = 60;   // «Em atraso» na agenda: só os últimos 60 dias; mais antigas vão para a lista de folhas antigas
 const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
@@ -270,6 +279,7 @@ const TRANSICOES = {
   'Revista': ['Aguarda NE', 'Faturada'],
   'Aguarda NE': ['Faturada'],
   'Faturada': [],
+  'Anulada': [],
 };
 const TRANSICOES_TECNICO = {
   'Agendada': ['Em curso'],
@@ -521,6 +531,8 @@ let base = inicioDia(new Date());
 let filtroTec = '';
 let itens = [];
 let cursor = null;
+let mostrarConcl = false;
+try { mostrarConcl = localStorage.getItem('agenda.concluidas') === '1'; } catch (e) { /* sem storage */ }
 
 const sessao = await iniciarPagina({ perfis: ['master', 'backoffice', 'tecnico'] });
 const staff = ehStaff(sessao.perfil);
@@ -559,13 +571,16 @@ async function carregarAtrasos() {
   if (!(chave in cacheAtrasos)) {
     const c = [];
     if (tec) c.push(where('tecnicoUid', '==', tec));
-    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '<', Timestamp.fromDate(hoje)), orderBy('dataPrevista'), limit(20));
+    const limiteAntigo = addDias(hoje, -DIAS_ATRASO);
+    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '>=', Timestamp.fromDate(limiteAntigo)),
+      where('dataPrevista', '<', Timestamp.fromDate(hoje)), orderBy('dataPrevista'), limit(20));
     try {
       const snap = await getDocs(query(collection(db, 'folhas'), ...c));
       const l = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const antigas = staff ? `<a class="muted" style="display:block;margin:0 6px 10px" href="${pagina('folhas', { filtro: 'antigas' })}">Ver folhas abertas há mais de ${DIAS_ATRASO} dias ›</a>` : '';
       cacheAtrasos[chave] = l.length ? `<details class="atrasos" ${l.length <= 3 ? 'open' : ''}>
         <summary>Em atraso <span class="badge estado-pendente-material">${l.length}${l.length === 20 ? '+' : ''}</span></summary>
-        ${l.map((f) => cartao(f, true)).join('')}</details>` : '';
+        ${l.map((f) => cartao(f, true)).join('')}${antigas}</details>` : antigas;
     } catch (e) { cacheAtrasos[chave] = ''; console.error(e); toast(erroFirebase(e), 'erro'); }
   }
   if ((staff ? filtroTec : sessao.uid) === tec) box.innerHTML = cacheAtrasos[chave];
@@ -579,6 +594,7 @@ async function carregar(mais = false) {
   const tec = staff ? filtroTec : sessao.uid;
   const c = [];
   if (tec) c.push(where('tecnicoUid', '==', tec));
+  if (!mostrarConcl) c.push(where('estado', 'in', ESTADOS_ABERTOS));   // agenda = trabalho por fazer
   c.push(where('dataPrevista', '>=', Timestamp.fromDate(ini)), where('dataPrevista', '<', Timestamp.fromDate(fim)), orderBy('dataPrevista'));
   if (cursor) c.push(startAfter(cursor));
   c.push(limit(AG_LIMITE));
@@ -644,6 +660,12 @@ $$('#segVista button').forEach((b) => b.onclick = () => {
   try { localStorage.setItem('agenda.vista', vista); } catch (e) { /* sem storage */ }
   carregar();
 });
+$('#mostrarConcl').checked = mostrarConcl;
+$('#mostrarConcl').onchange = () => {
+  mostrarConcl = $('#mostrarConcl').checked;
+  try { localStorage.setItem('agenda.concluidas', mostrarConcl ? '1' : '0'); } catch (e) { /* sem storage */ }
+  carregar();
+};
 $('#ant').onclick = () => { base = addDias(base, vista === 'dia' ? -1 : -7); carregar(); };
 $('#seg').onclick = () => { base = addDias(base, vista === 'dia' ? 1 : 7); carregar(); };
 $('#hoje').onclick = () => { base = inicioDia(new Date()); carregar(); };

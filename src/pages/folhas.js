@@ -8,7 +8,10 @@ let listaCarregada = false;
 let atual = null;          // folha aberta no detalhe
 
 // ---------- Filtros ----------
-$('#fEstado').insertAdjacentHTML('beforeend', ESTADOS.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join(''));
+$('#fEstado').insertAdjacentHTML('beforeend', `<option value="antigas">Antigas (+${DIAS_ATRASO} dias)</option>`
+  + ESTADOS.map((e) => `<option value="${esc(e)}">${esc(e)}</option>`).join(''));
+if (new URLSearchParams(location.search).get('filtro') === 'antigas') $('#fEstado').value = 'antigas';
+const selecionadas = new Set();
 if (tecnico) $('#tituloLista').textContent = 'As minhas folhas';
 if (staff) {
   $('#btnNova').classList.remove('oculto');
@@ -45,16 +48,20 @@ function consultaLista() {
   const est = $('#fEstado').value;
   if (tecnico) c.push(where('tecnicoUid', '==', sessao.uid));
   else if ($('#fTec').value) c.push(where('tecnicoUid', '==', $('#fTec').value));
-  if (est === 'abertas') c.push(where('estado', 'in', ESTADOS_ABERTOS));
-  else if (est) c.push(where('estado', '==', est));
-  c.push(orderBy('criadoEm', 'desc'));
+  if (est === 'antigas') {
+    c.push(where('estado', 'in', ESTADOS_ABERTOS), where('dataPrevista', '<', Timestamp.fromDate(addDias(inicioDia(new Date()), -DIAS_ATRASO))), orderBy('dataPrevista'));
+  } else {
+    if (est === 'abertas') c.push(where('estado', 'in', ESTADOS_ABERTOS));
+    else if (est) c.push(where('estado', '==', est));
+    c.push(orderBy('criadoEm', 'desc'));
+  }
   if (cursor) c.push(startAfter(cursor));
   c.push(limit(PAGINA_TAM));
   return query(collection(db, 'folhas'), ...c);
 }
 
 async function carregarLista(mais = false) {
-  if (!mais) { lista = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
+  if (!mais) { lista = []; cursor = null; selecionadas.clear(); $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
   try {
     const snap = await getDocs(consultaLista());
     lista = lista.concat(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -69,9 +76,13 @@ async function carregarLista(mais = false) {
 
 function renderLista(msgVazio = 'Não há folhas de obra com estes filtros.') {
   if (!lista.length) { $('#lista').innerHTML = `<div class="vazio">${esc(msgVazio)}</div>`; return; }
-  $('#lista').innerHTML = lista.map((f) => `
+  const lote = sessao.perfil === 'master' && $('#fEstado').value === 'antigas';
+  $('#lista').innerHTML = (lote ? `<div class="barra-lote" id="barraLote"><b id="nSel">0 selecionadas</b>
+      <button class="btn btn-peq" id="selTodas">Selecionar todas</button>
+      <select id="loteEstado" style="flex:1 1 140px"><option value="Concluída">Fechar como Concluída</option><option value="Faturada">Fechar como Faturada</option><option value="Anulada">Anular</option></select>
+      <button class="btn btn-peq btn-primario" id="btnLote">Aplicar</button></div>` : '') + lista.map((f) => `
     <a class="lista-item ${classeEstado(f.estado).replace('estado-', 'b-')}" href="${pagina('folhas', { id: f.id })}" data-id="${esc(f.id)}">
-      <div class="li-topo"><span class="li-titulo">${esc(f.numero || '')} · ${esc(f.clienteNome || '')}</span>${badgeEstado(f.estado)}</div>
+      <div class="li-topo"><span class="li-titulo ${lote ? 'sel-lote' : ''}">${lote ? `<input type="checkbox" data-sel="${esc(f.id)}" ${selecionadas.has(f.id) ? 'checked' : ''} aria-label="Selecionar">` : ''}${esc(f.numero || '')} · ${esc(f.clienteNome || '')}</span>${badgeEstado(f.estado)}</div>
       <div class="li-sub">${esc(f.localidade || f.morada || '')}</div>
       <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span>
         <span>${esc(fmtDataHora(f.dataPrevista))}</span>${staff ? `<span>· ${esc(f.tecnicoNome || '')}</span>` : ''}</div>
@@ -79,11 +90,53 @@ function renderLista(msgVazio = 'Não há folhas de obra com estes filtros.') {
     </a>`).join('');
 }
 $('#lista').addEventListener('click', (ev) => {
+  const cb = ev.target.closest('[data-sel]');
+  if (cb) {
+    ev.stopPropagation();
+    if (cb.checked) selecionadas.add(cb.dataset.sel); else selecionadas.delete(cb.dataset.sel);
+    $('#nSel').textContent = selecionadas.size + ' selecionadas';
+    return;
+  }
+  if (ev.target.closest('#barraLote')) {
+    if (ev.target.id === 'selTodas') { lista.forEach((f) => selecionadas.add(f.id)); renderLista(); $('#nSel').textContent = selecionadas.size + ' selecionadas'; }
+    if (ev.target.id === 'btnLote') fecharEmLote(ev.target);
+    ev.preventDefault();
+    return;
+  }
   const a = ev.target.closest('a[data-id]');
   if (!a) return;
   ev.preventDefault();
   irPara({ id: a.dataset.id });
 });
+
+// Fecho em lote das folhas antigas (só Master): cada folha fica com o registo no histórico.
+async function fecharEmLote(btn) {
+  const novo = $('#loteEstado').value;
+  const alvo = lista.filter((f) => selecionadas.has(f.id));
+  if (!alvo.length) { toast('Selecione pelo menos uma folha.'); return; }
+  // sem técnico/data só pode ser anulada (as outras exigem técnico e data)
+  const invalidas = novo === 'Anulada' ? [] : alvo.filter((f) => !f.tecnicoUid || !f.dataPrevista);
+  if (!(await confirmar(`${novo === 'Anulada' ? 'Anular' : 'Fechar como «' + novo + '»'} ${alvo.length - invalidas.length} folhas?` +
+    (invalidas.length ? ` (${invalidas.length} sem técnico ou data ficam de fora: só podem ser anuladas.)` : ''), { ok: 'Aplicar', perigo: novo === 'Anulada' }))) return;
+  await comBotao(btn, async () => {
+    const ok = alvo.filter((f) => !invalidas.includes(f));
+    try {
+      for (let i = 0; i < ok.length; i += 200) {
+        const b = writeBatch(db);
+        for (const f of ok.slice(i, i + 200)) {
+          const entrada = { estado: novo, de: f.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(), nota: 'Fecho em lote (folha antiga)' };
+          b.update(doc(db, 'folhas', f.id), {
+            estado: novo, historico: [...(f.historico || []), entrada], pendencia: null,
+            estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+          });
+        }
+        await b.commit();
+      }
+      toast(`${ok.length} folhas atualizadas.`, 'ok');
+      carregarLista();
+    } catch (e) { toast(erroFirebase(e), 'erro', 6000); }
+  });
+}
 
 // ---------- Navegação lista ⇄ detalhe ----------
 function irPara(params) { history.pushState({}, '', pagina('folhas', params)); rota(); }

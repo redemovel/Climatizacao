@@ -165,7 +165,7 @@ function sessaoAtual(db) {
 }
 const STAFF = ['master', 'backoffice'];
 const TRANS_TEC = { 'Agendada': ['Em curso'], 'Em curso': ['Pendente', 'Concluída'], 'Pendente': ['Em curso'] };
-const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
 const negar = (m) => { throw erro('permission-denied', 'Missing or insufficient permissions. (' + m + ')'); };
 
 function regraLer(dbRaw, colecao, id, docRaw, consulta) {
@@ -210,7 +210,7 @@ function regraEscrever(dbRaw, path, antes, depois) {
     if (!depois) { if (s.perfil === 'master' && ['Por agendar', 'Agendada'].includes(antes.estado)) return; negar('apagar folha'); }
     for (const k of ['clienteId', 'clienteNome', 'tipo', 'estado', 'historico', 'numero']) if (depois[k] === undefined || depois[k] === null || depois[k] === '') negar('folha sem ' + k);
     if (typeof depois.tecnicoUid !== 'string' || depois.dataPrevista === undefined) negar('folha sem tecnicoUid/dataPrevista');
-    if (depois.estado !== 'Por agendar' && (!depois.tecnicoUid || !depois.dataPrevista)) negar('só «Por agendar» pode estar sem técnico ou data');
+    if (!['Por agendar', 'Anulada'].includes(depois.estado) && (!depois.tecnicoUid || !depois.dataPrevista)) negar('só «Por agendar» pode estar sem técnico ou data');
     if (depois.estado === 'Pendente' && !(depois.pendencia && ['Peças', 'Orçamento', 'Cliente', 'Outro'].includes(depois.pendencia.motivo))) negar('pendente sem motivo');
     if (!['Instalação', 'Manutenção', 'AT'].includes(depois.tipo)) negar('tipo inválido');
     if (!antes) {

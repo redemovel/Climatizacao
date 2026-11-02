@@ -33,9 +33,10 @@ const db = initializeFirestore(fbApp, {
 
 // ---------- Constantes de negócio ----------
 const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
-const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada'];
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
 const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
-const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada'];   // revisão, NE e faturação: só o Master
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];   // revisão, NE, faturação e anulação: só o Master
+const DIAS_ATRASO = 60;   // «Em atraso» na agenda: só os últimos 60 dias; mais antigas vão para a lista de folhas antigas
 const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
 const TIPOS = ['Instalação', 'Manutenção', 'AT'];
 const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
@@ -49,6 +50,7 @@ const TRANSICOES = {
   'Revista': ['Aguarda NE', 'Faturada'],
   'Aguarda NE': ['Faturada'],
   'Faturada': [],
+  'Anulada': [],
 };
 const TRANSICOES_TECNICO = {
   'Agendada': ['Em curso'],

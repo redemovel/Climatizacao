@@ -124,6 +124,12 @@ function gerar() {
   db['folhas/phc-' + ano + '-1785/privado/phc'] = { totalVenda: 958.8,
     linhas: [{ ref: 'ST2', descricao: 'Serviço Técnico (Equipa)', qtd: 8, preco: 40.8, total: 326.4 }],
     valorHora: [{ data: ts(dia(-3, 0)), horas: 8, tipoIntervencao: 'Manutenção', tipoTecnico: 'Técnico-Técnico', preco: 40.8, total: 326.4 }] };
+  // folhas antigas ainda abertas (importadas do PHC e nunca fechadas): não aparecem em «Em atraso»
+  db['folhas/phc-' + (ano - 1) + '-0900'] = { ...db['folhas/fo004'], numero: `FO-${ano - 1}-0900`, origem: 'phc', phcNumero: 900,
+    estado: 'Agendada', historico: [db['folhas/fo004'].historico[0]], dataPrevista: ts(dia(-200, 9)), criadoPor: 'phc', criadoPorNome: 'PHC' };
+  db['folhas/phc-' + (ano - 1) + '-0901'] = { ...db['folhas/fo001'], numero: `FO-${ano - 1}-0901`, origem: 'phc', phcNumero: 901,
+    estado: 'Em curso', historico: [db['folhas/fo001'].historico[0], { estado: 'Em curso', de: 'Agendada', uid: 'u-tec1', nome: 'João Silva', em: ts(dia(-90, 9)) }],
+    dataPrevista: ts(dia(-90, 9)), criadoPor: 'phc', criadoPorNome: 'PHC' };
   db['contadores/folhas-' + ano] = { valor: F.length };
   return { db, users };
 }

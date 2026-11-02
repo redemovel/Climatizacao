@@ -244,9 +244,9 @@ teste('agenda técnico: vista semana e navegação', async () => {
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7));
     const fim = new Date(seg); fim.setDate(fim.getDate() + 7);
-    return Object.entries(db).filter(([k, v]) => k.startsWith('folhas/') && v.tecnicoUid === 'u-tec1' && v.dataPrevista.__ts >= seg.getTime() && v.dataPrevista.__ts < fim.getTime()).length;
+    return Object.entries(db).filter(([k, v]) => k.startsWith('folhas/') && v.tecnicoUid === 'u-tec1' && ['Por agendar', 'Agendada', 'Em curso', 'Pendente'].includes(v.estado) && v.dataPrevista.__ts >= seg.getTime() && v.dataPrevista.__ts < fim.getTime()).length;
   });
-  igual(n, esperado, 'trabalhos da semana');
+  igual(n, esperado, 'trabalhos da semana (só por fazer)');
   await semOverflow(page, 'agenda semana');
   await captura(page, 'agenda-semana-414');
   await page.click('#seg');
@@ -267,6 +267,61 @@ teste('agenda backoffice: todos os técnicos e filtro por técnico', async () =>
   await page.selectOption('#selTec', 'u-tec2');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 2);
   await captura(page, 'agenda-backoffice-desktop');
+  semErros(page); await ctx.close();
+});
+
+
+teste('agenda: só trabalho por fazer; «Mostrar concluídas» mostra o resto; atrasos só dos últimos 60 dias', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.evaluate(() => localStorage.setItem('agenda.vista', 'semana'));
+  await page.reload();
+  await page.waitForSelector('#lista .lista-item');
+  await page.click('#ant');
+  await page.waitForFunction(() => !document.querySelector('#lista').textContent.includes('A carregar'));
+  assert(!(await page.locator('#lista .estado-concluida').count()), 'semana passada sem concluídas');
+  await page.check('#mostrarConcl');
+  await page.waitForSelector('#lista .estado-concluida');
+  await page.click('#hoje');
+  await page.waitForSelector('#atrasos .atrasos');
+  igual(await contar(page, '#atrasos .lista-item'), 1, 'só o atraso recente (a folha de há 90 dias fica de fora)');
+  assert(!(await page.textContent('#atrasos')).includes('Ver folhas abertas'), 'técnico não vê a ligação às antigas');
+  await page.uncheck('#mostrarConcl');
+  semErros(page); await ctx.close();
+});
+
+teste('folhas master: abertas há mais de 60 dias e fecho em lote com histórico', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'master');
+  await page.evaluate(() => localStorage.setItem('agenda.vista', 'dia'));
+  await page.reload();
+  await page.waitForSelector('#atrasos a[href*="filtro=antigas"]');
+  await page.click('#atrasos a[href*="filtro=antigas"]');
+  await page.waitForSelector('#barraLote');
+  igual(await contar(page, '#lista .lista-item'), 2, 'duas folhas antigas abertas');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'lote ' + vp.width); await captura(page, 'folhas-antigas-' + vp.width); }
+  await page.click('#selTodas');
+  igual(await page.textContent('#nSel'), '2 selecionadas', 'selecionadas');
+  await page.selectOption('#loteEstado', 'Concluída');
+  await page.click('#btnLote');
+  await page.click('[data-r="1"]');
+  await page.waitForSelector('.toast-ok');
+  await page.waitForFunction(() => document.querySelector('#lista').textContent.includes('Não há folhas'));
+  const ano = new Date().getFullYear() - 1;
+  const f = await fake(page, (id) => window.__fake.doc('folhas/' + id), `phc-${ano}-0901`);
+  igual(f.estado, 'Concluída', 'estado');
+  const h = f.historico[f.historico.length - 1];
+  igual(h.de + '→' + h.estado + ' ' + h.uid, 'Em curso→Concluída u-master', 'histórico');
+  semErros(page); await ctx.close();
+});
+
+teste('folhas backoffice: vê as antigas mas sem fecho em lote', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html?filtro=antigas');
+  await page.waitForSelector('#lista .lista-item');
+  igual(await contar(page, '#lista .lista-item'), 2, 'antigas');
+  igual(await contar(page, '#barraLote'), 0, 'sem barra de lote');
   semErros(page); await ctx.close();
 });
 
@@ -404,7 +459,7 @@ teste('folhas backoffice: filtros, paginação e pesquisa por número', async ()
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   assert(await page.locator('#maisWrap').isVisible(), 'botão carregar mais');
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 29);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 31);
   await page.selectOption('#fEstado', 'Concluída');
   await page.waitForFunction(() => [...document.querySelectorAll('#lista .badge')].every((b) => b.textContent === 'Concluída'));
   await page.selectOption('#fTec', 'u-tec2');
@@ -669,7 +724,7 @@ teste('clientes: ficha mostra folhas do cliente (índice clienteId + criadoEm)',
   await entrar(page, 'master');
   await page.goto(BASE + '/clientes.html?id=cli001');
   await page.click('#btnVerFolhas');
-  await page.waitForFunction(() => document.querySelectorAll('#folhasCli .lista-item').length === 2);
+  await page.waitForFunction(() => document.querySelectorAll('#folhasCli .lista-item').length === 3);
   await captura(page, 'cliente-ficha-375');
   semErros(page); await ctx.close();
 });
