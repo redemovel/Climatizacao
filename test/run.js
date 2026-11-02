@@ -337,12 +337,37 @@ teste('folhas importadas do PHC: mostram dossier, estado PHC e linhas (sem preç
   const t = await page.textContent('#cartaoPhc');
   assert(t.includes('Dossier 1785') && t.includes('3-Em Execução') && t.includes('Serviço Técnico (Equipa)') && t.includes('8 h'), 'conteúdo: ' + t);
   assert(!/€|preço/i.test(t), 'sem preços');
+  assert(t.includes('Registo de tempos') && t.includes('Ricardo Pereira') && t.includes('Ficha fluorados'), 'tempos e tarefas');
+  igual(await contar(page, '#btnValores'), 0, 'técnico sem botão de valores');
+  const neg = await page.evaluate(async () => {
+    const m = await import('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js');
+    try { await m.getDoc(m.doc({ type: 'firestore' }, 'folhas', 'phc-' + new Date().getFullYear() + '-1785', 'privado', 'phc')); return 'leu'; } catch (e) { return e.code; }
+  });
+  igual(neg, 'permission-denied', 'técnico não lê os valores (regras)');
   await page.click('[data-estado="Pendente"]');
   await page.check('input[name=motivo][value="Peças"]', { force: true });
   await page.click('#pOk');
   await page.waitForSelector('#pendencia');
   await semOverflow(page, 'folha importada');
   await captura(page, 'folha-importada-375');
+  semErros(page); await ctx.close();
+});
+
+teste('folhas importadas do PHC: Master vê valores; backoffice não', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'master');
+  await page.goto(BASE + '/folhas.html?id=phc-' + new Date().getFullYear() + '-1785');
+  await page.click('#btnValores');
+  await page.waitForSelector('#totalVenda');
+  assert((await page.textContent('#totalVenda')).includes('958,80'), 'total venda');
+  assert((await page.textContent('#valoresPhc')).includes('Técnico-Técnico'), 'valor hora');
+  await captura(page, 'folha-valores-master-375');
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html?id=phc-' + new Date().getFullYear() + '-1785');
+  await page.waitForSelector('#cartaoPhc');
+  igual(await contar(page, '#btnValores'), 0, 'backoffice sem valores');
   semErros(page); await ctx.close();
 });
 

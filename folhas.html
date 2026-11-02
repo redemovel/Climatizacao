@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 09:59 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 10:38 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -235,7 +235,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 09:59 UTC';
+const BUILD = '2026-11-02 10:38 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -691,8 +691,12 @@ function renderDetalhe() {
       <h3 style="margin-top:0">Registado no PHC</h3>
       <p class="muted" style="margin:0 0 8px">Dossier ${esc(String(f.phcNumero || ''))} · estado no PHC: ${esc(f.phcEstado || '—')}${f.phcFechada ? ' · faturado' : ''}</p>
       ${(f.linhasPHC || []).length ? `<ul class="hist">${f.linhasPHC.map((l) => `
-        <li><b>${esc(String(l.qtd ?? ''))} ${esc(l.unidade || '')}</b><span>${esc(l.descricao || '')}</span><span class="muted">${esc(l.ref || '')}</span></li>`).join('')}</ul>`
+        <li><b>${esc(String(l.qtd ?? ''))} ${esc(l.unidade || '')}</b><span>${esc(l.descricao || '')}</span><span class="muted">${esc(l.ref || '')}${l.data ? ' · ' + esc(fmtData(l.data)) : ''}</span></li>`).join('')}</ul>`
         : '<p class="muted" style="margin:0">Sem linhas de trabalho ou material.</p>'}
+      ${(f.temposPHC || []).length ? `<h3>Registo de tempos</h3><ul class="hist" id="temposPhc">${f.temposPHC.map((t) => `
+        <li><b>${esc(String(t.horas ?? ''))} h</b><span>${esc(t.funcionario || '')}</span><span class="muted">${esc(fmtData(t.data))}</span></li>`).join('')}</ul>` : ''}
+      ${(f.tarefasPHC || []).length ? `<h3>Tarefas</h3><ul class="hist">${f.tarefasPHC.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+      ${sessao.perfil === 'master' ? '<div id="valoresPhc" style="margin-top:12px"><button class="btn btn-sec btn-bloco" id="btnValores">Ver valores (só Master)</button></div>' : ''}
     </div>` : ''}
     <div class="cartao">
       <h3 style="margin-top:0">Observações do técnico</h3>
@@ -705,6 +709,8 @@ function renderDetalhe() {
       <h3 style="margin-top:0">Histórico</h3>
       <ul class="hist">${(f.historico || []).slice().reverse().map((h) => `
         <li>${badgeEstado(h.estado)}${h.motivo ? `<span class="muted">${esc(h.motivo)}</span>` : ''}<span>${esc(h.nome || '')}</span><span class="muted">${esc(fmtDataHora(h.em))}</span></li>`).join('')}</ul>
+      ${(f.historicoPHC || []).length ? `<details style="margin-top:8px"><summary class="muted">Histórico no PHC (${f.historicoPHC.length})</summary><ul class="hist">${f.historicoPHC.map((h) => `
+        <li><span>${esc(h.texto || '')}</span><span class="muted">${esc(fmtDataHora(h.em))}</span></li>`).join('')}</ul></details>` : ''}
       <p class="muted" style="margin-bottom:0">Criada por ${esc(f.criadoPorNome || '—')} em ${esc(fmtDataHora(f.criadoEm))}</p>
     </div>`;
   ligarVoltar();
@@ -713,6 +719,23 @@ function renderDetalhe() {
   if ($('#selCorrigir')) $('#selCorrigir').onchange = (ev) => { const e = ev.target.value; ev.target.value = ''; if (e) mudarEstado(e, null); };
   if ($('#btnObs')) $('#btnObs').onclick = () => comBotao($('#btnObs'), guardarObs);
   if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
+  if ($('#btnValores')) $('#btnValores').onclick = () => comBotao($('#btnValores'), mostrarValores);
+}
+
+// Preços e valor/hora do PHC: documento separado que só o Master pode ler (garantido nas regras).
+async function mostrarValores() {
+  const eur = (v) => (Number(v) || 0).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+  try {
+    const s = await getDoc(doc(db, 'folhas', atual.id, 'privado', 'phc'));
+    if (!s.exists()) { $('#valoresPhc').innerHTML = '<p class="muted">Sem valores no PHC.</p>'; return; }
+    const v = s.data();
+    $('#valoresPhc').innerHTML = `<h3>Valores (só Master)</h3>
+      ${(v.valorHora || []).length ? `<ul class="hist">${v.valorHora.map((x) => `
+        <li><span>${esc(fmtData(x.data))}</span><span>${esc(x.tipoTecnico)} · ${esc(String(x.horas))} h × ${esc(eur(x.preco))}</span><b>${esc(eur(x.total))}</b></li>`).join('')}</ul>` : ''}
+      ${(v.linhas || []).length ? `<ul class="hist">${v.linhas.map((x) => `
+        <li><span>${esc(x.ref)}</span><span>${esc(String(x.qtd))} × ${esc(eur(x.preco))}</span><b>${esc(eur(x.total))}</b></li>`).join('')}</ul>` : ''}
+      <p style="text-align:right;margin:8px 0 0"><b id="totalVenda">Total venda: ${esc(eur(v.totalVenda))}</b> <span class="muted">s/IVA</span></p>`;
+  } catch (e) { toast(erroFirebase(e), 'erro'); }
 }
 
 // Pede o motivo da pendência (obrigatório), uma nota e a data para voltar a pegar.

@@ -288,7 +288,8 @@ export async function getDoc(ref) {
   await espera();
   const db = lerDB();
   const [col, id] = [ref.parent.path, ref.id];
-  regraLer(db, col.split('/')[0], id, db[ref.path], null);
+  if (ref.path.includes('/privado/')) { if (sessaoAtual(db).perfil !== 'master') negar('privado só master'); }
+  else regraLer(db, col.split('/')[0], id, db[ref.path], null);
   contarLeituras(1);
   return snapDoc(ref.path, db[ref.path]);
 }

@@ -891,6 +891,7 @@ class PhcSql : IFonteClientes, IFonteFolhas
             string sql = "SELECT TOP (@max) bo.bostamp, bo.obrano, bo.boano, bo.dataobra, bo.no, bo.nome, bo.ncont, bo.morada, bo.local, bo.codpost, " +
                 Bo(cn, "tecnnm") + " AS tecnnm, " + Bo(cn, "trab1") + " AS trab1, " + Bo(cn, "trab5") + " AS trab5, " + Bo(cn, "tabela1") + " AS tabela1, " +
                 Bo(cn, "u_davaria") + " AS u_davaria, " + (colunasBo.Contains("fechada") ? "bo.fechada" : "0") + " AS fechada, " +
+                Bo(cn, "tabela2") + " AS tabela2, " + (colunasBo.Contains("etotaldeb") ? "bo.etotaldeb" : "0") + " AS etotaldeb, " +
                 "bo.ousrdata, bo.ousrinis, bo.usrdata, bo.usrhora, ISNULL(bo2.xpdhora, '') AS xpdhora, " +
                 "ISNULL(cl." + (colunas.Contains("telefone") ? "telefone" : "nome") + ", '') AS telefone, ISNULL(cl." + (colunas.Contains("tlmvl") ? "tlmvl" : "nome") + ", '') AS tlmvl " +
                 "FROM bo WITH (NOLOCK) LEFT JOIN bo2 WITH (NOLOCK) ON bo2.bo2stamp = bo.bostamp " +
@@ -916,6 +917,8 @@ class PhcSql : IFonteClientes, IFonteFolhas
                         x.Telefone = S(r, "telefone"); if (x.Telefone == "" || x.Telefone == x.Nome) x.Telefone = S(r, "tlmvl"); if (x.Telefone == x.Nome) x.Telefone = "";
                         x.Tecnico = S(r, "tecnnm"); x.Contacto = S(r, "trab1"); x.Tipo = S(r, "trab5"); x.Estado = S(r, "tabela1"); x.Descricao = S(r, "u_davaria");
                         x.Fechada = r["fechada"] != DBNull.Value && Convert.ToBoolean(r["fechada"]);
+                        x.TecResp = S(r, "tabela2");
+                        x.TotalVenda = r["etotaldeb"] == DBNull.Value ? 0 : Convert.ToDecimal(r["etotaldeb"]);
                         x.Criada = r["ousrdata"] == DBNull.Value ? x.Data : Convert.ToDateTime(r["ousrdata"]); x.CriadaPor = S(r, "ousrinis");
                         x.AltData = r["usrdata"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["usrdata"]).Date; x.AltHora = S(r, "usrhora");
                         l.Add(x);
@@ -935,7 +938,7 @@ class PhcSql : IFonteClientes, IFonteFolhas
                         c.Parameters.AddWithValue("@s" + i, l[i].Stamp);
                     }
                     c.Connection = cn;
-                    c.CommandText = "SELECT bi.bostamp, bi.ref, bi.design, bi.qtt, bi.unidade FROM bi WITH (NOLOCK) WHERE bi.bostamp IN (" + ps + ") ORDER BY bi.bostamp, bi.lordem";
+                    c.CommandText = "SELECT bi.bostamp, bi.ref, bi.design, bi.qtt, bi.unidade, bi.dedata, bi.epu, bi.ettdeb FROM bi WITH (NOLOCK) WHERE bi.bostamp IN (" + ps + ") ORDER BY bi.bostamp, bi.lordem";
                     using (SqlDataReader r = c.ExecuteReader())
                         while (r.Read())
                         {
@@ -944,12 +947,102 @@ class PhcSql : IFonteClientes, IFonteFolhas
                             LinhaPHC li = new LinhaPHC();
                             li.Ref = S(r, "ref"); li.Design = S(r, "design"); li.Unidade = S(r, "unidade");
                             li.Qtd = r["qtt"] == DBNull.Value ? 0 : Convert.ToDecimal(r["qtt"]);
+                            if (r["dedata"] != DBNull.Value && Convert.ToDateTime(r["dedata"]).Year > 1900) li.Data = Convert.ToDateTime(r["dedata"]);
+                            li.Preco = r["epu"] == DBNull.Value ? 0 : Convert.ToDecimal(r["epu"]);
+                            li.Total = r["ettdeb"] == DBNull.Value ? 0 : Convert.ToDecimal(r["ettdeb"]);
                             if (li.Ref != "" || li.Design != "") fo.Linhas.Add(li);
                         }
                 }
+                LerTabelasNW(cn, porStamp);
             }
         }
         return l;
+    }
+
+    HashSet<string> tabelas;
+    bool Existe(SqlConnection cn, string tabela)
+    {
+        if (tabelas == null)
+        {
+            tabelas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (SqlCommand c = new SqlCommand("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) tabelas.Add(r.GetString(0));
+        }
+        return tabelas.Contains(tabela);
+    }
+
+    // Tabelas da NetWorker: registo de tempos, valores por hora, historico (NWService) e tarefas.
+    void LerTabelasNW(SqlConnection cn, Dictionary<string, FolhaPHC> porStamp)
+    {
+        string[] stamps = new string[porStamp.Count];
+        porStamp.Keys.CopyTo(stamps, 0);
+        Ler(cn, "U_NWRegistoTempos", "SELECT BOSTAMP AS s, DATA, NTOTALHORAS, FUNCIONARIO FROM U_NWRegistoTempos WITH (NOLOCK) WHERE BOSTAMP IN ({0}) ORDER BY DATA",
+            stamps, delegate(SqlDataReader r)
+            {
+                FolhaPHC fo;
+                if (!porStamp.TryGetValue(S(r, "s"), out fo)) return;
+                TempoPHC t = new TempoPHC();
+                t.Data = r["DATA"] == DBNull.Value ? fo.Data : Convert.ToDateTime(r["DATA"]);
+                t.Horas = r["NTOTALHORAS"] == DBNull.Value ? 0 : Convert.ToDecimal(r["NTOTALHORAS"]);
+                t.Funcionario = S(r, "FUNCIONARIO");
+                fo.Tempos.Add(t);
+            });
+        Ler(cn, "U_NWRegistoValores", "SELECT BOSTAMP AS s, DATA, NTOTALHORAS, TIPOINTERVENCAO, TIPOTECNICO, preco, total FROM U_NWRegistoValores WITH (NOLOCK) WHERE BOSTAMP IN ({0}) ORDER BY DATA",
+            stamps, delegate(SqlDataReader r)
+            {
+                FolhaPHC fo;
+                if (!porStamp.TryGetValue(S(r, "s"), out fo)) return;
+                ValorPHC v = new ValorPHC();
+                v.Data = r["DATA"] == DBNull.Value ? fo.Data : Convert.ToDateTime(r["DATA"]);
+                v.Horas = r["NTOTALHORAS"] == DBNull.Value ? 0 : Convert.ToDecimal(r["NTOTALHORAS"]);
+                v.TipoIntervencao = S(r, "TIPOINTERVENCAO"); v.TipoTecnico = S(r, "TIPOTECNICO");
+                v.Preco = r["preco"] == DBNull.Value ? 0 : Convert.ToDecimal(r["preco"]);
+                v.Total = r["total"] == DBNull.Value ? 0 : Convert.ToDecimal(r["total"]);
+                fo.Valores.Add(v);
+            });
+        Ler(cn, "NWService", "SELECT BOSTAMP AS s, data, texto FROM NWService WITH (NOLOCK) WHERE BOSTAMP IN ({0}) ORDER BY data, id",
+            stamps, delegate(SqlDataReader r)
+            {
+                FolhaPHC fo;
+                if (!porStamp.TryGetValue(S(r, "s"), out fo) || r["data"] == DBNull.Value) return;
+                string t = S(r, "texto");
+                if (t == "" || t == "Estado:") return;
+                DateTime d = Convert.ToDateTime(r["data"]);
+                if (fo.Servico.Count > 0 && fo.Servico[fo.Servico.Count - 1].Value == t) return; // repetido (um por destinatario)
+                fo.Servico.Add(new KeyValuePair<DateTime, string>(d, t));
+            });
+        Ler(cn, "NW_Tarefas", "SELECT bostamp AS s, descricao FROM NW_Tarefas WITH (NOLOCK) WHERE bostamp IN ({0}) ORDER BY lordem",
+            stamps, delegate(SqlDataReader r)
+            {
+                FolhaPHC fo;
+                if (porStamp.TryGetValue(S(r, "s"), out fo) && S(r, "descricao") != "") fo.Tarefas.Add(S(r, "descricao"));
+            });
+    }
+
+    delegate void Leitor(SqlDataReader r);
+
+    void Ler(SqlConnection cn, string tabela, string sql, string[] stamps, Leitor f)
+    {
+        if (!Existe(cn, tabela) || stamps.Length == 0) return;
+        using (SqlCommand c = new SqlCommand())
+        {
+            StringBuilder ps = new StringBuilder();
+            for (int i = 0; i < stamps.Length; i++)
+            {
+                if (i > 0) ps.Append(',');
+                ps.Append("@t" + i);
+                c.Parameters.AddWithValue("@t" + i, stamps[i]);
+            }
+            c.Connection = cn;
+            c.CommandText = string.Format(sql, ps);
+            try
+            {
+                using (SqlDataReader r = c.ExecuteReader())
+                    while (r.Read()) f(r);
+            }
+            catch (Exception e) { Log.Erro("Leitura de " + tabela + ": " + e.Message); }
+        }
     }
 
     public long MaiorNumero(int ano)
@@ -1252,7 +1345,9 @@ class FonteCsv : IFonteClientes
 }
 
 // ---------------------------------------------------------------- folhas de obra do PHC (dossier 114)
-class LinhaPHC { public string Ref = "", Design = "", Unidade = ""; public decimal Qtd; }
+class LinhaPHC { public string Ref = "", Design = "", Unidade = ""; public decimal Qtd, Preco, Total; public DateTime? Data; }
+class TempoPHC { public DateTime Data; public decimal Horas; public string Funcionario = ""; }
+class ValorPHC { public DateTime Data; public decimal Horas, Preco, Total; public string TipoIntervencao = "", TipoTecnico = ""; }
 
 class FolhaPHC
 {
@@ -1270,6 +1365,12 @@ class FolhaPHC
     public DateTime AltData;
     public string AltHora = "";
     public List<LinhaPHC> Linhas = new List<LinhaPHC>();
+    public List<TempoPHC> Tempos = new List<TempoPHC>();
+    public List<ValorPHC> Valores = new List<ValorPHC>();
+    public List<KeyValuePair<DateTime, string>> Servico = new List<KeyValuePair<DateTime, string>>();
+    public List<string> Tarefas = new List<string>();
+    public string TecResp = "";       // bo.tabela2 ("Apelido, Nome") - tecnico responsavel no ecra do PHC
+    public decimal TotalVenda;
     public long Chave { get { return (long)Ano * 10000000L + Numero; } }
 }
 
@@ -1300,6 +1401,9 @@ class FonteCsvFolhas : IFonteFolhas
             x.ClienteNo = long.Parse(d["no"]); x.Nome = d["nome"]; x.Ncont = d["ncont"]; x.Morada = d["morada"]; x.Local = d["local"];
             x.CodPost = d["codpost"]; x.Telefone = d["telefone"]; x.Tecnico = d["tecnnm"]; x.Contacto = d["trab1"]; x.Tipo = d["trab5"];
             x.Estado = d["tabela1"]; x.Descricao = d["u_davaria"]; x.Fechada = d["fechada"] == "1";
+            string tmp;
+            if (d.TryGetValue("tabela2", out tmp)) x.TecResp = tmp;
+            if (d.TryGetValue("etotaldeb", out tmp) && tmp != "") x.TotalVenda = decimal.Parse(tmp, CultureInfo.InvariantCulture);
             x.Criada = DateTime.ParseExact(d["ousrdata"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.CriadaPor = d["ousrinis"];
             x.AltData = DateTime.ParseExact(d["usrdata"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.AltHora = d["usrhora"];
             todas.Add(x);
@@ -1320,7 +1424,31 @@ class FonteCsvFolhas : IFonteFolhas
         }
     }
 
-    public void Recarregar(string f, string fl) { todas = new FonteCsvFolhas(f, fl).todas; }
+    // tempos.csv: bostamp;data;horas;funcionario   valores.csv: bostamp;data;horas;tipointervencao;tipotecnico;preco;total
+    public void Extras(string fTempos, string fValores)
+    {
+        if (fTempos != "" && File.Exists(fTempos))
+            foreach (string l in File.ReadAllLines(fTempos, Encoding.UTF8))
+            {
+                string[] v = l.Split(';');
+                FolhaPHC fo = v.Length >= 4 ? todas.Find(delegate(FolhaPHC z) { return z.Stamp == v[0]; }) : null;
+                if (fo == null) continue;
+                TempoPHC t = new TempoPHC();
+                t.Data = DateTime.ParseExact(v[1], "yyyy-MM-dd", CultureInfo.InvariantCulture); t.Horas = decimal.Parse(v[2], CultureInfo.InvariantCulture); t.Funcionario = v[3];
+                fo.Tempos.Add(t);
+            }
+        if (fValores != "" && File.Exists(fValores))
+            foreach (string l in File.ReadAllLines(fValores, Encoding.UTF8))
+            {
+                string[] v = l.Split(';');
+                FolhaPHC fo = v.Length >= 7 ? todas.Find(delegate(FolhaPHC z) { return z.Stamp == v[0]; }) : null;
+                if (fo == null) continue;
+                ValorPHC x = new ValorPHC();
+                x.Data = DateTime.ParseExact(v[1], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.Horas = decimal.Parse(v[2], CultureInfo.InvariantCulture);
+                x.TipoIntervencao = v[3]; x.TipoTecnico = v[4]; x.Preco = decimal.Parse(v[5], CultureInfo.InvariantCulture); x.Total = decimal.Parse(v[6], CultureInfo.InvariantCulture);
+                fo.Valores.Add(x);
+            }
+    }
 
     public List<FolhaPHC> FolhasSeguintes(Marca m, int max)
     {
@@ -1479,7 +1607,13 @@ class Motor
             if (fonteFolhas == null)
             {
                 string teste = cfg.Caminho("FonteTesteFolhas");
-                fonteFolhas = teste != "" ? (IFonteFolhas)new FonteCsvFolhas(teste, cfg.Caminho("FonteTesteLinhas")) : (IFonteFolhas)fonte;
+                if (teste != "")
+                {
+                    FonteCsvFolhas csv = new FonteCsvFolhas(teste, cfg.Caminho("FonteTesteLinhas"));
+                    csv.Extras(cfg.Caminho("FonteTesteTempos"), cfg.Caminho("FonteTesteValores"));
+                    fonteFolhas = csv;
+                }
+                else fonteFolhas = (IFonteFolhas)fonte;
             }
             return fonteFolhas;
         }
@@ -1516,6 +1650,16 @@ class Motor
         return data.Date.AddHours(9);
     }
 
+    // "Duarte, Paulo" -> "Paulo Duarte"
+    public static string NomeNormal(string s)
+    {
+        s = (s ?? "").Trim();
+        int i = s.IndexOf(',');
+        return i > 0 ? (s.Substring(i + 1).Trim() + " " + s.Substring(0, i).Trim()).Trim() : s;
+    }
+
+    static string NomeTecnico(FolhaPHC f) { return f.TecResp != "" ? NomeNormal(f.TecResp) : f.Tecnico; }
+
     public static string IdFolha(FolhaPHC f) { return "phc" + "-" + f.Ano + "-" + f.Numero; }
 
     // nome normalizado -> uid/nome; e chaves TecnicoPHC.<nome no PHC>=<email> no .ini
@@ -1547,9 +1691,12 @@ class Motor
         string motivo;
         string estado = Estado(f, out motivo);
         string[] tec = null;
-        if (f.Tecnico != "") tecnicos.TryGetValue(Regex.Replace(Regras.Normalizar(f.Tecnico), @"\s+", " ").Trim(), out tec);
+        string nomePHC = NomeTecnico(f);
+        foreach (string cand in new string[] { NomeNormal(f.TecResp), f.Tecnico })
+            if (tec == null && cand != "") tecnicos.TryGetValue(Regex.Replace(Regras.Normalizar(cand), @"\s+", " ").Trim(), out tec);
         string tecUid = tec != null ? tec[0] : "";
-        string tecNome = tec != null ? tec[1] : f.Tecnico;
+        string tecNome = tec != null ? tec[1] : nomePHC;
+        f.Tecnico = nomePHC;
         bool semData = f.Data.Year <= 1900;
         if (tecUid == "")
         {
@@ -1603,9 +1750,26 @@ class Motor
         return d;
     }
 
-    // Campos que vem sempre do PHC (atualizados tambem em folhas ja importadas).
+    // Campos que vem sempre do PHC (atualizados tambem em folhas ja importadas). Sem precos.
     static void DadosPHC(Documento d, FolhaPHC f)
     {
+        List<Documento> ts = new List<Documento>();
+        foreach (TempoPHC t in f.Tempos)
+        {
+            Documento x = new Documento();
+            x.Data("data", t.Data); x.Decimal("horas", t.Horas); x.Texto("funcionario", NomeNormal(t.Funcionario));
+            ts.Add(x);
+        }
+        d.ListaMapas("temposPHC", ts);
+        List<Documento> hs = new List<Documento>();
+        foreach (KeyValuePair<DateTime, string> h in f.Servico)
+        {
+            Documento x = new Documento();
+            x.Data("em", h.Key); x.Texto("texto", h.Value);
+            hs.Add(x);
+        }
+        d.ListaMapas("historicoPHC", hs);
+        d.Lista("tarefasPHC", f.Tarefas);
         d.Texto("origem", "phc");
         d.Texto("phcStamp", f.Stamp);
         d.Inteiro("phcNumero", f.Numero);
@@ -1615,10 +1779,36 @@ class Motor
         foreach (LinhaPHC l in f.Linhas)
         {
             Documento x = new Documento();
-            x.Texto("ref", l.Ref); x.Texto("descricao", l.Design); x.Decimal("qtd", l.Qtd); x.Texto("unidade", l.Unidade);
+            x.Texto("ref", l.Ref); x.Texto("descricao", l.Design); x.Decimal("qtd", l.Qtd); x.Texto("unidade", l.Unidade); x.Data("data", l.Data);
             ls.Add(x);
         }
         d.ListaMapas("linhasPHC", ls);
+    }
+
+    // Valores (precos, totais, valor hora): documento separado que so o Master pode ler (folhas/{id}/privado/phc).
+    public static Documento Privado(FolhaPHC f)
+    {
+        Documento d = new Documento();
+        d.Id = IdFolha(f) + "/privado/phc";
+        d.Decimal("totalVenda", f.TotalVenda);
+        List<Documento> ls = new List<Documento>();
+        foreach (LinhaPHC l in f.Linhas)
+        {
+            Documento x = new Documento();
+            x.Texto("ref", l.Ref); x.Texto("descricao", l.Design); x.Decimal("qtd", l.Qtd); x.Decimal("preco", l.Preco); x.Decimal("total", l.Total); x.Data("data", l.Data);
+            ls.Add(x);
+        }
+        d.ListaMapas("linhas", ls);
+        List<Documento> vs = new List<Documento>();
+        foreach (ValorPHC v in f.Valores)
+        {
+            Documento x = new Documento();
+            x.Data("data", v.Data); x.Decimal("horas", v.Horas); x.Texto("tipoIntervencao", v.TipoIntervencao); x.Texto("tipoTecnico", v.TipoTecnico);
+            x.Decimal("preco", v.Preco); x.Decimal("total", v.Total);
+            vs.Add(x);
+        }
+        d.ListaMapas("valorHora", vs);
+        return d;
     }
 
     // Folha que ja existe na plataforma: so dados do PHC; se foi faturada no PHC, passa a Faturada.
@@ -1650,7 +1840,7 @@ class Motor
         {
             if (fs == null && !sim) fs = new Firestore(cfg);
             fMarcaFolhas = Path.Combine(cfg.Pasta, "estado_folhas.txt");
-            int lote = Math.Min(300, Math.Max(1, cfg.GetInt("LoteFolhas", 200)));
+            int lote = Math.Min(240, Math.Max(1, cfg.GetInt("LoteFolhas", 200)));   // 2 escritas por folha (folha + privado); maximo 500 por pedido
             int limite = cfg.GetInt("MaxEscritasPorDia", 15000);
             Marca m = Marca.Ler(fMarcaFolhas);
             Dictionary<string, string[]> tecnicos = sim ? new Dictionary<string, string[]>() : MapaTecnicos();
@@ -1673,13 +1863,14 @@ class Motor
                     else { docs.Add(ConverterFolha(f, tecnicos)); novas++; }
                     anos.Add(f.Ano);
                 }
+                foreach (FolhaPHC f in l) docs.Add(Privado(f));
                 if (sim) foreach (Documento d in docs) Log.Info("SIMULACAO: enviaria folhas/" + d.Id);
                 else { fs.Gravar("folhas", docs); ContarEscritas(docs.Count); }
                 FolhaPHC u = l[l.Count - 1];
                 m.Data = u.AltData; m.Hora = u.AltHora; m.No = u.Chave;
                 if (!sim) m.Gravar(fMarcaFolhas);
-                enviados += docs.Count;
-                Log.Info((sim ? "SIMULACAO: " : "") + docs.Count + " folhas (" + novas + " novas). Marca: " + m);
+                enviados += l.Count;
+                Log.Info((sim ? "SIMULACAO: " : "") + l.Count + " folhas (" + novas + " novas). Marca: " + m);
                 if (l.Count < Math.Min(lote, livres)) break;
                 if (sim && enviados >= 1000) break;
             }

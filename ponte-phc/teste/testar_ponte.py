@@ -201,10 +201,10 @@ print('  -- folhas de obra')
 sv = lambda v: {'stringValue': v}
 BD['utilizadores/u-paulo'] = {'nome': sv('Paulo Duarte'), 'email': sv('pduarte@arpuro.pt'), 'ativo': {'booleanValue': True}}
 BD['utilizadores/u-ricardo'] = {'nome': sv('Ricardo Pereira'), 'email': sv('tecnica@arpuro.pt'), 'ativo': {'booleanValue': True}}
-cab = 'bostamp;obrano;boano;dataobra;xpdhora;no;nome;ncont;morada;local;codpost;telefone;tecnnm;trab1;trab5;tabela1;u_davaria;fechada;ousrdata;ousrinis;usrdata;usrhora'
+cab = 'bostamp;obrano;boano;dataobra;xpdhora;no;nome;ncont;morada;local;codpost;telefone;tecnnm;trab1;trab5;tabela1;u_davaria;fechada;ousrdata;ousrinis;usrdata;usrhora;tabela2;etotaldeb'
 folhas = [
-    'A;1785;2026;2026-10-29;09:00;3;SIMOLDES PLASTICOS, SA;501220267;R Comend Antonio Silva Rodrigues,165|Ap113;SANTIAGO DE RIBA-UL;3721-902 SANTIAGO DE RIBA-UL;256000000;Paulo Duarte;Telmo Pinho;Manutenção;3-Em Execução;Manutenção preventiva semestral;0;2026-10-29;Paulo Duarte;2026-10-29;12:58',
-    'B;1700;2026;2026-09-10;14:30;2;Hotel Meliá Ria;501234560;Cais;Aveiro;3810-200 AVEIRO;;tecnica;Eng. Marta;Assistência Técnica;4.1-Pendente Peças;Compressor;0;2026-09-10;NW;2026-09-11;10:00',
+    'A;1785;2026;2026-10-29;09:00;3;SIMOLDES PLASTICOS, SA;501220267;R Comend Antonio Silva Rodrigues,165|Ap113;SANTIAGO DE RIBA-UL;3721-902 SANTIAGO DE RIBA-UL;256000000;tecnica;Telmo Pinho;Manutenção;3-Em Execução;Manutenção preventiva semestral;0;2026-10-29;Paulo Duarte;2026-10-29;12:58;Duarte, Paulo;958.80',
+    'B;1700;2026;2026-09-10;14:30;2;Hotel Meliá Ria;501234560;Cais;Aveiro;3810-200 AVEIRO;;tecnica;Eng. Marta;Assistência Técnica;4.1-Pendente Peças;Compressor;0;2026-09-10;NW;2026-09-11;10:00;;0',
     'C;1600;2025;2025-05-02;;3;SIMOLDES PLASTICOS, SA;501220267;;;;;Ricardo B.;;Instalação;5-Concluido;Instalação split;1;2025-05-02;NW;2025-06-01;09:00',
     'D;1780;2026;2026-10-20;;4;Empresa Espanhola;ES B12345678;;Vigo;;;;;Assistência Técnica;1-Registado;Avaria;0;2026-10-20;NW;2026-10-20;08:00',
     'E;1781;2026;2026-10-21;10:00;4;Empresa Espanhola;ES B12345678;;Vigo;;;Pascoal Rodrigues;;Manutenção;2-Atribuido;;0;2026-10-21;NW;2026-10-21;08:00',
@@ -212,12 +212,19 @@ folhas = [
 ]
 open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
 open(os.path.join(d, 'linhas.csv'), 'w', encoding='utf-8').write('bostamp;ref;design;qtt;unidade\nA;ST2;Serviço Técnico (Equipa);8;h\nA;ST1;Serviço Técnico;7;h\n')
-open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nImportarFolhas=1\nFonteTesteFolhas=folhas.csv\nFonteTesteLinhas=linhas.csv\nTecnicoPHC.tecnica=tecnica@arpuro.pt\n')
+open(os.path.join(d, 'tempos.csv'), 'w', encoding='utf-8').write('A;2026-10-29;8;Pereira, Ricardo\nA;2026-10-29;7;Duarte, Paulo\n')
+open(os.path.join(d, 'valores.csv'), 'w', encoding='utf-8').write('A;2026-10-29;8;Manutenção;Técnico-Técnico;40.8;326.4\n')
+open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nImportarFolhas=1\nFonteTesteFolhas=folhas.csv\nFonteTesteLinhas=linhas.csv\nFonteTesteTempos=tempos.csv\nFonteTesteValores=valores.csv\nTecnicoPHC.tecnica=tecnica@arpuro.pt\n')
 cod, out = ponte('/sincronizar')
 verifica(cod == 0 and '6 folhas de obra enviadas' in out, '6 folhas importadas ' + out[-300:])
 F = lambda k: BD.get('folhas/' + k, {})
 c = lambda k, f: next(iter(F(k)[f].values())) if f in F(k) else None
-verifica(c('phc-2026-1785', 'numero') == 'FO-2026-1785' and c('phc-2026-1785', 'estado') == 'Em curso' and c('phc-2026-1785', 'tecnicoUid') == 'u-paulo', '3-Em Execução → Em curso, técnico Paulo (por nome)')
+verifica(c('phc-2026-1785', 'numero') == 'FO-2026-1785' and c('phc-2026-1785', 'estado') == 'Em curso' and c('phc-2026-1785', 'tecnicoUid') == 'u-paulo', '3-Em Execução → Em curso; técnico pelo «Tec. Responsável» (Duarte, Paulo), não pelo tecnnm')
+tp = F('phc-2026-1785')['temposPHC']['arrayValue']['values']
+verifica(len(tp) == 2 and tp[0]['mapValue']['fields']['funcionario']['stringValue'] == 'Ricardo Pereira', 'registo de tempos importado (nomes «Nome Apelido»)')
+pv = BD.get('folhas/phc-2026-1785/privado/phc', {})
+verifica(pv.get('totalVenda') == {'doubleValue': 958.8} and pv['valorHora']['arrayValue']['values'][0]['mapValue']['fields']['tipoTecnico']['stringValue'] == 'Técnico-Técnico', 'valores e total só no documento privado')
+verifica('preco' not in json.dumps(F('phc-2026-1785')) and 'total' not in json.dumps(F('phc-2026-1785')).lower().replace('totalhoras', ''), 'a folha (visível ao técnico) não tem preços')
 verifica(c('phc-2026-1785', 'tipo') == 'Manutenção' and c('phc-2026-1785', 'codigoPostal') == '3721-902' and c('phc-2026-1785', 'contacto') == 'Telmo Pinho', 'tipo, código postal e contacto no local')
 verifica(c('phc-2026-1785', 'morada') == 'R Comend Antonio Silva Rodrigues,165, Ap113' and c('phc-2026-1785', 'clienteId') == 'phc-3', 'morada e cliente')
 lin = F('phc-2026-1785')['linhasPHC']['arrayValue']['values']

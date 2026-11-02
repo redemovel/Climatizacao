@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-01 — novos estados da folha (Por agendar, Pendente com motivo, Revista, Aguarda NE) e utilizadores backoffice+técnico
+// Atualizado: 2026-11-02 — valores das folhas importadas do PHC (folhas/{id}/privado) só para o Master
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -141,6 +141,12 @@ service cloud.firestore {
         && quemAlterouCerto()
         && (atualizacaoStaff() || atualizacaoTecnico());
       allow delete: if eMaster() && resource.data.estado in ['Por agendar', 'Agendada'];
+
+      // Preços, totais e valor/hora (vindos do PHC pela PontePHC): só o Master lê; ninguém escreve pela plataforma.
+      match /privado/{doc} {
+        allow read: if eMaster();
+        allow write: if false;
+      }
     }
 
     // Tudo o resto: recusado.
