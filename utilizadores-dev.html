@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:29 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:34 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -199,6 +199,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .uid { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f5f9; padding: 8px; border-radius: 8px; word-break: break-all; user-select: all; display: block; margin: 8px 0; }
 .rodape-versao { text-align: center; font-size: .72rem; color: #9aa4b2; margin-top: 24px; }
 
+/* Fase 2: trabalho no local */
+.cab-cartao { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cab-cartao h3 { margin: 0; }
+.lixo { background: none; border: 0; color: #b91c1c; font-size: 1rem; min-height: 0; padding: 4px 6px; cursor: pointer; }
+.tarefas { display: grid; gap: 6px; }
+.tarefa { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: var(--raio); }
+.tarefa input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.grelha-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quadro-ass { width: 100%; height: auto; aspect-ratio: 5 / 2; border: 1px dashed #94a3b8; border-radius: var(--raio); background: #fff; touch-action: none; display: block; }
+.quadro-ass.desativado { opacity: .35; pointer-events: none; }
+.assinatura { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.assinatura img { max-width: 300px; width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); background: #fff; }
+.aviso-concl { background: #fef3c7; color: #92400e; padding: 8px 10px; border-radius: var(--raio); margin: 0 0 10px; }
+
 </style>
 </head>
 <body class="env-dev pagina-utilizadores">
@@ -207,7 +221,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 <!-- titulo: Utilizadores -->
 <div class="titulo-pag">
   <h1>Utilizadores</h1>
-  <button class="btn btn-primario" id="btnNovo">+ Novo</button>
+  <div style="display:flex;gap:8px"><button class="btn" id="btnPrecos">Preço/hora</button><button class="btn btn-primario" id="btnNovo">+ Novo</button></div>
 </div>
 <p class="muted">Ao criar um utilizador, ele recebe um email para definir a sua palavra-passe.</p>
 <div id="lista"><div class="vazio">A carregar…</div></div>
@@ -230,7 +244,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 11:29 UTC';
+const BUILD = '2026-11-02 11:34 UTC';
 const PAGINA = 'utilizadores';
 
 const FIREBASE_CONFIG = {
@@ -624,6 +638,57 @@ function abrirForm(u) {
     });
   };
 }
+
+// ---------- Tabela de preço/hora da mão de obra (só Master; config/precosHora) ----------
+// Uma linha por equipa: «Tipo;Composição;Preço», p. ex. «Manutenção;Técnico-Técnico-Ajudante;51,00».
+function lerTabelaPrecos(txt) {
+  const linhas = [], ignoradas = [];
+  for (const bruta of txt.split(/\r?\n/)) {
+    const l = bruta.trim();
+    if (!l) continue;
+    const p = l.split(/[;\t]/).map((x) => x.trim());
+    const preco = Number((p[2] || '').replace(/[€\s]/g, '').replace(',', '.'));
+    const partes = (p[1] || '').split('-').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const tecnicos = partes.filter((x) => x.startsWith('técnico') || x.startsWith('tecnico')).length;
+    const ajudantes = partes.filter((x) => x.startsWith('ajudante')).length;
+    if (p.length < 3 || !(preco > 0) || !tecnicos || tecnicos + ajudantes !== partes.length) { ignoradas.push(l); continue; }
+    const tipo = /manuten/i.test(p[0]) ? 'Manutenção' : 'AT/Instalação';
+    const i = linhas.findIndex((x) => x.tipo === tipo && x.tecnicos === tecnicos && x.ajudantes === ajudantes);
+    const nova = { tipo, composicao: p[1], tecnicos, ajudantes, preco: Math.round(preco * 100) / 100 };
+    if (i >= 0) linhas[i] = nova; else linhas.push(nova);
+  }
+  return { linhas, ignoradas };
+}
+
+async function abrirPrecos() {
+  let atualP = {};
+  try { const s = await getDoc(doc(db, 'config', 'precosHora')); if (s.exists()) atualP = s.data(); } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+  const txt = (atualP.linhas || []).map((l) => `${l.tipo};${l.composicao};${String(l.preco).replace('.', ',')}`).join('\n');
+  const c = abrirModal('Preço/hora da mão de obra', `
+    <p class="muted" style="margin-top:0">Só o Master vê esta tabela. Uma linha por equipa: <b>Tipo;Composição;Preço</b><br>
+      Ex.: <code>Manutenção;Técnico-Técnico-Ajudante;51,00</code> · <code>AT/Instalação;Técnico;22,80</code></p>
+    <label class="campo"><span>Tabela</span><textarea id="pTab" rows="10" style="font-family:monospace">${esc(txt)}</textarea></label>
+    <div class="grelha-2">
+      <label class="campo"><span>1.ª hora (+%)</span><input id="p1" type="number" min="0" value="${esc(String(atualP.primeiraHora ?? 20))}"></label>
+      <label class="campo"><span>2.ª hora (+%)</span><input id="p2" type="number" min="0" value="${esc(String(atualP.segundaHora ?? 10))}"></label>
+    </div>
+    <label class="campo"><span>Sábado, domingo (+%)</span><input id="pFds" type="number" min="0" value="${esc(String(atualP.fimDeSemana ?? 100))}"></label>
+    <div class="msg-erro" id="pErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="pGuardar">Guardar</button></div>`);
+  $('#pGuardar', c).onclick = () => {
+    const { linhas, ignoradas } = lerTabelaPrecos($('#pTab', c).value);
+    if (!linhas.length) { $('#pErro', c).textContent = 'Nenhuma linha válida.'; return; }
+    const n = (id) => Math.max(0, Number($(id, c).value) || 0);
+    comBotao($('#pGuardar', c), async () => {
+      try {
+        await setDoc(doc(db, 'config', 'precosHora'), { linhas, primeiraHora: n('#p1'), segundaHora: n('#p2'), fimDeSemana: n('#pFds'), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+        fecharModal();
+        toast(`Tabela guardada (${linhas.length} linhas${ignoradas.length ? `, ${ignoradas.length} ignoradas: ${ignoradas.slice(0, 3).join(' | ')}` : ''}).`, ignoradas.length ? 'erro' : 'ok', 8000);
+      } catch (e) { $('#pErro', c).textContent = erroFirebase(e); }
+    });
+  };
+}
+$('#btnPrecos').onclick = () => comBotao($('#btnPrecos'), abrirPrecos);
 
 carregar();
 

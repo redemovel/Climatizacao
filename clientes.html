@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:29 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:34 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -199,6 +199,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .uid { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f5f9; padding: 8px; border-radius: 8px; word-break: break-all; user-select: all; display: block; margin: 8px 0; }
 .rodape-versao { text-align: center; font-size: .72rem; color: #9aa4b2; margin-top: 24px; }
 
+/* Fase 2: trabalho no local */
+.cab-cartao { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cab-cartao h3 { margin: 0; }
+.lixo { background: none; border: 0; color: #b91c1c; font-size: 1rem; min-height: 0; padding: 4px 6px; cursor: pointer; }
+.tarefas { display: grid; gap: 6px; }
+.tarefa { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: var(--raio); }
+.tarefa input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.grelha-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quadro-ass { width: 100%; height: auto; aspect-ratio: 5 / 2; border: 1px dashed #94a3b8; border-radius: var(--raio); background: #fff; touch-action: none; display: block; }
+.quadro-ass.desativado { opacity: .35; pointer-events: none; }
+.assinatura { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.assinatura img { max-width: 300px; width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); background: #fff; }
+.aviso-concl { background: #fef3c7; color: #92400e; padding: 8px 10px; border-radius: var(--raio); margin: 0 0 10px; }
+
 </style>
 </head>
 <body class="env-prod pagina-clientes">
@@ -238,7 +252,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 11:29 UTC';
+const BUILD = '2026-11-02 11:34 UTC';
 const PAGINA = 'clientes';
 
 const FIREBASE_CONFIG = {

@@ -365,9 +365,56 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   await page.click('[data-estado="Em curso"]');
   await page.waitForSelector('.det-cab .estado-em-curso');
   igual(await contar(page, '#pendencia'), 0, 'pendência fechada ao retomar');
+  // Fase 2: tempos, material, tarefas e relatório
+  await page.click('#btnTempo');
+  await page.fill('#tIni', '09:00');
+  await page.fill('#tFim', '08:00');
+  await page.click('#tGuardar');
+  igual(await page.textContent('#tErro'), 'A hora de fim tem de ser depois da de início.', 'valida horas');
+  await page.fill('#tFim', '11:30');
+  await page.selectOption('#tTec', '2');
+  await page.selectOption('#tAju', '1');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'modal tempo ' + vp.width); }
+  await captura(page, 'folha-tempo-modal-414');
+  await page.setViewportSize(MOVEIS[0]);
+  await page.click('#tGuardar');
+  await page.waitForSelector('.toast-ok >> text=Tempo registado.');
+  assert((await page.textContent('#cartaoTempos')).includes('2 técnicos + 1 ajudante'), 'equipa');
+  assert((await page.textContent('#totalHoras')).includes('7,5 h'), 'total 2,5 h × 3 pessoas');
+  await page.click('#btnMaterial');
+  await page.click('#mGuardar');
+  igual(await page.textContent('#mErro'), 'Indique a descrição do material.', 'valida material');
+  await page.fill('#mDesc', 'Tubo de cobre 1/4"');
+  await page.fill('#mRef', 'TC14');
+  await page.fill('#mQtd', '3,5'.replace(',', '.'));
+  await page.selectOption('#mUn', 'm');
+  await page.click('#mGuardar');
+  await page.waitForSelector('.toast-ok >> text=Material registado.');
+  await page.check('[data-tarefa="Limpeza do local"]');
+  await page.waitForFunction(() => window.__fake.doc('folhas/fo001').tarefas?.['Limpeza do local'] === true);
+  await page.fill('#relatorio', 'Limpeza de filtros e verificação de pressões.');
+  await page.click('#btnRelatorio');
+  await page.waitForSelector('.toast-ok >> text=Relatório guardado.');
+  assert(!(await page.textContent('#vDetalhe')).includes('€'), 'técnico não vê valores');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'folha trabalho ' + vp.width); await captura(page, 'folha-trabalho-' + vp.width); }
+  await page.setViewportSize(MOVEIS[0]);
+  // concluir: relatório + assinatura obrigatórios
   await page.click('[data-estado="Concluída"]');
-  await page.click('.modal [data-r="1"]');
+  await page.waitForSelector('#cAss');
+  await page.fill('#cNome', 'Sr. Manuel');
+  await page.click('#cOk');
+  igual(await page.textContent('#cErro'), 'Peça ao cliente para assinar, ou marque «Cliente ausente».', 'assinatura obrigatória');
+  const box = await page.locator('#cAss').boundingBox();
+  await page.mouse.move(box.x + 30, box.y + 60);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + 30 + i * 25, box.y + 60 + (i % 2 ? 30 : -20));
+  await page.mouse.up();
+  await semOverflow(page, 'modal concluir');
+  await captura(page, 'folha-concluir-375');
+  await page.click('#cOk');
   await page.waitForSelector('.det-cab .estado-concluida');
+  await page.waitForSelector('#assinaturaCli img');
+  igual(await contar(page, '#btnTempo'), 0, 'técnico já não regista tempos depois de concluída');
   await page.fill('#obs', 'Filtros limpos. Pressões OK.');
   await page.click('#btnObs');
   await page.waitForSelector('.toast-ok >> text=Observações guardadas.');
@@ -379,8 +426,72 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   assert(f.historico[4].em && f.historico[4].em.seconds > 0, 'timestamp no histórico');
   igual(f.pendencia, null, 'pendência limpa');
   igual(f.observacoesTecnico, 'Filtros limpos. Pressões OK.', 'observações');
+  igual(f.tempos.length + ' ' + f.tempos[0].horas + ' ' + f.tempos[0].tecnicos + ' ' + f.tempos[0].ajudantes, '1 2.5 2 1', 'tempo gravado');
+  igual(f.materiais[0].descricao + ' ' + f.materiais[0].qtd + ' ' + f.materiais[0].unidade, 'Tubo de cobre 1/4" 3.5 m', 'material gravado');
+  igual(f.assinatura.nome, 'Sr. Manuel', 'assinatura');
+  assert(f.assinatura.imagem.startsWith('data:image/png') && f.assinatura.imagem.length < 200000, 'imagem da assinatura pequena: ' + f.assinatura.imagem.length);
+  igual(f.relatorio, 'Limpeza de filtros e verificação de pressões.', 'relatório');
   // concluída: técnico já não tem ações (Faturada é só backoffice/master)
   igual(await contar(page, '[data-estado]'), 0, 'sem ações após concluída');
+  semErros(page); await ctx.close();
+});
+
+teste('fase 2: técnico não regista trabalho em folha agendada; regras recusam concluir sem assinatura', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/folhas.html?id=fo002');
+  await page.waitForSelector('#detNumero');
+  igual(await contar(page, '#btnTempo'), 0, 'sem «+ Tempo» em Agendada');
+  assert(await page.locator('[data-tarefa]').first().isDisabled(), 'tarefas só de leitura');
+  const tenta = (id, alt) => page.evaluate(async ([id, alt]) => {
+    try { await window.__fake.atualizarComoUtilizador('folhas/' + id, alt); return 'ok'; } catch (e) { return e.code; }
+  }, [id, alt]);
+  igual(await tenta('fo002', { relatorio: 'x' }), 'permission-denied', 'relatório em Agendada');
+  const f3 = await fake(page, () => window.__fake.db()['folhas/fo003']);
+  const hist = [...f3.historico, { estado: 'Concluída', de: 'Em curso', uid: 'u-tec1', nome: 'João Silva', em: { seconds: 1 } }];
+  igual(await tenta('fo003', { estado: 'Concluída', historico: hist }), 'permission-denied', 'concluir sem assinatura');
+  igual(await tenta('fo003', { tempos: [{ id: 'a', horas: 1 }] }), 'ok', 'tempo em curso');
+  igual(await tenta('fo003', { tecnicoUid: 'u-tec2' }), 'permission-denied', 'técnico não muda o responsável');
+  semErros(page); await ctx.close();
+});
+
+teste('fase 2: master define preço/hora e vê o valor da mão de obra; backoffice não', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'master');
+  await page.goto(BASE + '/utilizadores.html');
+  await page.click('#btnPrecos');
+  await page.fill('#pTab', 'Manutenção;Técnico;20,40\nManutenção;Técnico-Técnico-Ajudante;51,00\nAT/Instalação;Técnico;22,80\nlinha errada');
+  await semOverflow(page, 'preço/hora');
+  await captura(page, 'precos-hora-375');
+  await page.click('#pGuardar');
+  await page.waitForSelector('.toast >> text=3 linhas');
+  const t = await fake(page, () => window.__fake.doc('config/precosHora'));
+  igual(t.linhas.length, 3, 'linhas');
+  igual(JSON.stringify(t.linhas[1]), JSON.stringify({ tipo: 'Manutenção', composicao: 'Técnico-Técnico-Ajudante', tecnicos: 2, ajudantes: 1, preco: 51 }), 'linha equipa');
+  // folha de manutenção com 2,5 h de 2 técnicos + 1 ajudante num dia útil
+  await fake(page, () => {
+    const db = window.__fake.db();
+    const d = new Date(); d.setHours(12, 0, 0, 0);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+    window.__fake.set('folhas/fo006', { ...db['folhas/fo006'], tipo: 'Manutenção', estado: 'Em curso',
+      tempos: [{ id: 'x1', data: { __ts: d.getTime() }, inicio: '09:00', fim: '11:30', horas: 2.5, tecnicos: 2, ajudantes: 1, uid: 'u-tec1', nome: 'João Silva' }] });
+  });
+  await page.goto(BASE + '/folhas.html?id=fo006');
+  await page.click('#btnValorMO');
+  await page.waitForSelector('#totalMO');
+  // 51 × (1×1,2 + 1×1,1 + 0,5) = 142,80
+  assert((await page.textContent('#totalMO')).includes('142,80'), 'total MO: ' + await page.textContent('#totalMO'));
+  await captura(page, 'valor-mo-375');
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html?id=fo006');
+  await page.waitForSelector('#cartaoTempos');
+  igual(await contar(page, '#btnValorMO'), 0, 'backoffice sem valores');
+  const negado = await page.evaluate(async () => {
+    try { await window.__fake.lerComoUtilizador('config/precosHora'); return 'lido'; } catch (e) { return e.code; }
+  });
+  igual(negado, 'permission-denied', 'backoffice não lê a tabela');
   semErros(page); await ctx.close();
 });
 

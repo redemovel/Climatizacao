@@ -171,6 +171,7 @@ const negar = (m) => { throw erro('permission-denied', 'Missing or insufficient 
 function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   const s = sessaoAtual(dbRaw);
   if (!s.uid) negar('sem sessão');
+  if (colecao === 'config') { if (s.perfil === 'master') return; negar('config só master'); }
   if (colecao === 'utilizadores') {
     if (!consulta && id === s.uid) return;
     if (STAFF.includes(s.perfil)) return;
@@ -206,6 +207,7 @@ function regraEscrever(dbRaw, path, antes, depois) {
     return;
   }
   if (colecao === 'contadores') { if (!staff) negar('contadores'); return; }
+  if (colecao === 'config') { if (s.perfil !== 'master') negar('config só master'); return; }
   if (colecao === 'folhas') {
     if (!depois) { if (s.perfil === 'master' && ['Por agendar', 'Agendada'].includes(antes.estado)) return; negar('apagar folha'); }
     for (const k of ['clienteId', 'clienteNome', 'tipo', 'estado', 'historico', 'numero']) if (depois[k] === undefined || depois[k] === null || depois[k] === '') negar('folha sem ' + k);
@@ -213,6 +215,9 @@ function regraEscrever(dbRaw, path, antes, depois) {
     if (!['Por agendar', 'Anulada'].includes(depois.estado) && (!depois.tecnicoUid || !depois.dataPrevista)) negar('só «Por agendar» pode estar sem técnico ou data');
     if (depois.estado === 'Pendente' && !(depois.pendencia && ['Peças', 'Orçamento', 'Cliente', 'Outro'].includes(depois.pendencia.motivo))) negar('pendente sem motivo');
     if (!['Instalação', 'Manutenção', 'AT'].includes(depois.tipo)) negar('tipo inválido');
+    if (depois.tempos && (!Array.isArray(depois.tempos) || depois.tempos.length > 200)) negar('tempos');
+    if (depois.materiais && (!Array.isArray(depois.materiais) || depois.materiais.length > 300)) negar('materiais');
+    if (depois.assinatura && (typeof depois.assinatura.imagem !== 'string' || depois.assinatura.imagem.length > 200000)) negar('assinatura');
     if (!antes) {
       if (!staff) negar('criar folha');
       if (!['Por agendar', 'Agendada'].includes(depois.estado) || depois.historico.length !== 1 || depois.historico[0].estado !== depois.estado || depois.historico[0].uid !== s.uid) negar('folha nova inválida');
@@ -234,9 +239,12 @@ function regraEscrever(dbRaw, path, antes, depois) {
     }
     if (s.perfil === 'tecnico') {
       if (antes.tecnicoUid !== s.uid) negar('folha de outro técnico');
-      const permitidos = ['estado', 'historico', 'estadoAlteradoEm', 'pendencia', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'];
+      const trabalho = ['tempos', 'materiais', 'tarefas', 'relatorio', 'assinatura'];
+      const permitidos = ['estado', 'historico', 'estadoAlteradoEm', 'pendencia', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor', ...trabalho];
       const proibidos = mudou.filter((k) => !permitidos.includes(k));
       if (proibidos.length) negar('técnico não pode alterar ' + proibidos.join(','));
+      if (mudou.some((k) => trabalho.includes(k)) && !['Em curso', 'Pendente'].includes(antes.estado)) negar('trabalho só em curso/pendente');
+      if (mudouEstado && depois.estado === 'Concluída' && !(depois.assinatura && typeof depois.assinatura === 'object')) negar('concluir sem assinatura');
       if (mudouEstado && !(TRANS_TEC[antes.estado] || []).includes(depois.estado)) negar('transição ' + antes.estado + '→' + depois.estado);
       if (ESTADOS_MASTER.includes(antes.estado)) negar('folha em revisão/faturação');
       return;
@@ -352,4 +360,9 @@ window.__fake = {
   leituras: () => Number(localStorage.getItem(LS_READS) || 0),
   zerarLeituras: () => localStorage.setItem(LS_READS, '0'),
   emails: () => JSON.parse(localStorage.getItem('__fake_emails') || '[]'),
+  // grava em bruto (sem regras) — preparar dados de teste
+  set: (p, raw) => { const db = lerDB(); db[p] = raw; gravarDB(db); },
+  // como o utilizador com sessão, passando pelas regras (simula quem contorna o ecrã)
+  lerComoUtilizador: async (p) => { const i = p.lastIndexOf('/'); return getDoc({ path: p, id: p.slice(i + 1), parent: { path: p.slice(0, i) } }); },
+  atualizarComoUtilizador: async (p, alt) => { const i = p.lastIndexOf('/'); commit([{ tipo: 'update', ref: { path: p, id: p.slice(i + 1) }, dados: alt }]); },
 };

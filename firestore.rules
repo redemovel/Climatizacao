@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-02 (2) — estado «Anulada» (só Master) e fecho em lote
+// Atualizado: 2026-11-02 (3) — Fase 2: tempos, material, tarefas, relatório, assinatura; tabela preço/hora (só Master); estado «Anulada»
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -87,8 +87,16 @@ service cloud.firestore {
         && (d.estado != 'Pendente' || (d.get('pendencia', null) != null && d.pendencia.motivo in ['Peças', 'Orçamento', 'Cliente', 'Outro']))
         && d.historico is list && d.historico.size() <= 500
         && (!('observacoesTecnico' in d) || (d.observacoesTecnico is string && d.observacoesTecnico.size() <= 5000))
-        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 5000));
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 5000))
+        // Fase 2: trabalho no local (sem preços)
+        && (!('tempos' in d) || (d.tempos is list && d.tempos.size() <= 200))
+        && (!('materiais' in d) || (d.materiais is list && d.materiais.size() <= 300))
+        && (!('tarefas' in d) || d.tarefas is map)
+        && (!('relatorio' in d) || (d.relatorio is string && d.relatorio.size() <= 10000))
+        && (!('assinatura' in d) || d.assinatura == null
+            || (d.assinatura is map && d.assinatura.imagem is string && d.assinatura.imagem.size() <= 200000));
     }
+    function camposTrabalho() { return ['tempos', 'materiais', 'tarefas', 'relatorio', 'assinatura']; }
     function folhaNovaValida(d) {
       return d.estado in ['Por agendar', 'Agendada']
         && d.historico.size() == 1
@@ -127,9 +135,15 @@ service cloud.firestore {
       return eTecnico()
         && resource.data.tecnicoUid == request.auth.uid
         && !(resource.data.estado in estadosMaster())
-        && alterados().hasOnly(['estado', 'historico', 'estadoAlteradoEm', 'pendencia', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor'])
+        && alterados().hasOnly(['estado', 'historico', 'estadoAlteradoEm', 'pendencia', 'observacoesTecnico', 'atualizadoEm', 'atualizadoPor',
+                                'tempos', 'materiais', 'tarefas', 'relatorio', 'assinatura'])
+        // tempos, material, tarefas, relatório e assinatura: só com o trabalho em curso ou pendente
+        && (!alterados().hasAny(camposTrabalho()) || resource.data.estado in ['Em curso', 'Pendente'])
         && (request.resource.data.estado == resource.data.estado
-            || transicaoTecnico(resource.data.estado, request.resource.data.estado));
+            || transicaoTecnico(resource.data.estado, request.resource.data.estado))
+        // o técnico só conclui com assinatura do cliente (ou registo de cliente ausente)
+        && (request.resource.data.estado == resource.data.estado || request.resource.data.estado != 'Concluída'
+            || request.resource.data.get('assinatura', null) is map);
     }
     match /folhas/{id} {
       // técnico: só as folhas atribuídas a si (as consultas têm de filtrar por tecnicoUid)
@@ -147,6 +161,11 @@ service cloud.firestore {
         allow read: if eMaster();
         allow write: if false;
       }
+    }
+
+    // ---------- Configuração (tabela de preço/hora da mão de obra): só o Master ----------
+    match /config/{id} {
+      allow read, write: if eMaster();
     }
 
     // Tudo o resto: recusado.

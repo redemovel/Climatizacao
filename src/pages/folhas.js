@@ -193,6 +193,7 @@ function renderDetalhe() {
   const pend = f.estado === 'Pendente' && f.pendencia ? f.pendencia : null;
   const podeObs = staff || (tecnico && f.estado !== 'Faturada');
   const obsPorGravar = $('#obs') ? $('#obs').value : null; // não perder texto escrito ao re-desenhar
+  const relPorGravar = $('#relatorio') && $('#relatorio').value !== (f.relatorio || '') ? $('#relatorio').value : null;
   $('#vDetalhe').innerHTML = `
     ${botaoVoltar()}
     <div class="cartao">
@@ -222,6 +223,7 @@ function renderDetalhe() {
           <select id="selCorrigir"><option value="">—</option>${outros.map((e) => `<option>${esc(e)}</option>`).join('')}</select></label>` : ''}
       </div>
     </div>
+    ${htmlTrabalho(f)}
     ${f.origem === 'phc' ? `<div class="cartao" id="cartaoPhc">
       <h3 style="margin-top:0">Registado no PHC</h3>
       <p class="muted" style="margin:0 0 8px">Dossier ${esc(String(f.phcNumero || ''))} · estado no PHC: ${esc(f.phcEstado || '—')}${f.phcFechada ? ' · faturado' : ''}${f.situacaoPHC ? ' · ' + esc(f.situacaoPHC) : ''}</p>
@@ -237,7 +239,8 @@ function renderDetalhe() {
       ${sessao.perfil === 'master' ? '<div id="valoresPhc" style="margin-top:12px"><button class="btn btn-sec btn-bloco" id="btnValores">Ver valores (só Master)</button></div>' : ''}
     </div>` : ''}
     <div class="cartao">
-      <h3 style="margin-top:0">Observações do técnico</h3>
+      <h3 style="margin-top:0">Notas internas</h3>
+      <p class="muted" style="margin:-4px 0 8px">Não seguem para o cliente.</p>
       ${podeObs
         ? `<textarea id="obs" placeholder="Notas sobre o trabalho realizado, anomalias, material em falta…">${esc(f.observacoesTecnico || '')}</textarea>
            <div class="acoes"><button class="btn" id="btnObs">Guardar observações</button></div>`
@@ -253,6 +256,8 @@ function renderDetalhe() {
     </div>`;
   ligarVoltar();
   if (obsPorGravar !== null && $('#obs')) $('#obs').value = obsPorGravar;
+  if (relPorGravar !== null && $('#relatorio')) $('#relatorio').value = relPorGravar;
+  ligarTrabalho();
   $$('[data-estado]').forEach((b) => b.onclick = () => mudarEstado(b.dataset.estado, b));
   if ($('#selCorrigir')) $('#selCorrigir').onchange = (ev) => { const e = ev.target.value; ev.target.value = ''; if (e) mudarEstado(e, null); };
   if ($('#btnObs')) $('#btnObs').onclick = () => comBotao($('#btnObs'), guardarObs);
@@ -320,7 +325,12 @@ async function mudarEstado(novo, btn) {
     if (!p) return;
     extra.pendencia = p;
   }
-  if (novo === 'Concluída' && !(await confirmar('Marcar esta folha de obra como concluída?', { ok: 'Concluir' }))) return;
+  if (novo === 'Concluída' && f.estado === 'Em curso') {
+    // fim do trabalho no local: relatório + assinatura do cliente
+    const c = await pedirConclusao(f);
+    if (!c) return;
+    Object.assign(extra, c);
+  } else if (novo === 'Concluída' && !(await confirmar('Marcar esta folha de obra como concluída?', { ok: 'Concluir' }))) return;
   if (novo === 'Faturada') {
     const n = await pedirTexto('Marcar como faturada', 'N.º da fatura (opcional)');
     if (n === null) return;

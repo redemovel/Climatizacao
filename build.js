@@ -35,7 +35,9 @@ function substituir(txt, mapa) {
 const gerados = [];
 for (const nome of PAGINAS) {
   const corpo = ler(`pages/${nome}.html`);
-  const js = ler(`pages/${nome}.js`);
+  // página principal + módulos extra da mesma página (pages/<nome>.<parte>.js, por ordem alfabética)
+  const extras = fs.readdirSync(path.join(SRC, 'pages')).filter((f) => f.startsWith(nome + '.') && f.endsWith('.js') && f !== nome + '.js').sort();
+  const js = [ler(`pages/${nome}.js`), ...extras.map((f) => `// ===== módulo: ${f} =====\n` + ler('pages/' + f))].join('\n');
   const mTitulo = corpo.match(/<!--\s*titulo:\s*(.+?)\s*-->/);
   const titulo = mTitulo ? mTitulo[1] : nome;
   for (const env of envs) {

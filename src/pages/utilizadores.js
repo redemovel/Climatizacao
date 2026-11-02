@@ -109,4 +109,55 @@ function abrirForm(u) {
   };
 }
 
+// ---------- Tabela de preço/hora da mão de obra (só Master; config/precosHora) ----------
+// Uma linha por equipa: «Tipo;Composição;Preço», p. ex. «Manutenção;Técnico-Técnico-Ajudante;51,00».
+function lerTabelaPrecos(txt) {
+  const linhas = [], ignoradas = [];
+  for (const bruta of txt.split(/\r?\n/)) {
+    const l = bruta.trim();
+    if (!l) continue;
+    const p = l.split(/[;\t]/).map((x) => x.trim());
+    const preco = Number((p[2] || '').replace(/[€\s]/g, '').replace(',', '.'));
+    const partes = (p[1] || '').split('-').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const tecnicos = partes.filter((x) => x.startsWith('técnico') || x.startsWith('tecnico')).length;
+    const ajudantes = partes.filter((x) => x.startsWith('ajudante')).length;
+    if (p.length < 3 || !(preco > 0) || !tecnicos || tecnicos + ajudantes !== partes.length) { ignoradas.push(l); continue; }
+    const tipo = /manuten/i.test(p[0]) ? 'Manutenção' : 'AT/Instalação';
+    const i = linhas.findIndex((x) => x.tipo === tipo && x.tecnicos === tecnicos && x.ajudantes === ajudantes);
+    const nova = { tipo, composicao: p[1], tecnicos, ajudantes, preco: Math.round(preco * 100) / 100 };
+    if (i >= 0) linhas[i] = nova; else linhas.push(nova);
+  }
+  return { linhas, ignoradas };
+}
+
+async function abrirPrecos() {
+  let atualP = {};
+  try { const s = await getDoc(doc(db, 'config', 'precosHora')); if (s.exists()) atualP = s.data(); } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+  const txt = (atualP.linhas || []).map((l) => `${l.tipo};${l.composicao};${String(l.preco).replace('.', ',')}`).join('\n');
+  const c = abrirModal('Preço/hora da mão de obra', `
+    <p class="muted" style="margin-top:0">Só o Master vê esta tabela. Uma linha por equipa: <b>Tipo;Composição;Preço</b><br>
+      Ex.: <code>Manutenção;Técnico-Técnico-Ajudante;51,00</code> · <code>AT/Instalação;Técnico;22,80</code></p>
+    <label class="campo"><span>Tabela</span><textarea id="pTab" rows="10" style="font-family:monospace">${esc(txt)}</textarea></label>
+    <div class="grelha-2">
+      <label class="campo"><span>1.ª hora (+%)</span><input id="p1" type="number" min="0" value="${esc(String(atualP.primeiraHora ?? 20))}"></label>
+      <label class="campo"><span>2.ª hora (+%)</span><input id="p2" type="number" min="0" value="${esc(String(atualP.segundaHora ?? 10))}"></label>
+    </div>
+    <label class="campo"><span>Sábado, domingo (+%)</span><input id="pFds" type="number" min="0" value="${esc(String(atualP.fimDeSemana ?? 100))}"></label>
+    <div class="msg-erro" id="pErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="pGuardar">Guardar</button></div>`);
+  $('#pGuardar', c).onclick = () => {
+    const { linhas, ignoradas } = lerTabelaPrecos($('#pTab', c).value);
+    if (!linhas.length) { $('#pErro', c).textContent = 'Nenhuma linha válida.'; return; }
+    const n = (id) => Math.max(0, Number($(id, c).value) || 0);
+    comBotao($('#pGuardar', c), async () => {
+      try {
+        await setDoc(doc(db, 'config', 'precosHora'), { linhas, primeiraHora: n('#p1'), segundaHora: n('#p2'), fimDeSemana: n('#pFds'), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+        fecharModal();
+        toast(`Tabela guardada (${linhas.length} linhas${ignoradas.length ? `, ${ignoradas.length} ignoradas: ${ignoradas.slice(0, 3).join(' | ')}` : ''}).`, ignoradas.length ? 'erro' : 'ok', 8000);
+      } catch (e) { $('#pErro', c).textContent = erroFirebase(e); }
+    });
+  };
+}
+$('#btnPrecos').onclick = () => comBotao($('#btnPrecos'), abrirPrecos);
+
 carregar();
