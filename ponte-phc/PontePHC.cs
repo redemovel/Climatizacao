@@ -1056,6 +1056,56 @@ class PhcSql : IFonteClientes, IFonteFolhas
         }
     }
 
+    // Diagnostico: para uma serie, que colunas de texto de bo/bo2/bo3 estao preenchidas e um exemplo de cada.
+    public List<string> CamposPreenchidos(int ndos)
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            foreach (string t in new string[] { "bo", "bo2", "bo3" })
+            {
+                List<string> cols = new List<string>();
+                using (SqlCommand c = new SqlCommand("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t " +
+                    "AND DATA_TYPE IN ('varchar','nvarchar','char','nchar','text','ntext') AND COLUMN_NAME NOT LIKE '%stamp' " +
+                    "AND COLUMN_NAME NOT IN ('ousrinis','usrinis','nmdos','origem') ORDER BY COLUMN_NAME", cn))
+                {
+                    c.Parameters.AddWithValue("@t", t);
+                    using (SqlDataReader r = c.ExecuteReader()) while (r.Read()) cols.Add(r.GetString(0));
+                }
+                l.Add("");
+                l.Add("--- " + t + ": colunas de texto preenchidas na serie " + ndos + " (quantas folhas | exemplo da mais recente)");
+                string junta = t == "bo" ? "" : " INNER JOIN bo b WITH (NOLOCK) ON b.bostamp = x." + t + "stamp";
+                string serie = t == "bo" ? "x.ndos" : "b.ndos";
+                string ordem = t == "bo" ? "x.dataobra" : "b.dataobra";
+                foreach (string col in cols)
+                {
+                    string cond = "LTRIM(RTRIM(CAST(x.[" + col + "] AS NVARCHAR(4000)))) <> ''";
+                    string sql = "SELECT COUNT(*) FROM " + t + " x WITH (NOLOCK)" + junta + " WHERE " + serie + " = @n AND " + cond + "; " +
+                                 "SELECT TOP 1 CAST(x.[" + col + "] AS NVARCHAR(4000)) FROM " + t + " x WITH (NOLOCK)" + junta + " WHERE " + serie + " = @n AND " + cond + " ORDER BY " + ordem + " DESC";
+                    try
+                    {
+                        using (SqlCommand c = new SqlCommand(sql, cn))
+                        {
+                            c.Parameters.AddWithValue("@n", ndos);
+                            using (SqlDataReader r = c.ExecuteReader())
+                            {
+                                r.Read();
+                                int n = r.GetInt32(0);
+                                if (n == 0) continue;
+                                r.NextResult();
+                                string ex = r.Read() ? r.GetString(0).Trim().Replace("\r", " ").Replace("\n", " ") : "";
+                                if (ex.Length > 120) ex = ex.Substring(0, 120) + "...";
+                                l.Add(string.Format("  {0,-22} {1,6} | {2}", col, n, ex));
+                            }
+                        }
+                    }
+                    catch (Exception e) { l.Add("  " + col + ": (" + e.Message + ")"); }
+                }
+            }
+        }
+        return l;
+    }
+
     // Diagnostico: mostra um dossier interno completo (campos preenchidos de bo/bo2/bo3 e linhas bi) e um resumo da serie.
     public List<string> VerDossier(int ndos, long numero)
     {
@@ -2220,6 +2270,14 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/campos" && args.Length >= 2)
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.CamposPreenchidos(int.Parse(args[1]))) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/dossier" && args.Length >= 2)
             {
                 PhcSql sql = m.Fonte as PhcSql;
@@ -2265,6 +2323,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /testar-sql        mostra colunas, total e 5 clientes do PHC; nada e enviado");
                 Console.WriteLine("  PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)");
                 Console.WriteLine("  PontePHC.exe /dossier SERIE [N]  mostra um dossier completo (o ultimo, ou o numero N)");
+                Console.WriteLine("  PontePHC.exe /campos SERIE      que campos de texto estao preenchidos numa serie (ex.: 114)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
