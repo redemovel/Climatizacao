@@ -138,6 +138,7 @@ async function carregarFolhasCliente(mais = false) {
       <a class="lista-item ${classeEstado(f.estado).replace('estado-', 'b-')}" href="${pagina('folhas', { id: d.id })}">
         <div class="li-topo"><span class="li-titulo">${esc(f.numero)}</span>${badgeEstado(f.estado)}</div>
         <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span><span>${esc(fmtDataHora(f.dataPrevista))}</span><span>· ${esc(f.tecnicoNome || '')}</span></div>
+        ${f.descricao ? `<div class="li-desc">${esc(f.descricao)}</div>` : ''}
       </a>`; }).join('');
     box.insertAdjacentHTML('beforeend', html || (mais ? '' : '<div class="vazio">Sem folhas de obra.</div>'));
     if (snap.docs.length === 10) {

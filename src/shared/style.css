@@ -92,6 +92,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .li-titulo { font-weight: 700; }
 .li-sub { color: var(--texto-2); font-size: .9rem; margin-top: 2px; overflow-wrap: anywhere; }
 .li-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: .82rem; color: var(--texto-2); align-items: center; }
+.li-desc { margin-top: 6px; font-size: .9rem; color: var(--texto); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .vazio { text-align: center; color: var(--texto-2); padding: 28px 12px; }
 .mais { display: flex; justify-content: center; margin: 12px 0; }
 

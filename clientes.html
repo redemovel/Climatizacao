@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 10:54 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-02 11:11 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -109,6 +109,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .li-titulo { font-weight: 700; }
 .li-sub { color: var(--texto-2); font-size: .9rem; margin-top: 2px; overflow-wrap: anywhere; }
 .li-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: .82rem; color: var(--texto-2); align-items: center; }
+.li-desc { margin-top: 6px; font-size: .9rem; color: var(--texto); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .vazio { text-align: center; color: var(--texto-2); padding: 28px 12px; }
 .mais { display: flex; justify-content: center; margin: 12px 0; }
 
@@ -230,7 +231,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-02 10:54 UTC';
+const BUILD = '2026-11-02 11:11 UTC';
 const PAGINA = 'clientes';
 
 const FIREBASE_CONFIG = {
@@ -652,6 +653,7 @@ async function carregarFolhasCliente(mais = false) {
       <a class="lista-item ${classeEstado(f.estado).replace('estado-', 'b-')}" href="${pagina('folhas', { id: d.id })}">
         <div class="li-topo"><span class="li-titulo">${esc(f.numero)}</span>${badgeEstado(f.estado)}</div>
         <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span><span>${esc(fmtDataHora(f.dataPrevista))}</span><span>· ${esc(f.tecnicoNome || '')}</span></div>
+        ${f.descricao ? `<div class="li-desc">${esc(f.descricao)}</div>` : ''}
       </a>`; }).join('');
     box.insertAdjacentHTML('beforeend', html || (mais ? '' : '<div class="vazio">Sem folhas de obra.</div>'));
     if (snap.docs.length === 10) {

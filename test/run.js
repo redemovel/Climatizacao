@@ -399,6 +399,7 @@ teste('folhas backoffice: filtros, paginação e pesquisa por número', async ()
   await page.waitForSelector('#lista .lista-item');
   const abertas = await fake(page, () => Object.entries(window.__fake.db()).filter(([k, v]) => k.startsWith('folhas/') && ['Por agendar', 'Agendada', 'Em curso', 'Pendente'].includes(v.estado)).length);
   igual(await contar(page, '#lista .lista-item'), abertas, 'abertas');
+  assert((await page.textContent('#lista')).includes('Equipamento não arranca'), 'descrição do trabalho na lista');
   await page.selectOption('#fEstado', '');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   assert(await page.locator('#maisWrap').isVisible(), 'botão carregar mais');

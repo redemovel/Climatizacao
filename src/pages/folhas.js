@@ -75,6 +75,7 @@ function renderLista(msgVazio = 'Não há folhas de obra com estes filtros.') {
       <div class="li-sub">${esc(f.localidade || f.morada || '')}</div>
       <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span>
         <span>${esc(fmtDataHora(f.dataPrevista))}</span>${staff ? `<span>· ${esc(f.tecnicoNome || '')}</span>` : ''}</div>
+      ${f.descricao ? `<div class="li-desc">${esc(f.descricao)}</div>` : ''}
     </a>`).join('');
 }
 $('#lista').addEventListener('click', (ev) => {
