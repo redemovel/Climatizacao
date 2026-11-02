@@ -892,6 +892,9 @@ class PhcSql : IFonteClientes, IFonteFolhas
                 Bo(cn, "tecnnm") + " AS tecnnm, " + Bo(cn, "trab1") + " AS trab1, " + Bo(cn, "trab5") + " AS trab5, " + Bo(cn, "tabela1") + " AS tabela1, " +
                 Bo(cn, "u_davaria") + " AS u_davaria, " + (colunasBo.Contains("fechada") ? "bo.fechada" : "0") + " AS fechada, " +
                 Bo(cn, "tabela2") + " AS tabela2, " + (colunasBo.Contains("etotaldeb") ? "bo.etotaldeb" : "0") + " AS etotaldeb, " +
+                "CAST(" + Bo(cn, "u_dinterve") + " AS NVARCHAR(4000)) AS u_dinterve, CAST(" + Bo(cn, "obstab2") + " AS NVARCHAR(4000)) AS obstab2, " + Bo(cn, "obranome") + " AS obranome, " +
+                "ISNULL(bo2.contacto, '') AS b2contacto, ISNULL(bo2.telefone, '') AS b2telefone, ISNULL(bo2.email, '') AS b2email, " +
+                "ISNULL(bo2.morada, '') AS b2morada, ISNULL(bo2.local, '') AS b2local, ISNULL(bo2.codpost, '') AS b2codpost, " + (ColunaExiste(cn, "bo2", "u_resnego") ? "ISNULL(CAST(bo2.u_resnego AS NVARCHAR(200)), '')" : "''") + " AS b2resnego, " +
                 "bo.ousrdata, bo.ousrinis, bo.usrdata, bo.usrhora, ISNULL(bo2.xpdhora, '') AS xpdhora, " +
                 "ISNULL(cl." + (colunas.Contains("telefone") ? "telefone" : "nome") + ", '') AS telefone, ISNULL(cl." + (colunas.Contains("tlmvl") ? "tlmvl" : "nome") + ", '') AS tlmvl " +
                 "FROM bo WITH (NOLOCK) LEFT JOIN bo2 WITH (NOLOCK) ON bo2.bo2stamp = bo.bostamp " +
@@ -918,6 +921,12 @@ class PhcSql : IFonteClientes, IFonteFolhas
                         x.Tecnico = S(r, "tecnnm"); x.Contacto = S(r, "trab1"); x.Tipo = S(r, "trab5"); x.Estado = S(r, "tabela1"); x.Descricao = S(r, "u_davaria");
                         x.Fechada = r["fechada"] != DBNull.Value && Convert.ToBoolean(r["fechada"]);
                         x.TecResp = S(r, "tabela2");
+                        x.Relatorio = S(r, "u_dinterve"); x.ObsInternas = S(r, "obstab2"); x.Encomenda = S(r, "obranome");
+                        x.Situacao = S(r, "b2resnego"); x.EmailContacto = S(r, "b2email");
+                        if (S(r, "b2contacto") != "") x.Contacto = S(r, "b2contacto");
+                        if (S(r, "b2telefone") != "") x.Telefone = S(r, "b2telefone");
+                        // morada da obra (bo2) quando difere da do cliente
+                        if (S(r, "b2morada") != "") { x.Morada = S(r, "b2morada"); x.Local = S(r, "b2local"); if (S(r, "b2codpost") != "") x.CodPost = S(r, "b2codpost"); }
                         x.TotalVenda = r["etotaldeb"] == DBNull.Value ? 0 : Convert.ToDecimal(r["etotaldeb"]);
                         x.Criada = r["ousrdata"] == DBNull.Value ? x.Data : Convert.ToDateTime(r["ousrdata"]); x.CriadaPor = S(r, "ousrinis");
                         x.AltData = r["usrdata"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["usrdata"]).Date; x.AltHora = S(r, "usrhora");
@@ -957,6 +966,16 @@ class PhcSql : IFonteClientes, IFonteFolhas
             }
         }
         return l;
+    }
+
+    bool ColunaExiste(SqlConnection cn, string tabela, string coluna)
+    {
+        using (SqlCommand c = new SqlCommand("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t AND COLUMN_NAME = @c", cn))
+        {
+            c.Parameters.AddWithValue("@t", tabela);
+            c.Parameters.AddWithValue("@c", coluna);
+            return Convert.ToInt32(c.ExecuteScalar()) > 0;
+        }
     }
 
     HashSet<string> tabelas;
@@ -1419,6 +1438,7 @@ class FolhaPHC
     public List<ValorPHC> Valores = new List<ValorPHC>();
     public List<KeyValuePair<DateTime, string>> Servico = new List<KeyValuePair<DateTime, string>>();
     public List<string> Tarefas = new List<string>();
+    public string Relatorio = "", ObsInternas = "", Encomenda = "", Situacao = "", EmailContacto = "";
     public string TecResp = "";       // bo.tabela2 ("Apelido, Nome") - tecnico responsavel no ecra do PHC
     public decimal TotalVenda;
     public long Chave { get { return (long)Ano * 10000000L + Numero; } }
@@ -1454,6 +1474,10 @@ class FonteCsvFolhas : IFonteFolhas
             string tmp;
             if (d.TryGetValue("tabela2", out tmp)) x.TecResp = tmp;
             if (d.TryGetValue("etotaldeb", out tmp) && tmp != "") x.TotalVenda = decimal.Parse(tmp, CultureInfo.InvariantCulture);
+            if (d.TryGetValue("u_dinterve", out tmp)) x.Relatorio = tmp;
+            if (d.TryGetValue("obstab2", out tmp)) x.ObsInternas = tmp;
+            if (d.TryGetValue("obranome", out tmp)) x.Encomenda = tmp;
+            if (d.TryGetValue("u_resnego", out tmp)) x.Situacao = tmp;
             x.Criada = DateTime.ParseExact(d["ousrdata"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.CriadaPor = d["ousrinis"];
             x.AltData = DateTime.ParseExact(d["usrdata"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.AltHora = d["usrhora"];
             todas.Add(x);
@@ -1820,6 +1844,11 @@ class Motor
         }
         d.ListaMapas("historicoPHC", hs);
         d.Lista("tarefasPHC", f.Tarefas);
+        d.Texto("relatorioPHC", f.Relatorio);
+        d.Texto("observacoesInternasPHC", f.ObsInternas);
+        d.Texto("encomendaCliente", f.Encomenda);
+        d.Texto("situacaoPHC", f.Situacao);
+        d.Texto("emailContacto", f.EmailContacto);
         d.Texto("origem", "phc");
         d.Texto("phcStamp", f.Stamp);
         d.Inteiro("phcNumero", f.Numero);

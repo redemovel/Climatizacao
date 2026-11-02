@@ -170,7 +170,10 @@ function renderDetalhe() {
     </div>
     ${f.origem === 'phc' ? `<div class="cartao" id="cartaoPhc">
       <h3 style="margin-top:0">Registado no PHC</h3>
-      <p class="muted" style="margin:0 0 8px">Dossier ${esc(String(f.phcNumero || ''))} · estado no PHC: ${esc(f.phcEstado || '—')}${f.phcFechada ? ' · faturado' : ''}</p>
+      <p class="muted" style="margin:0 0 8px">Dossier ${esc(String(f.phcNumero || ''))} · estado no PHC: ${esc(f.phcEstado || '—')}${f.phcFechada ? ' · faturado' : ''}${f.situacaoPHC ? ' · ' + esc(f.situacaoPHC) : ''}</p>
+      ${f.encomendaCliente ? `<p style="margin:0 0 8px"><b>V/Encomenda:</b> <span id="encomendaPhc">${esc(f.encomendaCliente)}</span></p>` : ''}
+      ${f.relatorioPHC ? `<h3>Relatório de intervenção</h3><p id="relatorioPhc" style="white-space:pre-wrap;margin:0 0 8px">${esc(f.relatorioPHC)}</p>` : ''}
+      ${f.observacoesInternasPHC && staff ? `<h3>Observações internas</h3><p style="white-space:pre-wrap;margin:0 0 8px">${esc(f.observacoesInternasPHC)}</p>` : ''}
       ${(f.linhasPHC || []).length ? `<ul class="hist">${f.linhasPHC.map((l) => `
         <li><b>${esc(String(l.qtd ?? ''))} ${esc(l.unidade || '')}</b><span>${esc(l.descricao || '')}</span><span class="muted">${esc(l.ref || '')}${l.data ? ' · ' + esc(fmtData(l.data)) : ''}</span></li>`).join('')}</ul>`
         : '<p class="muted" style="margin:0">Sem linhas de trabalho ou material.</p>'}

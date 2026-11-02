@@ -338,6 +338,8 @@ teste('folhas importadas do PHC: mostram dossier, estado PHC e linhas (sem preç
   assert(t.includes('Dossier 1785') && t.includes('3-Em Execução') && t.includes('Serviço Técnico (Equipa)') && t.includes('8 h'), 'conteúdo: ' + t);
   assert(!/€|preço/i.test(t), 'sem preços');
   assert(t.includes('Registo de tempos') && t.includes('Ricardo Pereira') && t.includes('Ficha fluorados'), 'tempos e tarefas');
+  assert(t.includes('Substituído o ligador') && t.includes('2146895') && t.includes('Em garantia'), 'relatório, V/Encomenda e situação');
+  assert(!t.includes('paga a 60 dias'), 'observações internas não aparecem ao técnico');
   igual(await contar(page, '#btnValores'), 0, 'técnico sem botão de valores');
   const neg = await page.evaluate(async () => {
     const m = await import('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js');

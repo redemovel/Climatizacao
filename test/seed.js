@@ -119,6 +119,7 @@ function gerar() {
     criadoEm: ts(new Date(Date.now() - 400 * 864e5)), dataPrevista: ts(dia(20, 9)),
     temposPHC: [{ data: ts(dia(-3, 0)), horas: 8, funcionario: 'Ricardo Pereira' }, { data: ts(dia(-3, 0)), horas: 7, funcionario: 'Paulo Duarte' }],
     tarefasPHC: ['Cliente no local', 'Limpeza do local', 'Ficha fluorados'],
+    relatorioPHC: 'Substituído o ligador do compressor.', encomendaCliente: '2146895', observacoesInternasPHC: 'Cliente paga a 60 dias', situacaoPHC: 'Em garantia',
     historicoPHC: [{ em: ts(dia(-3, 12)), texto: 'NOVA FO Nº:1785' }, { em: ts(dia(-3, 18)), texto: 'Estado:3-Em Execução' }] };
   db['folhas/phc-' + ano + '-1785/privado/phc'] = { totalVenda: 958.8,
     linhas: [{ ref: 'ST2', descricao: 'Serviço Técnico (Equipa)', qtd: 8, preco: 40.8, total: 326.4 }],

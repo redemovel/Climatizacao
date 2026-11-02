@@ -201,9 +201,9 @@ print('  -- folhas de obra')
 sv = lambda v: {'stringValue': v}
 BD['utilizadores/u-paulo'] = {'nome': sv('Paulo Duarte'), 'email': sv('pduarte@arpuro.pt'), 'ativo': {'booleanValue': True}}
 BD['utilizadores/u-ricardo'] = {'nome': sv('Ricardo Pereira'), 'email': sv('tecnica@arpuro.pt'), 'ativo': {'booleanValue': True}}
-cab = 'bostamp;obrano;boano;dataobra;xpdhora;no;nome;ncont;morada;local;codpost;telefone;tecnnm;trab1;trab5;tabela1;u_davaria;fechada;ousrdata;ousrinis;usrdata;usrhora;tabela2;etotaldeb'
+cab = 'bostamp;obrano;boano;dataobra;xpdhora;no;nome;ncont;morada;local;codpost;telefone;tecnnm;trab1;trab5;tabela1;u_davaria;fechada;ousrdata;ousrinis;usrdata;usrhora;tabela2;etotaldeb;u_dinterve;obstab2;obranome;u_resnego'
 folhas = [
-    'A;1785;2026;2026-10-29;09:00;3;SIMOLDES PLASTICOS, SA;501220267;R Comend Antonio Silva Rodrigues,165|Ap113;SANTIAGO DE RIBA-UL;3721-902 SANTIAGO DE RIBA-UL;256000000;tecnica;Telmo Pinho;Manutenção;3-Em Execução;Manutenção preventiva semestral;0;2026-10-29;Paulo Duarte;2026-10-29;12:58;Duarte, Paulo;958.80',
+    'A;1785;2026;2026-10-29;09:00;3;SIMOLDES PLASTICOS, SA;501220267;R Comend Antonio Silva Rodrigues,165|Ap113;SANTIAGO DE RIBA-UL;3721-902 SANTIAGO DE RIBA-UL;256000000;tecnica;Telmo Pinho;Manutenção;3-Em Execução;Manutenção preventiva semestral;0;2026-10-29;Paulo Duarte;2026-10-29;12:58;Duarte, Paulo;958.80;Substituído ligador do compressor.;Cliente paga a 60 dias;2146895;Em garantia',
     'B;1700;2026;2026-09-10;14:30;2;Hotel Meliá Ria;501234560;Cais;Aveiro;3810-200 AVEIRO;;tecnica;Eng. Marta;Assistência Técnica;4.1-Pendente Peças;Compressor;0;2026-09-10;NW;2026-09-11;10:00;;0',
     'C;1600;2025;2025-05-02;;3;SIMOLDES PLASTICOS, SA;501220267;;;;;Ricardo B.;;Instalação;5-Concluido;Instalação split;1;2025-05-02;NW;2025-06-01;09:00',
     'D;1780;2026;2026-10-20;;4;Empresa Espanhola;ES B12345678;;Vigo;;;;;Assistência Técnica;1-Registado;Avaria;0;2026-10-20;NW;2026-10-20;08:00',
@@ -225,6 +225,7 @@ verifica(len(tp) == 2 and tp[0]['mapValue']['fields']['funcionario']['stringValu
 pv = BD.get('folhas/phc-2026-1785/privado/phc', {})
 verifica(pv.get('totalVenda') == {'doubleValue': 958.8} and pv['valorHora']['arrayValue']['values'][0]['mapValue']['fields']['tipoTecnico']['stringValue'] == 'Técnico-Técnico', 'valores e total só no documento privado')
 verifica('preco' not in json.dumps(F('phc-2026-1785')) and 'total' not in json.dumps(F('phc-2026-1785')).lower().replace('totalhoras', ''), 'a folha (visível ao técnico) não tem preços')
+verifica(c('phc-2026-1785', 'relatorioPHC') == 'Substituído ligador do compressor.' and c('phc-2026-1785', 'encomendaCliente') == '2146895' and c('phc-2026-1785', 'observacoesInternasPHC') == 'Cliente paga a 60 dias' and c('phc-2026-1785', 'situacaoPHC') == 'Em garantia', 'relatório, V/Encomenda, observações internas e situação')
 verifica(c('phc-2026-1785', 'tipo') == 'Manutenção' and c('phc-2026-1785', 'codigoPostal') == '3721-902' and c('phc-2026-1785', 'contacto') == 'Telmo Pinho', 'tipo, código postal e contacto no local')
 verifica(c('phc-2026-1785', 'morada') == 'R Comend Antonio Silva Rodrigues,165, Ap113' and c('phc-2026-1785', 'clienteId') == 'phc-3', 'morada e cliente')
 lin = F('phc-2026-1785')['linhasPHC']['arrayValue']['values']
