@@ -329,6 +329,23 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   semErros(page); await ctx.close();
 });
 
+teste('folhas importadas do PHC: mostram dossier, estado PHC e linhas (sem preços)', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/folhas.html?id=phc-' + new Date().getFullYear() + '-1785');
+  await page.waitForSelector('#cartaoPhc');
+  const t = await page.textContent('#cartaoPhc');
+  assert(t.includes('Dossier 1785') && t.includes('3-Em Execução') && t.includes('Serviço Técnico (Equipa)') && t.includes('8 h'), 'conteúdo: ' + t);
+  assert(!/€|preço/i.test(t), 'sem preços');
+  await page.click('[data-estado="Pendente"]');
+  await page.check('input[name=motivo][value="Peças"]', { force: true });
+  await page.click('#pOk');
+  await page.waitForSelector('#pendencia');
+  await semOverflow(page, 'folha importada');
+  await captura(page, 'folha-importada-375');
+  semErros(page); await ctx.close();
+});
+
 teste('folhas técnico: não abre folha de outro técnico', async () => {
   const { ctx, page } = await contexto();
   await entrar(page, 'tecnico1');
@@ -359,7 +376,7 @@ teste('folhas backoffice: filtros, paginação e pesquisa por número', async ()
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   assert(await page.locator('#maisWrap').isVisible(), 'botão carregar mais');
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 28);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 29);
   await page.selectOption('#fEstado', 'Concluída');
   await page.waitForFunction(() => [...document.querySelectorAll('#lista .badge')].every((b) => b.textContent === 'Concluída'));
   await page.selectOption('#fTec', 'u-tec2');

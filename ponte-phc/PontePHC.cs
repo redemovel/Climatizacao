@@ -86,6 +86,14 @@ class Config
     }
 
     public bool Simular { get { return GetBool("Simular", true); } }
+
+    public Dictionary<string, string> ComPrefixo(string prefixo)
+    {
+        Dictionary<string, string> r = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> kv in v)
+            if (kv.Key.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase) && kv.Value != "") r[kv.Key.Substring(prefixo.Length)] = kv.Value;
+        return r;
+    }
 }
 
 // ---------------------------------------------------------------- registo
@@ -519,6 +527,31 @@ class Documento
         foreach (string s in l) { if (sb.Length > 0) sb.Append(','); sb.Append("{\"stringValue\":").Append(global::Json.Texto(s)).Append('}'); }
         Por(k, "{\"arrayValue\":{\"values\":[" + sb + "]}}");
     }
+    public void Inteiro(string k, long v) { Por(k, "{\"integerValue\":\"" + v + "\"}"); }
+    public void Decimal(string k, decimal v) { Por(k, "{\"doubleValue\":" + v.ToString(CultureInfo.InvariantCulture) + "}"); }
+    public static string ValorData(DateTime d)
+    {
+        return "{\"timestampValue\":\"" + d.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture) + "\"}";
+    }
+    public void Data(string k, DateTime? d) { Por(k, d.HasValue ? ValorData(d.Value) : "{\"nullValue\":null}"); }
+    public string ComoMapa() { return "{\"mapValue\":{\"fields\":{" + Json + "}}}"; }
+    public void Mapa(string k, Documento m) { Por(k, m.ComoMapa()); }
+    public void ListaMapas(string k, List<Documento> l)
+    {
+        StringBuilder sb = new StringBuilder();
+        foreach (Documento m in l) { if (sb.Length > 0) sb.Append(','); sb.Append(m.ComoMapa()); }
+        Por(k, "{\"arrayValue\":{\"values\":[" + sb + "]}}");
+    }
+    // Transformacoes extra (ex.: acrescentar ao historico sem o reescrever).
+    public List<string> Transformacoes = new List<string>();
+    public void Acrescentar(string k, Documento elemento)
+    {
+        Transformacoes.Add("{\"fieldPath\":" + global::Json.Texto(k) + ",\"appendMissingElements\":{\"values\":[" + elemento.ComoMapa() + "]}}");
+    }
+    public void HoraServidor(string k)
+    {
+        Transformacoes.Add("{\"fieldPath\":" + global::Json.Texto(k) + ",\"setToServerValue\":\"REQUEST_TIME\"}");
+    }
 }
 
 class Firestore
@@ -552,11 +585,79 @@ class Firestore
             sb.Append("{\"update\":{\"name\":").Append(Json.Texto("projects/" + Projeto + "/databases/(default)/documents/" + colecao + "/" + d.Id));
             sb.Append(",\"fields\":{").Append(d.Json).Append("}},\"updateMask\":{\"fieldPaths\":[");
             for (int k = 0; k < d.Campos.Count; k++) { if (k > 0) sb.Append(','); sb.Append(Json.Texto(d.Campos[k])); }
-            sb.Append("]},\"updateTransforms\":[{\"fieldPath\":\"sincronizadoEm\",\"setToServerValue\":\"REQUEST_TIME\"}]}");
+            sb.Append("]},\"updateTransforms\":[{\"fieldPath\":\"sincronizadoEm\",\"setToServerValue\":\"REQUEST_TIME\"}");
+            foreach (string t in d.Transformacoes) sb.Append(',').Append(t);
+            sb.Append("]}");
         }
         sb.Append("]}");
         Resposta r = Https.Pedir(cfg, host, "POST", Base + ":commit", "application/json; charset=utf-8", sb.ToString(), conta.Token());
         if (r.Estado != 200) throw new Exception("Firestore recusou a gravacao (HTTP " + r.Estado + "): " + ContaServico.Resumir(r.Corpo));
+    }
+
+    // Le varios documentos de uma vez; devolve so os que existem (id -> campos).
+    public Dictionary<string, Dictionary<string, object>> LerVarios(string colecao, List<string> ids)
+    {
+        Dictionary<string, Dictionary<string, object>> r = new Dictionary<string, Dictionary<string, object>>();
+        if (ids.Count == 0) return r;
+        StringBuilder sb = new StringBuilder("{\"documents\":[");
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append(Json.Texto("projects/" + Projeto + "/databases/(default)/documents/" + colecao + "/" + ids[i]));
+        }
+        sb.Append("]}");
+        Resposta res = Https.Pedir(cfg, host, "POST", Base + ":batchGet", "application/json; charset=utf-8", sb.ToString(), conta.Token());
+        if (res.Estado != 200) throw new Exception("Firestore recusou a leitura (HTTP " + res.Estado + "): " + ContaServico.Resumir(res.Corpo));
+        List<object> l = Json.Ler(res.Corpo) as List<object>;
+        if (l == null) return r;
+        foreach (object o in l)
+        {
+            Dictionary<string, object> e = o as Dictionary<string, object>;
+            object f;
+            if (e == null || !e.TryGetValue("found", out f)) continue;
+            Dictionary<string, object> doc = f as Dictionary<string, object>;
+            string nome = Json.Campo(doc, "name");
+            object campos;
+            doc.TryGetValue("fields", out campos);
+            r[nome.Substring(nome.LastIndexOf('/') + 1)] = (campos as Dictionary<string, object>) ?? new Dictionary<string, object>();
+        }
+        return r;
+    }
+
+    // Lista uma colecao pequena (ex.: utilizadores), ate 300 documentos.
+    public List<KeyValuePair<string, Dictionary<string, object>>> Listar(string colecao)
+    {
+        List<KeyValuePair<string, Dictionary<string, object>>> r = new List<KeyValuePair<string, Dictionary<string, object>>>();
+        Resposta res = Https.Pedir(cfg, host, "GET", Base + "/" + colecao + "?pageSize=300", null, null, conta.Token());
+        if (res.Estado != 200) throw new Exception("Firestore recusou a leitura de " + colecao + " (HTTP " + res.Estado + "): " + ContaServico.Resumir(res.Corpo));
+        Dictionary<string, object> j = Json.Ler(res.Corpo) as Dictionary<string, object>;
+        object docs;
+        if (j == null || !j.TryGetValue("documents", out docs)) return r;
+        foreach (object o in (List<object>)docs)
+        {
+            Dictionary<string, object> doc = (Dictionary<string, object>)o;
+            string nome = Json.Campo(doc, "name");
+            object campos;
+            doc.TryGetValue("fields", out campos);
+            r.Add(new KeyValuePair<string, Dictionary<string, object>>(nome.Substring(nome.LastIndexOf('/') + 1), (campos as Dictionary<string, object>) ?? new Dictionary<string, object>()));
+        }
+        return r;
+    }
+
+    // Valor simples de um campo devolvido pela API (stringValue, integerValue, booleanValue...).
+    public static string Valor(Dictionary<string, object> campos, string k)
+    {
+        object v;
+        if (campos == null || !campos.TryGetValue(k, out v)) return "";
+        Dictionary<string, object> d = v as Dictionary<string, object>;
+        if (d == null) return "";
+        foreach (KeyValuePair<string, object> kv in d)
+        {
+            if (kv.Value == null) return "";
+            if (kv.Value is bool) return (bool)kv.Value ? "true" : "false";
+            return Convert.ToString(kv.Value, CultureInfo.InvariantCulture);
+        }
+        return "";
     }
 
     // So le 1 documento de utilizadores: confirma ligacao, certificado e chave.
@@ -616,7 +717,7 @@ interface IFonteClientes
     int Total();
 }
 
-class PhcSql : IFonteClientes
+class PhcSql : IFonteClientes, IFonteFolhas
 {
     Config cfg;
     HashSet<string> colunas;
@@ -761,6 +862,105 @@ class PhcSql : IFonteClientes
                 while (r.Read()) l.Add(Linha(r));
         }
         return l;
+    }
+
+    HashSet<string> colunasBo;
+
+    string Bo(SqlConnection cn, string col)
+    {
+        if (colunasBo == null)
+        {
+            colunasBo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (SqlCommand c = new SqlCommand("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'bo'", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) colunasBo.Add(r.GetString(0));
+        }
+        return colunasBo.Contains(col) ? "bo." + col : "''";
+    }
+
+    public List<FolhaPHC> FolhasSeguintes(Marca m, int max)
+    {
+        List<FolhaPHC> l = new List<FolhaPHC>();
+        int ndos = cfg.GetInt("SerieFolhas", 114);
+        using (SqlConnection cn = Abrir())
+        {
+            Colunas(cn);
+            DateTime desde;
+            string filtroData = DateTime.TryParseExact(cfg.Get("FolhasDesde", ""), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out desde)
+                ? " AND bo.dataobra >= '" + desde.ToString("yyyyMMdd") + "'" : "";
+            string sql = "SELECT TOP (@max) bo.bostamp, bo.obrano, bo.boano, bo.dataobra, bo.no, bo.nome, bo.ncont, bo.morada, bo.local, bo.codpost, " +
+                Bo(cn, "tecnnm") + " AS tecnnm, " + Bo(cn, "trab1") + " AS trab1, " + Bo(cn, "trab5") + " AS trab5, " + Bo(cn, "tabela1") + " AS tabela1, " +
+                Bo(cn, "u_davaria") + " AS u_davaria, " + (colunasBo.Contains("fechada") ? "bo.fechada" : "0") + " AS fechada, " +
+                "bo.ousrdata, bo.ousrinis, bo.usrdata, bo.usrhora, ISNULL(bo2.xpdhora, '') AS xpdhora, " +
+                "ISNULL(cl." + (colunas.Contains("telefone") ? "telefone" : "nome") + ", '') AS telefone, ISNULL(cl." + (colunas.Contains("tlmvl") ? "tlmvl" : "nome") + ", '') AS tlmvl " +
+                "FROM bo WITH (NOLOCK) LEFT JOIN bo2 WITH (NOLOCK) ON bo2.bo2stamp = bo.bostamp " +
+                "LEFT JOIN cl WITH (NOLOCK) ON cl.no = bo.no AND cl.estab = 0 " +
+                "WHERE bo.ndos = @ndos" + filtroData + " AND (bo.usrdata > @d OR (bo.usrdata = @d AND bo.usrhora > @h) " +
+                "OR (bo.usrdata = @d AND bo.usrhora = @h AND (bo.boano * 10000000 + bo.obrano) > @no)) " +
+                "ORDER BY bo.usrdata, bo.usrhora, bo.boano, bo.obrano";
+            using (SqlCommand c = new SqlCommand(sql, cn))
+            {
+                c.Parameters.AddWithValue("@max", max);
+                c.Parameters.AddWithValue("@ndos", ndos);
+                c.Parameters.AddWithValue("@d", m.Data);
+                c.Parameters.AddWithValue("@h", m.Hora);
+                c.Parameters.AddWithValue("@no", m.No);
+                using (SqlDataReader r = c.ExecuteReader())
+                    while (r.Read())
+                    {
+                        FolhaPHC x = new FolhaPHC();
+                        x.Stamp = S(r, "bostamp"); x.Numero = Convert.ToInt64(r["obrano"]); x.Ano = Convert.ToInt32(r["boano"]);
+                        x.Data = r["dataobra"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["dataobra"]).Date;
+                        x.Hora = S(r, "xpdhora"); x.ClienteNo = Convert.ToInt64(r["no"]);
+                        x.Nome = S(r, "nome"); x.Ncont = S(r, "ncont"); x.Morada = S(r, "morada"); x.Local = S(r, "local"); x.CodPost = S(r, "codpost");
+                        x.Telefone = S(r, "telefone"); if (x.Telefone == "" || x.Telefone == x.Nome) x.Telefone = S(r, "tlmvl"); if (x.Telefone == x.Nome) x.Telefone = "";
+                        x.Tecnico = S(r, "tecnnm"); x.Contacto = S(r, "trab1"); x.Tipo = S(r, "trab5"); x.Estado = S(r, "tabela1"); x.Descricao = S(r, "u_davaria");
+                        x.Fechada = r["fechada"] != DBNull.Value && Convert.ToBoolean(r["fechada"]);
+                        x.Criada = r["ousrdata"] == DBNull.Value ? x.Data : Convert.ToDateTime(r["ousrdata"]); x.CriadaPor = S(r, "ousrinis");
+                        x.AltData = r["usrdata"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["usrdata"]).Date; x.AltHora = S(r, "usrhora");
+                        l.Add(x);
+                    }
+            }
+            if (l.Count > 0)
+            {
+                Dictionary<string, FolhaPHC> porStamp = new Dictionary<string, FolhaPHC>();
+                StringBuilder ps = new StringBuilder();
+                using (SqlCommand c = new SqlCommand())
+                {
+                    for (int i = 0; i < l.Count; i++)
+                    {
+                        porStamp[l[i].Stamp] = l[i];
+                        if (i > 0) ps.Append(',');
+                        ps.Append("@s" + i);
+                        c.Parameters.AddWithValue("@s" + i, l[i].Stamp);
+                    }
+                    c.Connection = cn;
+                    c.CommandText = "SELECT bi.bostamp, bi.ref, bi.design, bi.qtt, bi.unidade FROM bi WITH (NOLOCK) WHERE bi.bostamp IN (" + ps + ") ORDER BY bi.bostamp, bi.lordem";
+                    using (SqlDataReader r = c.ExecuteReader())
+                        while (r.Read())
+                        {
+                            FolhaPHC fo;
+                            if (!porStamp.TryGetValue(S(r, "bostamp"), out fo)) continue;
+                            LinhaPHC li = new LinhaPHC();
+                            li.Ref = S(r, "ref"); li.Design = S(r, "design"); li.Unidade = S(r, "unidade");
+                            li.Qtd = r["qtt"] == DBNull.Value ? 0 : Convert.ToDecimal(r["qtt"]);
+                            if (li.Ref != "" || li.Design != "") fo.Linhas.Add(li);
+                        }
+                }
+            }
+        }
+        return l;
+    }
+
+    public long MaiorNumero(int ano)
+    {
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand("SELECT ISNULL(MAX(obrano), 0) FROM bo WITH (NOLOCK) WHERE ndos = @n AND boano = @a", cn))
+        {
+            c.Parameters.AddWithValue("@n", cfg.GetInt("SerieFolhas", 114));
+            c.Parameters.AddWithValue("@a", ano);
+            return Convert.ToInt64(c.ExecuteScalar());
+        }
     }
 
     // Diagnostico: mostra um dossier interno completo (campos preenchidos de bo/bo2/bo3 e linhas bi) e um resumo da serie.
@@ -1015,6 +1215,102 @@ class FonteCsv : IFonteClientes
     }
 }
 
+// ---------------------------------------------------------------- folhas de obra do PHC (dossier 114)
+class LinhaPHC { public string Ref = "", Design = "", Unidade = ""; public decimal Qtd; }
+
+class FolhaPHC
+{
+    public string Stamp = "";
+    public long Numero;
+    public int Ano;
+    public DateTime Data;
+    public string Hora = "";
+    public long ClienteNo;
+    public string Nome = "", Ncont = "", Morada = "", Local = "", CodPost = "", Telefone = "";
+    public string Tecnico = "", Contacto = "", Tipo = "", Estado = "", Descricao = "";
+    public bool Fechada;
+    public DateTime Criada;
+    public string CriadaPor = "";
+    public DateTime AltData;
+    public string AltHora = "";
+    public List<LinhaPHC> Linhas = new List<LinhaPHC>();
+    public long Chave { get { return (long)Ano * 10000000L + Numero; } }
+}
+
+interface IFonteFolhas
+{
+    List<FolhaPHC> FolhasSeguintes(Marca desde, int max);
+    long MaiorNumero(int ano);
+}
+
+// So para testes: folhas num CSV (separador ;) e linhas noutro.
+class FonteCsvFolhas : IFonteFolhas
+{
+    List<FolhaPHC> todas = new List<FolhaPHC>();
+
+    public FonteCsvFolhas(string f, string fLinhas)
+    {
+        string[] ls = File.ReadAllLines(f, Encoding.UTF8);
+        string[] cab = ls[0].Split(';');
+        for (int i = 1; i < ls.Length; i++)
+        {
+            if (ls[i].Trim() == "") continue;
+            string[] v = ls[i].Split(';');
+            Dictionary<string, string> d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (int k = 0; k < cab.Length; k++) d[cab[k]] = k < v.Length ? v[k] : "";
+            FolhaPHC x = new FolhaPHC();
+            x.Stamp = d["bostamp"]; x.Numero = long.Parse(d["obrano"]); x.Ano = int.Parse(d["boano"]);
+            x.Data = DateTime.ParseExact(d["dataobra"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.Hora = d["xpdhora"];
+            x.ClienteNo = long.Parse(d["no"]); x.Nome = d["nome"]; x.Ncont = d["ncont"]; x.Morada = d["morada"]; x.Local = d["local"];
+            x.CodPost = d["codpost"]; x.Telefone = d["telefone"]; x.Tecnico = d["tecnnm"]; x.Contacto = d["trab1"]; x.Tipo = d["trab5"];
+            x.Estado = d["tabela1"]; x.Descricao = d["u_davaria"]; x.Fechada = d["fechada"] == "1";
+            x.Criada = DateTime.ParseExact(d["ousrdata"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.CriadaPor = d["ousrinis"];
+            x.AltData = DateTime.ParseExact(d["usrdata"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.AltHora = d["usrhora"];
+            todas.Add(x);
+        }
+        if (fLinhas != "" && File.Exists(fLinhas))
+        {
+            string[] ll = File.ReadAllLines(fLinhas, Encoding.UTF8);
+            for (int i = 1; i < ll.Length; i++)
+            {
+                string[] v = ll[i].Split(';');
+                if (v.Length < 5) continue;
+                FolhaPHC fo = todas.Find(delegate(FolhaPHC z) { return z.Stamp == v[0]; });
+                if (fo == null) continue;
+                LinhaPHC li = new LinhaPHC();
+                li.Ref = v[1]; li.Design = v[2]; li.Qtd = decimal.Parse(v[3], CultureInfo.InvariantCulture); li.Unidade = v[4];
+                fo.Linhas.Add(li);
+            }
+        }
+    }
+
+    public void Recarregar(string f, string fl) { todas = new FonteCsvFolhas(f, fl).todas; }
+
+    public List<FolhaPHC> FolhasSeguintes(Marca m, int max)
+    {
+        List<FolhaPHC> l = todas.FindAll(delegate(FolhaPHC x)
+        {
+            int a = x.AltData.CompareTo(m.Data); if (a != 0) return a > 0;
+            int b = string.CompareOrdinal(x.AltHora, m.Hora); if (b != 0) return b > 0;
+            return x.Chave > m.No;
+        });
+        l.Sort(delegate(FolhaPHC x, FolhaPHC y)
+        {
+            int a = x.AltData.CompareTo(y.AltData); if (a != 0) return a;
+            int b = string.CompareOrdinal(x.AltHora, y.AltHora); if (b != 0) return b;
+            return x.Chave.CompareTo(y.Chave);
+        });
+        return l.GetRange(0, Math.Min(max, l.Count));
+    }
+
+    public long MaiorNumero(int ano)
+    {
+        long n = 0;
+        foreach (FolhaPHC x in todas) if (x.Ano == ano && x.Numero > n) n = x.Numero;
+        return n;
+    }
+}
+
 // ---------------------------------------------------------------- regras iguais as da plataforma web
 static class Regras
 {
@@ -1136,6 +1432,247 @@ class Motor
     }
 
     public IFonteClientes Fonte { get { return fonte; } }
+
+    IFonteFolhas fonteFolhas;
+    string fMarcaFolhas;
+
+    IFonteFolhas FonteFolhas
+    {
+        get
+        {
+            if (fonteFolhas == null)
+            {
+                string teste = cfg.Caminho("FonteTesteFolhas");
+                fonteFolhas = teste != "" ? (IFonteFolhas)new FonteCsvFolhas(teste, cfg.Caminho("FonteTesteLinhas")) : (IFonteFolhas)fonte;
+            }
+            return fonteFolhas;
+        }
+    }
+
+    // ---- folhas de obra: PHC -> plataforma
+    static string Tipo(string trab5)
+    {
+        string t = Regras.Normalizar(trab5);
+        if (t.StartsWith("manut")) return "Manutenção";
+        if (t.StartsWith("instal")) return "Instalação";
+        return "AT";
+    }
+
+    // Estado da plataforma a partir do campo tabela1 do PHC (e de o dossier estar fechado = faturado).
+    static string Estado(FolhaPHC f, out string motivo)
+    {
+        motivo = null;
+        if (f.Fechada) return "Faturada";
+        string e = f.Estado.Trim();
+        if (e.StartsWith("5.1")) return "Aguarda NE";
+        if (e.StartsWith("5")) return "Revista";
+        if (e.StartsWith("4.1")) { motivo = "Peças"; return "Pendente"; }
+        if (e.StartsWith("4.2")) { motivo = "Cliente"; return "Pendente"; }
+        if (e.StartsWith("4")) { motivo = "Outro"; return "Pendente"; }
+        if (e.StartsWith("3")) return "Em curso";
+        return "Agendada";   // 1-Registado, 2-Atribuido, vazio
+    }
+
+    static DateTime Juntar(DateTime data, string hora)
+    {
+        TimeSpan t;
+        if (TimeSpan.TryParse((hora ?? "").Trim(), out t) && t.TotalHours < 24) return data.Date + t;
+        return data.Date.AddHours(9);
+    }
+
+    public static string IdFolha(FolhaPHC f) { return "phc" + "-" + f.Ano + "-" + f.Numero; }
+
+    // nome normalizado -> uid/nome; e chaves TecnicoPHC.<nome no PHC>=<email> no .ini
+    Dictionary<string, string[]> MapaTecnicos()
+    {
+        Dictionary<string, string[]> porNome = new Dictionary<string, string[]>();
+        Dictionary<string, string[]> porEmail = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, Dictionary<string, object>> u in fs.Listar("utilizadores"))
+        {
+            if (Firestore.Valor(u.Value, "ativo") != "true") continue;
+            string nome = Firestore.Valor(u.Value, "nome");
+            string[] par = new string[] { u.Key, nome };
+            porNome[Regex.Replace(Regras.Normalizar(nome), @"\s+", " ").Trim()] = par;
+            porEmail[Firestore.Valor(u.Value, "email")] = par;
+        }
+        foreach (KeyValuePair<string, string> kv in cfg.ComPrefixo("TecnicoPHC."))
+        {
+            string[] par;
+            if (porEmail.TryGetValue(kv.Value.Trim(), out par)) porNome[Regex.Replace(Regras.Normalizar(kv.Key), @"\s+", " ").Trim()] = par;
+            else Log.Erro("TecnicoPHC." + kv.Key + ": nao ha utilizador ativo com o email " + kv.Value);
+        }
+        return porNome;
+    }
+
+    public static Documento ConverterFolha(FolhaPHC f, Dictionary<string, string[]> tecnicos)
+    {
+        Documento d = new Documento();
+        d.Id = IdFolha(f);
+        string motivo;
+        string estado = Estado(f, out motivo);
+        string[] tec = null;
+        if (f.Tecnico != "") tecnicos.TryGetValue(Regex.Replace(Regras.Normalizar(f.Tecnico), @"\s+", " ").Trim(), out tec);
+        string tecUid = tec != null ? tec[0] : "";
+        string tecNome = tec != null ? tec[1] : f.Tecnico;
+        bool semData = f.Data.Year <= 1900;
+        if (tecUid == "")
+        {
+            // Por iniciar e sem tecnico conhecido: fica para atribuir. Restantes: tecnico do PHC so como nome.
+            if (estado == "Agendada") estado = "Por agendar";
+            else if (f.Tecnico != "") tecUid = "phc:" + f.Tecnico;
+            else if (estado == "Em curso" || estado == "Pendente") estado = "Por agendar";
+            else tecUid = "phc:sem-tecnico";
+        }
+        if (semData && estado != "Por agendar") estado = "Por agendar";
+        string pais; bool ok;
+        string nif = Regras.Nif(f.Ncont, out pais, out ok);
+        string cp = Regex.Match(f.CodPost ?? "", @"\d{4}-\d{3}").Value;
+        DateTime criada = Juntar(f.Criada, "");
+
+        d.Texto("numero", "FO-" + f.Ano + "-" + f.Numero.ToString("0000"));
+        d.Texto("clienteId", "phc-" + f.ClienteNo);
+        d.Texto("clienteNome", f.Nome != "" ? f.Nome : "(sem nome)");
+        d.Texto("clienteNif", nif);
+        d.Texto("morada", (f.Morada ?? "").Replace("|", ", ").Trim());
+        d.Texto("codigoPostal", cp);
+        d.Texto("localidade", f.Local);
+        d.Texto("contacto", f.Contacto);
+        d.Texto("telefone", f.Telefone);
+        d.Texto("tipo", Tipo(f.Tipo));
+        d.Texto("tecnicoUid", tecUid);
+        d.Texto("tecnicoNome", tecNome);
+        d.Data("dataPrevista", semData ? (DateTime?)null : Juntar(f.Data, f.Hora));
+        d.Texto("descricao", f.Descricao);
+        d.Texto("estado", estado);
+        Documento h = new Documento();
+        h.Texto("estado", estado); h.Nulo("de"); h.Texto("uid", "phc"); h.Texto("nome", "Importada do PHC" + (f.CriadaPor != "" ? " (" + f.CriadaPor + ")" : ""));
+        h.Data("em", criada);
+        if (motivo != null) h.Texto("motivo", motivo);
+        d.ListaMapas("historico", new List<Documento> { h });
+        if (estado == "Pendente")
+        {
+            Documento p = new Documento();
+            p.Texto("motivo", motivo); p.Texto("nota", "Estado no PHC: " + f.Estado); p.Nulo("reverEm");
+            p.Texto("uid", "phc"); p.Texto("nome", "PHC"); p.Data("em", Juntar(f.AltData, f.AltHora));
+            d.Mapa("pendencia", p);
+        }
+        d.Texto("observacoesTecnico", "");
+        d.Data("criadoEm", criada);
+        d.Texto("criadoPor", "phc");
+        d.Texto("criadoPorNome", "PHC" + (f.CriadaPor != "" ? " (" + f.CriadaPor + ")" : ""));
+        d.Data("estadoAlteradoEm", Juntar(f.AltData, f.AltHora));
+        d.Data("atualizadoEm", Juntar(f.AltData, f.AltHora));
+        d.Texto("atualizadoPor", "phc");
+        DadosPHC(d, f);
+        return d;
+    }
+
+    // Campos que vem sempre do PHC (atualizados tambem em folhas ja importadas).
+    static void DadosPHC(Documento d, FolhaPHC f)
+    {
+        d.Texto("origem", "phc");
+        d.Texto("phcStamp", f.Stamp);
+        d.Inteiro("phcNumero", f.Numero);
+        d.Texto("phcEstado", f.Estado);
+        d.Bool("phcFechada", f.Fechada);
+        List<Documento> ls = new List<Documento>();
+        foreach (LinhaPHC l in f.Linhas)
+        {
+            Documento x = new Documento();
+            x.Texto("ref", l.Ref); x.Texto("descricao", l.Design); x.Decimal("qtd", l.Qtd); x.Texto("unidade", l.Unidade);
+            ls.Add(x);
+        }
+        d.ListaMapas("linhasPHC", ls);
+    }
+
+    // Folha que ja existe na plataforma: so dados do PHC; se foi faturada no PHC, passa a Faturada.
+    static Documento AtualizarFolha(FolhaPHC f, Dictionary<string, object> atual)
+    {
+        Documento d = new Documento();
+        d.Id = IdFolha(f);
+        DadosPHC(d, f);
+        string estadoAtual = Firestore.Valor(atual, "estado");
+        if (f.Fechada && estadoAtual != "Faturada")
+        {
+            d.Texto("estado", "Faturada");
+            d.Nulo("pendencia");
+            Documento h = new Documento();
+            h.Texto("estado", "Faturada"); h.Texto("de", estadoAtual); h.Texto("uid", "phc"); h.Texto("nome", "PHC (faturada)");
+            h.Data("em", DateTime.Now);
+            d.Acrescentar("historico", h);
+            d.HoraServidor("estadoAlteradoEm");
+        }
+        return d;
+    }
+
+    public int CicloFolhas()
+    {
+        if (!cfg.GetBool("ImportarFolhas", false)) return 0;
+        int enviados = 0;
+        bool sim = cfg.Simular || cfg.GetBool("SimularFolhas", false);
+        try
+        {
+            if (fs == null && !sim) fs = new Firestore(cfg);
+            fMarcaFolhas = Path.Combine(cfg.Pasta, "estado_folhas.txt");
+            int lote = Math.Min(300, Math.Max(1, cfg.GetInt("LoteFolhas", 200)));
+            int limite = cfg.GetInt("MaxEscritasPorDia", 15000);
+            Marca m = Marca.Ler(fMarcaFolhas);
+            Dictionary<string, string[]> tecnicos = sim ? new Dictionary<string, string[]>() : MapaTecnicos();
+            HashSet<int> anos = new HashSet<int>();
+            while (true)
+            {
+                int livres = limite - EscritasHoje();
+                if (livres <= 0) { Log.Info("Limite diario de escritas atingido; as folhas continuam amanha."); break; }
+                List<FolhaPHC> l = FonteFolhas.FolhasSeguintes(m, Math.Min(lote, livres));
+                if (l.Count == 0) break;
+                List<string> ids = new List<string>();
+                foreach (FolhaPHC f in l) ids.Add(IdFolha(f));
+                Dictionary<string, Dictionary<string, object>> existentes = sim ? new Dictionary<string, Dictionary<string, object>>() : fs.LerVarios("folhas", ids);
+                List<Documento> docs = new List<Documento>();
+                int novas = 0;
+                foreach (FolhaPHC f in l)
+                {
+                    Dictionary<string, object> atual;
+                    if (existentes.TryGetValue(IdFolha(f), out atual)) docs.Add(AtualizarFolha(f, atual));
+                    else { docs.Add(ConverterFolha(f, tecnicos)); novas++; }
+                    anos.Add(f.Ano);
+                }
+                if (sim) foreach (Documento d in docs) Log.Info("SIMULACAO: enviaria folhas/" + d.Id);
+                else { fs.Gravar("folhas", docs); ContarEscritas(docs.Count); }
+                FolhaPHC u = l[l.Count - 1];
+                m.Data = u.AltData; m.Hora = u.AltHora; m.No = u.Chave;
+                if (!sim) m.Gravar(fMarcaFolhas);
+                enviados += docs.Count;
+                Log.Info((sim ? "SIMULACAO: " : "") + docs.Count + " folhas (" + novas + " novas). Marca: " + m);
+                if (l.Count < Math.Min(lote, livres)) break;
+                if (sim && enviados >= 1000) break;
+            }
+            // A numeracao da plataforma continua a do PHC (ano corrente).
+            int ano = DateTime.Today.Year;
+            if (!sim && anos.Contains(ano)) AcertarContador(ano);
+        }
+        catch (Exception e)
+        {
+            Log.Erro("Falha na importacao de folhas: " + e.GetType().Name + ": " + e.Message + (enviados > 0 ? " (" + enviados + " enviadas antes da falha)" : ""));
+            ultimoErro = e.Message;
+        }
+        return enviados;
+    }
+
+    void AcertarContador(int ano)
+    {
+        long maior = FonteFolhas.MaiorNumero(ano);
+        Dictionary<string, Dictionary<string, object>> c = fs.LerVarios("contadores", new List<string> { "folhas-" + ano });
+        long atual = 0;
+        Dictionary<string, object> campos;
+        if (c.TryGetValue("folhas-" + ano, out campos)) long.TryParse(Firestore.Valor(campos, "valor"), out atual);
+        if (atual >= maior) return;
+        Documento d = new Documento();
+        d.Id = "folhas-" + ano;
+        d.Inteiro("valor", maior);
+        fs.Gravar("contadores", new List<Documento> { d });
+        Log.Info("Numeracao das folhas " + ano + " acertada: a proxima folha criada na plataforma sera a " + (maior + 1) + ".");
+    }
 
     public void Preparar()
     {
@@ -1281,6 +1818,8 @@ class Motor
         if (File.Exists(fMarca)) File.Delete(fMarca);
         if (File.Exists(fInicio)) File.Delete(fInicio);
         if (File.Exists(fEnviados)) File.Delete(fEnviados);
+        string ff = Path.Combine(cfg.Pasta, "estado_folhas.txt");
+        if (File.Exists(ff)) File.Delete(ff);
     }
 }
 
@@ -1322,6 +1861,7 @@ class Servico : ServiceBase
                 while (!parar)
                 {
                     m.Ciclo();
+                    m.CicloFolhas();
                     for (int i = 0; i < intervalo * 2 && !parar; i++) Thread.Sleep(500);
                 }
             }
@@ -1479,6 +2019,9 @@ static class Programa
             {
                 m.Preparar();
                 int n = m.Ciclo();
+                int nf = m.CicloFolhas();
+                bool simF = cfg.Simular || cfg.GetBool("SimularFolhas", false);
+                if (cfg.GetBool("ImportarFolhas", false)) Console.WriteLine((simF ? "SIMULACAO: " : "") + nf + " folhas de obra " + (simF ? "seriam enviadas." : "enviadas."));
                 Console.WriteLine((cfg.Simular ? "SIMULACAO: " : "") + n + " clientes " + (cfg.Simular ? "seriam enviados (nada enviado; veja Simular no .ini)." : "enviados."));
                 return m.UltimoErro == "" || m.UltimoErro == "quota" ? 0 : 2;
             }

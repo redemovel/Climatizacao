@@ -100,13 +100,24 @@ class G(http.server.BaseHTTPRequestHandler):
                 nome = w['update']['name'].split('/documents/')[1]
                 doc = BD.setdefault(nome, {})
                 for k in w['updateMask']['fieldPaths']: doc[k] = w['update']['fields'][k]
-                for t in w.get('updateTransforms', []): doc[t['fieldPath']] = {'timestampValue': 'agora'}
+                for t in w.get('updateTransforms', []):
+                    if 'appendMissingElements' in t:
+                        doc.setdefault(t['fieldPath'], {'arrayValue': {'values': []}})['arrayValue'].setdefault('values', []).extend(t['appendMissingElements']['values'])
+                    else: doc[t['fieldPath']] = {'timestampValue': 'agora'}
             return self.responder(200, {'writeResults': [{}] * len(pedido['writes'])})
+        if self.path == f'/v1/projects/{PROJETO}/databases/(default)/documents:batchGet':
+            pedido = json.loads(corpo); out = []
+            for n in pedido['documents']:
+                k = n.split('/documents/')[1]
+                out.append({'found': {'name': n, 'fields': BD[k]}} if k in BD else {'missing': n})
+            return self.responder(200, out)
         self.responder(404, {'error': {'message': 'nao encontrado'}})
     def do_GET(self):
         PEDIDOS.append((self.path, self.headers.get('Authorization'), ''))
         if self.path.startswith(f'/v1/projects/{PROJETO}/databases/(default)/documents/utilizadores'):
-            return self.responder(200, {'documents': []}) if self.headers.get('Authorization') == 'Bearer TOKEN-OK' else self.responder(401, {})
+            if self.headers.get('Authorization') != 'Bearer TOKEN-OK': return self.responder(401, {})
+            docs = [{'name': f'projects/{PROJETO}/databases/(default)/documents/{k}', 'fields': v} for k, v in BD.items() if k.startswith('utilizadores/')]
+            return self.responder(200, {'documents': docs} if docs else {})
         self.responder(404, {})
 
 srv = http.server.ThreadingHTTPServer(('127.0.0.1', PORTA), G)
@@ -184,6 +195,52 @@ linhas[1] = linhas[1].replace(';0;2026-01-10;10:00:00', f';1;{hoje};18:00:00')
 open(os.path.join(d, 'clientes_teste.csv'), 'w', encoding='utf-8').write('\n'.join(linhas) + '\n')
 cod, out = ponte('/sincronizar')
 verifica(campo('clientes/phc-1', 'ativo') is False, 'cliente desativado depois do arranque é enviado como inativo')
+
+# 5c) folhas de obra do PHC (dossier 114)
+print('  -- folhas de obra')
+sv = lambda v: {'stringValue': v}
+BD['utilizadores/u-paulo'] = {'nome': sv('Paulo Duarte'), 'email': sv('pduarte@arpuro.pt'), 'ativo': {'booleanValue': True}}
+BD['utilizadores/u-ricardo'] = {'nome': sv('Ricardo Pereira'), 'email': sv('tecnica@arpuro.pt'), 'ativo': {'booleanValue': True}}
+cab = 'bostamp;obrano;boano;dataobra;xpdhora;no;nome;ncont;morada;local;codpost;telefone;tecnnm;trab1;trab5;tabela1;u_davaria;fechada;ousrdata;ousrinis;usrdata;usrhora'
+folhas = [
+    'A;1785;2026;2026-10-29;09:00;3;SIMOLDES PLASTICOS, SA;501220267;R Comend Antonio Silva Rodrigues,165|Ap113;SANTIAGO DE RIBA-UL;3721-902 SANTIAGO DE RIBA-UL;256000000;Paulo Duarte;Telmo Pinho;Manutenção;3-Em Execução;Manutenção preventiva semestral;0;2026-10-29;Paulo Duarte;2026-10-29;12:58',
+    'B;1700;2026;2026-09-10;14:30;2;Hotel Meliá Ria;501234560;Cais;Aveiro;3810-200 AVEIRO;;tecnica;Eng. Marta;Assistência Técnica;4.1-Pendente Peças;Compressor;0;2026-09-10;NW;2026-09-11;10:00',
+    'C;1600;2025;2025-05-02;;3;SIMOLDES PLASTICOS, SA;501220267;;;;;Ricardo B.;;Instalação;5-Concluido;Instalação split;1;2025-05-02;NW;2025-06-01;09:00',
+    'D;1780;2026;2026-10-20;;4;Empresa Espanhola;ES B12345678;;Vigo;;;;;Assistência Técnica;1-Registado;Avaria;0;2026-10-20;NW;2026-10-20;08:00',
+    'E;1781;2026;2026-10-21;10:00;4;Empresa Espanhola;ES B12345678;;Vigo;;;Pascoal Rodrigues;;Manutenção;2-Atribuido;;0;2026-10-21;NW;2026-10-21;08:00',
+    'F;12;2021;2021-05-04;;3;SIMOLDES PLASTICOS, SA;501220267;;;;;Paulo Duarte;;Manutenção;5.1 Pedido NE;;0;2021-05-04;NW;2021-05-05;08:00',
+]
+open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
+open(os.path.join(d, 'linhas.csv'), 'w', encoding='utf-8').write('bostamp;ref;design;qtt;unidade\nA;ST2;Serviço Técnico (Equipa);8;h\nA;ST1;Serviço Técnico;7;h\n')
+open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nImportarFolhas=1\nFonteTesteFolhas=folhas.csv\nFonteTesteLinhas=linhas.csv\nTecnicoPHC.tecnica=tecnica@arpuro.pt\n')
+cod, out = ponte('/sincronizar')
+verifica(cod == 0 and '6 folhas de obra enviadas' in out, '6 folhas importadas ' + out[-300:])
+F = lambda k: BD.get('folhas/' + k, {})
+c = lambda k, f: next(iter(F(k)[f].values())) if f in F(k) else None
+verifica(c('phc-2026-1785', 'numero') == 'FO-2026-1785' and c('phc-2026-1785', 'estado') == 'Em curso' and c('phc-2026-1785', 'tecnicoUid') == 'u-paulo', '3-Em Execução → Em curso, técnico Paulo (por nome)')
+verifica(c('phc-2026-1785', 'tipo') == 'Manutenção' and c('phc-2026-1785', 'codigoPostal') == '3721-902' and c('phc-2026-1785', 'contacto') == 'Telmo Pinho', 'tipo, código postal e contacto no local')
+verifica(c('phc-2026-1785', 'morada') == 'R Comend Antonio Silva Rodrigues,165, Ap113' and c('phc-2026-1785', 'clienteId') == 'phc-3', 'morada e cliente')
+lin = F('phc-2026-1785')['linhasPHC']['arrayValue']['values']
+verifica(len(lin) == 2 and lin[0]['mapValue']['fields']['ref']['stringValue'] == 'ST2' and 'preco' not in json.dumps(lin), 'linhas de horas importadas sem preços')
+verifica(c('phc-2026-1700', 'estado') == 'Pendente' and F('phc-2026-1700')['pendencia']['mapValue']['fields']['motivo']['stringValue'] == 'Peças' and c('phc-2026-1700', 'tecnicoUid') == 'u-ricardo', '4.1 → Pendente (Peças); «tecnica» → Ricardo Pereira (TecnicoPHC)')
+verifica(c('phc-2025-1600', 'estado') == 'Faturada' and c('phc-2025-1600', 'tecnicoUid') == 'phc:Ricardo B.', 'fechada → Faturada; técnico antigo só como nome')
+verifica(c('phc-2026-1780', 'estado') == 'Por agendar' and c('phc-2026-1780', 'tecnicoUid') == '', 'registada sem técnico → Por agendar')
+verifica(c('phc-2026-1781', 'estado') == 'Por agendar' and c('phc-2026-1781', 'tecnicoNome') == 'Pascoal Rodrigues', 'técnico sem conta → Por agendar, nome guardado')
+verifica(c('phc-2021-12', 'estado') == 'Aguarda NE' and c('phc-2021-12', 'numero') == 'FO-2021-0012', '5.1 Pedido NE → Aguarda NE; numeração com 4 dígitos')
+verifica(c('contadores/folhas-2026'.replace('contadores/', ''), 'x') is None and BD.get('contadores/folhas-2026', {}).get('valor') == {'integerValue': '1785'}, 'contador 2026 acertado para continuar em 1786')
+# folha trabalhada na plataforma e depois faturada no PHC
+F('phc-2026-1785')['estado'] = sv('Concluída'); F('phc-2026-1785')['observacoesTecnico'] = sv('feito')
+folhas[0] = folhas[0].replace(';0;2026-10-29;Paulo Duarte;2026-10-29;12:58', ';1;2026-10-29;Paulo Duarte;2026-10-30;18:00')
+open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
+cod, out = ponte('/sincronizar')
+h = F('phc-2026-1785')['historico']['arrayValue']['values']
+verifica(c('phc-2026-1785', 'estado') == 'Faturada' and h[-1]['mapValue']['fields']['de']['stringValue'] == 'Concluída' and len(h) == 2, 'faturada no PHC → Faturada, com registo no histórico')
+verifica(c('phc-2026-1785', 'observacoesTecnico') == 'feito' and c('phc-2026-1785', 'tecnicoUid') == 'u-paulo', 'não apaga o que foi feito na plataforma')
+BD['contadores/folhas-2026'] = {'valor': {'integerValue': '1800'}}
+folhas[1] = folhas[1].replace('2026-09-11;10:00', '2026-11-01;10:00')
+open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
+cod, out = ponte('/sincronizar')
+verifica(BD['contadores/folhas-2026']['valor'] == {'integerValue': '1800'}, 'contador nunca desce')
 
 # 6) limite diário de escritas
 open(os.path.join(d, 'estado_escritas.txt'), 'w').write(datetime.date.today().isoformat() + '|100')

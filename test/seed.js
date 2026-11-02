@@ -112,6 +112,11 @@ function gerar() {
       criadoEm: ts(criado), criadoPor: 'u-bo', criadoPorNome: 'Ana Ferreira', estadoAlteradoEm: ts(criado),
     };
   });
+  // folha importada do PHC pela PontePHC
+  db['folhas/phc-' + ano + '-1785'] = { ...db['folhas/fo003'], numero: `FO-${ano}-1785`, origem: 'phc', phcStamp: 'NW1', phcNumero: 1785,
+    phcEstado: '3-Em Execução', phcFechada: false, criadoPor: 'phc', criadoPorNome: 'PHC (Paulo Duarte)',
+    linhasPHC: [{ ref: 'ST2', descricao: 'Serviço Técnico (Equipa)', qtd: 8, unidade: 'h' }, { ref: 'ST1', descricao: 'Serviço Técnico', qtd: 7, unidade: 'h' }],
+    criadoEm: ts(new Date(Date.now() - 400 * 864e5)), dataPrevista: ts(dia(20, 9)) };
   db['contadores/folhas-' + ano] = { valor: F.length };
   return { db, users };
 }

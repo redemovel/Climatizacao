@@ -168,6 +168,13 @@ function renderDetalhe() {
           <select id="selCorrigir"><option value="">—</option>${outros.map((e) => `<option>${esc(e)}</option>`).join('')}</select></label>` : ''}
       </div>
     </div>
+    ${f.origem === 'phc' ? `<div class="cartao" id="cartaoPhc">
+      <h3 style="margin-top:0">Registado no PHC</h3>
+      <p class="muted" style="margin:0 0 8px">Dossier ${esc(String(f.phcNumero || ''))} · estado no PHC: ${esc(f.phcEstado || '—')}${f.phcFechada ? ' · faturado' : ''}</p>
+      ${(f.linhasPHC || []).length ? `<ul class="hist">${f.linhasPHC.map((l) => `
+        <li><b>${esc(String(l.qtd ?? ''))} ${esc(l.unidade || '')}</b><span>${esc(l.descricao || '')}</span><span class="muted">${esc(l.ref || '')}</span></li>`).join('')}</ul>`
+        : '<p class="muted" style="margin:0">Sem linhas de trabalho ou material.</p>'}
+    </div>` : ''}
     <div class="cartao">
       <h3 style="margin-top:0">Observações do técnico</h3>
       ${podeObs
