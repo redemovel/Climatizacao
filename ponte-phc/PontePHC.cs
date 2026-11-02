@@ -1010,6 +1010,42 @@ class PhcSql : IFonteClientes, IFonteFolhas
                     catch (Exception e) { l.Add("  (" + e.Message + ")"); }
                 }
             }
+            // Tabelas proprias (ex.: registo de tempos, valor hora) ligadas ao dossier por uma coluna *bostamp.
+            List<string[]> ligadas = new List<string[]>();
+            using (SqlCommand c = new SqlCommand("SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
+                "WHERE COLUMN_NAME LIKE '%bostamp%' AND TABLE_NAME NOT IN ('bo','bo2','bo3','bi','bi2','bo_mail') " +
+                "AND TABLE_NAME NOT LIKE '%[_]hist%' ORDER BY TABLE_NAME", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) ligadas.Add(new string[] { r.GetString(0), r.GetString(1) });
+            foreach (string[] t in ligadas)
+            {
+                List<string> linhas = new List<string>();
+                using (SqlCommand c = new SqlCommand("SELECT TOP 30 * FROM [" + t[0] + "] WITH (NOLOCK) WHERE [" + t[1] + "] = @s", cn))
+                {
+                    c.Parameters.AddWithValue("@s", stamp);
+                    try
+                    {
+                        using (SqlDataReader r = c.ExecuteReader())
+                            while (r.Read())
+                            {
+                                StringBuilder sb = new StringBuilder("  ");
+                                for (int i = 0; i < r.FieldCount; i++)
+                                {
+                                    string n = r.GetName(i);
+                                    if (n.EndsWith("stamp") || n.StartsWith("ousr") || n.StartsWith("usr") || n == "marcada") continue;
+                                    string v = Valor(r[i]);
+                                    if (v != "") sb.Append(n + "=" + v + "; ");
+                                }
+                                linhas.Add(sb.ToString());
+                            }
+                    }
+                    catch (Exception e) { linhas.Add("  (" + e.Message + ")"); }
+                }
+                if (linhas.Count == 0) continue;
+                l.Add("");
+                l.Add("--- tabela " + t[0] + " (ligada por " + t[1] + ")");
+                l.AddRange(linhas);
+            }
             l.Add("");
             l.Add("--- linhas (bi, so campos preenchidos)");
             using (SqlCommand c = new SqlCommand("SELECT * FROM bi WITH (NOLOCK) WHERE bostamp = @s ORDER BY lordem", cn))
