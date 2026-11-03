@@ -195,3 +195,5 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .assinatura { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linha); }
 .assinatura img { max-width: 300px; width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); background: #fff; }
 .aviso-concl { background: #fef3c7; color: #92400e; padding: 8px 10px; border-radius: var(--raio); margin: 0 0 10px; }
+.valor-mo { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--linha); }
+.equipa { font-weight: 600; }

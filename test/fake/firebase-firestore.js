@@ -172,6 +172,7 @@ function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   const s = sessaoAtual(dbRaw);
   if (!s.uid) negar('sem sessão');
   if (colecao === 'config') { if (s.perfil === 'master') return; negar('config só master'); }
+  if (colecao === 'colaboradores') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('colaboradores'); }
   if (colecao === 'utilizadores') {
     if (!consulta && id === s.uid) return;
     if (STAFF.includes(s.perfil)) return;
@@ -208,6 +209,11 @@ function regraEscrever(dbRaw, path, antes, depois) {
   }
   if (colecao === 'contadores') { if (!staff) negar('contadores'); return; }
   if (colecao === 'config') { if (s.perfil !== 'master') negar('config só master'); return; }
+  if (colecao === 'colaboradores') {
+    if (s.perfil !== 'master' || !depois) negar('colaboradores só master');
+    if (!depois.nome || !['Técnico', 'Ajudante', 'Aprendiz'].includes(depois.funcao) || typeof depois.ativo !== 'boolean') negar('colaborador inválido');
+    return;
+  }
   if (colecao === 'folhas') {
     if (!depois) { if (s.perfil === 'master' && ['Por agendar', 'Agendada'].includes(antes.estado)) return; negar('apagar folha'); }
     for (const k of ['clienteId', 'clienteNome', 'tipo', 'estado', 'historico', 'numero']) if (depois[k] === undefined || depois[k] === null || depois[k] === '') negar('folha sem ' + k);
@@ -220,7 +226,7 @@ function regraEscrever(dbRaw, path, antes, depois) {
     if (depois.assinatura && (typeof depois.assinatura.imagem !== 'string' || depois.assinatura.imagem.length > 200000)) negar('assinatura');
     if (!antes) {
       if (!staff) negar('criar folha');
-      if (!['Por agendar', 'Agendada'].includes(depois.estado) || depois.historico.length !== 1 || depois.historico[0].estado !== depois.estado || depois.historico[0].uid !== s.uid) negar('folha nova inválida');
+      if (depois.estado !== 'Por agendar' || depois.historico.length !== 1 || depois.historico[0].estado !== depois.estado || depois.historico[0].uid !== s.uid) negar('folha nova inválida');
       if (!dbRaw['clientes/' + depois.clienteId]) negar('cliente inexistente');
       if (depois.tecnicoUid && !dbRaw['utilizadores/' + depois.tecnicoUid]) negar('técnico inexistente');
       return;

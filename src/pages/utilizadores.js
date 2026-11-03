@@ -121,10 +121,11 @@ function lerTabelaPrecos(txt) {
     const partes = (p[1] || '').split('-').map((x) => x.trim().toLowerCase()).filter(Boolean);
     const tecnicos = partes.filter((x) => x.startsWith('técnico') || x.startsWith('tecnico')).length;
     const ajudantes = partes.filter((x) => x.startsWith('ajudante')).length;
-    if (p.length < 3 || !(preco > 0) || !tecnicos || tecnicos + ajudantes !== partes.length) { ignoradas.push(l); continue; }
+    const aprendizes = partes.filter((x) => x.startsWith('aprendiz')).length;
+    if (p.length < 3 || !(preco > 0) || !tecnicos || tecnicos + ajudantes + aprendizes !== partes.length) { ignoradas.push(l); continue; }
     const tipo = /manuten/i.test(p[0]) ? 'Manutenção' : 'AT/Instalação';
-    const i = linhas.findIndex((x) => x.tipo === tipo && x.tecnicos === tecnicos && x.ajudantes === ajudantes);
-    const nova = { tipo, composicao: p[1], tecnicos, ajudantes, preco: Math.round(preco * 100) / 100 };
+    const i = linhas.findIndex((x) => x.tipo === tipo && x.tecnicos === tecnicos && x.ajudantes === ajudantes && x.aprendizes === aprendizes);
+    const nova = { tipo, composicao: p[1], tecnicos, ajudantes, aprendizes, preco: Math.round(preco * 100) / 100 };
     if (i >= 0) linhas[i] = nova; else linhas.push(nova);
   }
   return { linhas, ignoradas };
@@ -160,4 +161,66 @@ async function abrirPrecos() {
 }
 $('#btnPrecos').onclick = () => comBotao($('#btnPrecos'), abrirPrecos);
 
-carregar();
+// ---------- Colaboradores (quem aparece nos registos de tempo) ----------
+const FUNCOES = ['Técnico', 'Ajudante', 'Aprendiz'];
+let colaboradores = [];
+async function carregarCol() {
+  try {
+    const snap = await getDocs(query(collection(db, 'colaboradores'), limit(100)));
+    colaboradores = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0) || a.nome.localeCompare(b.nome, 'pt'));
+    renderCol();
+  } catch (e) { $('#listaCol').innerHTML = `<div class="vazio">${esc(erroFirebase(e))}</div>`; }
+}
+function renderCol() {
+  $('#listaCol').innerHTML = colaboradores.map((p, i) => `
+    <div class="lista-item" data-col="${i}" style="${p.ativo ? '' : 'opacity:.55'}">
+      <div class="li-topo"><span class="li-titulo">${esc(p.nome)}</span><span class="badge">${esc(p.funcao)}${p.externo ? ' · externo' : ''}</span></div>
+      <div class="li-sub">${p.uid ? 'Utilizador: ' + esc((lista.find((u) => u.uid === p.uid) || {}).nome || p.uid) : '<span class="muted">Sem utilizador associado</span>'}${p.ativo ? '' : ' · Inativo'}</div>
+    </div>`).join('') || `<div class="vazio">Sem colaboradores.<br><button class="btn" id="btnColIniciais" style="margin-top:10px">Criar lista inicial</button></div>`;
+  if ($('#btnColIniciais')) $('#btnColIniciais').onclick = () => comBotao($('#btnColIniciais'), criarColIniciais);
+}
+// Equipa atual (2026-11): os três técnicos + equipas externas + aprendiz. Associa ao utilizador pelo nome, se existir.
+async function criarColIniciais() {
+  const base = [['Paulo Duarte', 'Técnico', false], ['Ricardo Pereira', 'Técnico', false], ['Pascoal Rodrigues', 'Técnico', false],
+    ['Equipa externa — técnico', 'Técnico', true], ['Equipa externa — ajudante', 'Ajudante', true], ['Aprendiz', 'Aprendiz', false]];
+  const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  try {
+    const b = writeBatch(db);
+    for (const [nome, funcao, externo] of base) {
+      const u = lista.find((x) => norm(x.nome) === norm(nome));
+      b.set(doc(collection(db, 'colaboradores')), { nome, funcao, externo, uid: u ? u.uid : '', ativo: true, criadoEm: serverTimestamp() });
+    }
+    await b.commit();
+    toast('Lista criada. Verifique as funções e as associações.', 'ok');
+    carregarCol();
+  } catch (e) { toast(erroFirebase(e), 'erro'); }
+}
+function formCol(p) {
+  const ed = !!p;
+  const c = abrirModal(ed ? 'Editar colaborador' : 'Novo colaborador', `
+    <label class="campo"><span>Nome *</span><input id="cNome" maxlength="120" value="${esc(p?.nome || '')}" autocomplete="off"></label>
+    <label class="campo"><span>Função *</span><select id="cFuncao">${FUNCOES.map((f) => `<option ${p?.funcao === f ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+    <label class="campo"><span>Utilizador da plataforma</span><select id="cUid"><option value="">— nenhum —</option>${lista.filter((u) => u.ativo).map((u) => `<option value="${esc(u.uid)}" ${p?.uid === u.uid ? 'selected' : ''}>${esc(u.nome)}</option>`).join('')}</select></label>
+    <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cExt" style="width:auto;min-height:0" ${p?.externo ? 'checked' : ''}><span style="margin:0">Equipa externa</span></label>
+    <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cAtivo" style="width:auto;min-height:0" ${!ed || p.ativo ? 'checked' : ''}><span style="margin:0">Ativo</span></label>
+    <div class="msg-erro" id="cErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="cGuardar">Guardar</button></div>`);
+  $('#cGuardar', c).onclick = () => {
+    const nome = $('#cNome', c).value.trim();
+    if (nome.length < 2) { $('#cErro', c).textContent = 'Indique o nome.'; return; }
+    const dados = { nome, funcao: $('#cFuncao', c).value, uid: $('#cUid', c).value, externo: $('#cExt', c).checked, ativo: $('#cAtivo', c).checked, atualizadoEm: serverTimestamp() };
+    comBotao($('#cGuardar', c), async () => {
+      try {
+        if (ed) await updateDoc(doc(db, 'colaboradores', p.id), dados);
+        else await setDoc(doc(collection(db, 'colaboradores')), { ...dados, criadoEm: serverTimestamp() });
+        fecharModal();
+        toast('Colaborador guardado.', 'ok');
+        carregarCol();
+      } catch (e) { $('#cErro', c).textContent = erroFirebase(e); }
+    });
+  };
+}
+$('#listaCol').addEventListener('click', (ev) => { const it = ev.target.closest('[data-col]'); if (it) formCol(colaboradores[+it.dataset.col]); });
+$('#btnNovoCol').onclick = () => formCol(null);
+
+carregar().then(carregarCol);

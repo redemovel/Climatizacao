@@ -130,6 +130,11 @@ function gerar() {
   db['folhas/phc-' + (ano - 1) + '-0901'] = { ...db['folhas/fo001'], numero: `FO-${ano - 1}-0901`, origem: 'phc', phcNumero: 901,
     estado: 'Em curso', historico: [db['folhas/fo001'].historico[0], { estado: 'Em curso', de: 'Agendada', uid: 'u-tec1', nome: 'João Silva', em: ts(dia(-90, 9)) }],
     dataPrevista: ts(dia(-90, 9)), criadoPor: 'phc', criadoPorNome: 'PHC' };
+  // colaboradores (registos de tempo)
+  [['col1', 'João Silva', 'Técnico', 'u-tec1'], ['col2', 'Pedro Costa', 'Técnico', 'u-tec2'], ['col3', 'Ana Ferreira', 'Técnico', 'u-bo'],
+    ['col4', 'Equipa externa — ajudante', 'Ajudante', ''], ['col5', 'Aprendiz', 'Aprendiz', '']]
+    .forEach(([id, nome, funcao, uid]) => { db['colaboradores/' + id] = { nome, funcao, uid, externo: id === 'col4', ativo: true }; });
+  db['colaboradores/col9'] = { nome: 'Antigo Colaborador', funcao: 'Técnico', uid: '', externo: false, ativo: false };
   db['contadores/folhas-' + ano] = { valor: F.length };
   return { db, users };
 }

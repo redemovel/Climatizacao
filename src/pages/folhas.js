@@ -317,7 +317,7 @@ async function mudarEstado(novo, btn) {
   const extra = {};
   if (novo === 'Agendada' && (!f.tecnicoUid || !f.dataPrevista)) {
     toast('Indique o técnico e a data para agendar.', 'erro');
-    abrirForm(atual);
+    abrirForm(atual, null, { agendarDepois: true });
     return;
   }
   if (novo === 'Pendente') {
@@ -376,7 +376,7 @@ async function guardarObs() {
 }
 
 // ---------- Formulário nova / editar (só master e backoffice) ----------
-async function abrirForm(folha, clienteIdInicial) {
+async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}) {
   const ed = !!folha;
   let cliente = ed ? { id: folha.clienteId, nome: folha.clienteNome, nif: folha.clienteNif } : null;
   const dp = ed ? paraData(folha.dataPrevista) : addDias(inicioDia(new Date()), 1);
@@ -476,12 +476,7 @@ async function abrirForm(folha, clienteIdInicial) {
     comBotao($('#ffGuardar', corpo), async () => {
       try {
         if (ed) {
-          // Folha "Por agendar" que passa a ter técnico e data: fica Agendada (com registo no histórico).
-          if (folha.estado === 'Por agendar' && tecUid && data) {
-            dados.estado = 'Agendada';
-            dados.historico = [...(folha.historico || []), { estado: 'Agendada', de: 'Por agendar', uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }];
-            dados.estadoAlteradoEm = serverTimestamp();
-          }
+          // «Por agendar» continua «Por agendar» até carregar em «Agendar» (decisão 2026-11-03).
           await updateDoc(doc(db, 'folhas', folha.id), dados);
           atual = { ...atual, ...dados, atualizadoEm: Timestamp.now() };
           const i = lista.findIndex((x) => x.id === folha.id);
@@ -489,6 +484,7 @@ async function abrirForm(folha, clienteIdInicial) {
           fecharModal();
           toast('Folha atualizada.', 'ok');
           renderDetalhe();
+          if (agendarDepois && atual.estado === 'Por agendar' && atual.tecnicoUid && atual.dataPrevista) await mudarEstado('Agendada', null);
         } else {
           const id = await criarFolha(cliente, dados);
           fecharModal();
@@ -514,8 +510,8 @@ async function criarFolha(cliente, dados) {
       ...dados,
       numero: `FO-${ano}-${String(n).padStart(4, '0')}`,
       clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '',
-      estado: dados.tecnicoUid && dados.dataPrevista ? 'Agendada' : 'Por agendar',
-      historico: [{ estado: dados.tecnicoUid && dados.dataPrevista ? 'Agendada' : 'Por agendar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
+      estado: 'Por agendar',   // toda a folha nova nasce «Por agendar»; passa a «Agendada» no botão «Agendar»
+      historico: [{ estado: 'Por agendar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
       observacoesTecnico: '',
       criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email,
       estadoAlteradoEm: serverTimestamp(),

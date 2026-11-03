@@ -367,19 +367,27 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   igual(await contar(page, '#pendencia'), 0, 'pendência fechada ao retomar');
   // Fase 2: tempos, material, tarefas e relatório
   await page.click('#btnTempo');
+  await page.waitForSelector('#tEquipa');
+  assert(await page.locator('#tEquipa input[value=col1]').isChecked(), 'o próprio técnico vem marcado');
+  assert(!(await page.textContent('#tEquipa')).includes('Antigo Colaborador'), 'inativos não aparecem');
   await page.fill('#tIni', '09:00');
   await page.fill('#tFim', '08:00');
   await page.click('#tGuardar');
   igual(await page.textContent('#tErro'), 'A hora de fim tem de ser depois da de início.', 'valida horas');
   await page.fill('#tFim', '11:30');
-  await page.selectOption('#tTec', '2');
-  await page.selectOption('#tAju', '1');
+  await page.uncheck('#tEquipa input[value=col1]');
+  await page.check('#tEquipa input[value=col4]');
+  await page.click('#tGuardar');
+  igual(await page.textContent('#tErro'), 'Tem de estar pelo menos um técnico.', 'pelo menos um técnico');
+  await page.check('#tEquipa input[value=col1]');
+  await page.check('#tEquipa input[value=col2]');
   for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'modal tempo ' + vp.width); }
   await captura(page, 'folha-tempo-modal-414');
   await page.setViewportSize(MOVEIS[0]);
   await page.click('#tGuardar');
   await page.waitForSelector('.toast-ok >> text=Tempo registado.');
-  assert((await page.textContent('#cartaoTempos')).includes('2 técnicos + 1 ajudante'), 'equipa');
+  assert((await page.textContent('#cartaoTempos')).includes('João Silva, Pedro Costa, Equipa externa — ajudante'), 'nomes da equipa');
+  assert((await page.textContent('#cartaoTempos')).includes('das 09:00 às 11:30'), 'horas');
   assert((await page.textContent('#totalHoras')).includes('7,5 h'), 'total 2,5 h × 3 pessoas');
   await page.click('#btnMaterial');
   await page.click('#mGuardar');
@@ -426,7 +434,8 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   assert(f.historico[4].em && f.historico[4].em.seconds > 0, 'timestamp no histórico');
   igual(f.pendencia, null, 'pendência limpa');
   igual(f.observacoesTecnico, 'Filtros limpos. Pressões OK.', 'observações');
-  igual(f.tempos.length + ' ' + f.tempos[0].horas + ' ' + f.tempos[0].tecnicos + ' ' + f.tempos[0].ajudantes, '1 2.5 2 1', 'tempo gravado');
+  igual(f.tempos.length + ' ' + f.tempos[0].horas + ' ' + f.tempos[0].tecnicos + ' ' + f.tempos[0].ajudantes + ' ' + f.tempos[0].aprendizes, '1 2.5 2 1 0', 'tempo gravado');
+  igual(f.tempos[0].equipa.map((p) => p.nome + '/' + p.funcao).join(','), 'João Silva/Técnico,Pedro Costa/Técnico,Equipa externa — ajudante/Ajudante', 'equipa gravada');
   igual(f.materiais[0].descricao + ' ' + f.materiais[0].qtd + ' ' + f.materiais[0].unidade, 'Tubo de cobre 1/4" 3.5 m', 'material gravado');
   igual(f.assinatura.nome, 'Sr. Manuel', 'assinatura');
   assert(f.assinatura.imagem.startsWith('data:image/png') && f.assinatura.imagem.length < 200000, 'imagem da assinatura pequena: ' + f.assinatura.imagem.length);
@@ -455,30 +464,57 @@ teste('fase 2: técnico não regista trabalho em folha agendada; regras recusam 
   semErros(page); await ctx.close();
 });
 
+teste('colaboradores: master cria lista inicial e edita; técnico só lê', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'master');
+  await page.evaluate(() => { const db = window.__fake.db(); for (const k of Object.keys(db)) if (k.startsWith('colaboradores/')) delete db[k]; localStorage.setItem('__fake_db', JSON.stringify(db)); });
+  await page.goto(BASE + '/utilizadores.html');
+  await page.click('#btnColIniciais');
+  await page.waitForSelector('[data-col]');
+  igual(await contar(page, '[data-col]'), 6, 'seis colaboradores');
+  assert((await page.textContent('#listaCol')).includes('Pascoal Rodrigues'), 'Pascoal');
+  await page.click('[data-col] >> text=Aprendiz');
+  await page.selectOption('#cFuncao', 'Ajudante');
+  await page.click('#cGuardar');
+  await page.waitForSelector('.toast-ok >> text=Colaborador guardado.');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'colaboradores ' + vp.width); await captura(page, 'colaboradores-' + vp.width); }
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'tecnico1');
+  const r = await page.evaluate(async () => {
+    const k = Object.keys(window.__fake.db()).find((x) => x.startsWith('colaboradores/'));
+    try { await window.__fake.atualizarComoUtilizador(k, { funcao: 'Ajudante' }); return 'ok'; } catch (e) { return e.code; }
+  });
+  igual(r, 'permission-denied', 'técnico não altera colaboradores');
+  semErros(page); await ctx.close();
+});
+
 teste('fase 2: master define preço/hora e vê o valor da mão de obra; backoffice não', async () => {
   const { ctx, page } = await contexto();
   await entrar(page, 'master');
   await page.goto(BASE + '/utilizadores.html');
   await page.click('#btnPrecos');
-  await page.fill('#pTab', 'Manutenção;Técnico;20,40\nManutenção;Técnico-Técnico-Ajudante;51,00\nAT/Instalação;Técnico;22,80\nlinha errada');
+  await page.fill('#pTab', 'Manutenção;Técnico;20,40\nManutenção;Técnico-Técnico-Ajudante;51,00\nAT/Instalação;Técnico-Aprendiz;30,00\nlinha errada');
   await semOverflow(page, 'preço/hora');
   await captura(page, 'precos-hora-375');
   await page.click('#pGuardar');
   await page.waitForSelector('.toast >> text=3 linhas');
   const t = await fake(page, () => window.__fake.doc('config/precosHora'));
   igual(t.linhas.length, 3, 'linhas');
-  igual(JSON.stringify(t.linhas[1]), JSON.stringify({ tipo: 'Manutenção', composicao: 'Técnico-Técnico-Ajudante', tecnicos: 2, ajudantes: 1, preco: 51 }), 'linha equipa');
+  igual(JSON.stringify(t.linhas[1]), JSON.stringify({ tipo: 'Manutenção', composicao: 'Técnico-Técnico-Ajudante', tecnicos: 2, ajudantes: 1, aprendizes: 0, preco: 51 }), 'linha equipa');
+  igual(t.linhas[2].aprendizes, 1, 'aprendiz contado');
   // folha de manutenção com 2,5 h de 2 técnicos + 1 ajudante num dia útil
   await fake(page, () => {
     const db = window.__fake.db();
     const d = new Date(); d.setHours(12, 0, 0, 0);
     while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
     window.__fake.set('folhas/fo006', { ...db['folhas/fo006'], tipo: 'Manutenção', estado: 'Em curso',
-      tempos: [{ id: 'x1', data: { __ts: d.getTime() }, inicio: '09:00', fim: '11:30', horas: 2.5, tecnicos: 2, ajudantes: 1, uid: 'u-tec1', nome: 'João Silva' }] });
+      tempos: [{ id: 'x1', data: { __ts: d.getTime() }, inicio: '09:00', fim: '11:30', horas: 2.5, tecnicos: 2, ajudantes: 1, aprendizes: 0, uid: 'u-tec1', nome: 'João Silva',
+        equipa: [{ id: 'col1', nome: 'João Silva', funcao: 'Técnico' }, { id: 'col2', nome: 'Pedro Costa', funcao: 'Técnico' }, { id: 'col4', nome: 'Equipa externa — ajudante', funcao: 'Ajudante' }] }] });
   });
   await page.goto(BASE + '/folhas.html?id=fo006');
-  await page.click('#btnValorMO');
-  await page.waitForSelector('#totalMO');
+  await page.waitForSelector('#totalMO');   // automático, sem botão
+  assert((await page.textContent('#valorMO')).includes('Técnico-Técnico-Ajudante'), 'linha da tabela usada');
   // 51 × (1×1,2 + 1×1,1 + 0,5) = 142,80
   assert((await page.textContent('#totalMO')).includes('142,80'), 'total MO: ' + await page.textContent('#totalMO'));
   await captura(page, 'valor-mo-375');
@@ -487,7 +523,9 @@ teste('fase 2: master define preço/hora e vê o valor da mão de obra; backoffi
   await entrar(page, 'backoffice');
   await page.goto(BASE + '/folhas.html?id=fo006');
   await page.waitForSelector('#cartaoTempos');
-  igual(await contar(page, '#btnValorMO'), 0, 'backoffice sem valores');
+  await page.waitForTimeout(200);
+  igual(await contar(page, '#valorMO'), 0, 'backoffice sem valores');
+  assert(!(await page.textContent('#vDetalhe')).includes('€'), 'backoffice não vê euros');
   const negado = await page.evaluate(async () => {
     try { await window.__fake.lerComoUtilizador('config/precosHora'); return 'lido'; } catch (e) { return e.code; }
   });
@@ -612,12 +650,14 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   igual(num, `FO-${new Date().getFullYear()}-0029`, 'número sequencial');
   const id = new URL(page.url()).searchParams.get('id');
   const f = await fake(page, (id) => window.__fake.doc('folhas/' + id), id);
-  igual(f.estado, 'Agendada', 'estado inicial');
+  igual(f.estado, 'Por agendar', 'estado inicial: Por agendar mesmo com técnico e data');
   igual(f.tecnicoNome, 'Pedro Costa', 'técnico');
   igual(f.tipo, 'AT', 'tipo');
   igual(f.clienteId, 'cli001', 'cliente');
   igual(f.historico.length, 1, 'histórico inicial');
   igual(new Date(f.dataPrevista.seconds * 1000).getHours(), 16, 'hora prevista');
+  await page.click('[data-estado="Agendada"]');
+  await page.waitForSelector('.det-cab .estado-agendada');
   // backoffice não faz revisão nem faturação (só o Master)
   await page.goto(BASE + '/folhas.html?id=fo010');
   await page.waitForSelector('#detNumero');

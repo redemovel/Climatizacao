@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-02 (3) — Fase 2: tempos, material, tarefas, relatório, assinatura; tabela preço/hora (só Master); estado «Anulada»
+// Atualizado: 2026-11-03 — colaboradores nos registos de tempo; folha nova sempre «Por agendar»
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -98,7 +98,7 @@ service cloud.firestore {
     }
     function camposTrabalho() { return ['tempos', 'materiais', 'tarefas', 'relatorio', 'assinatura']; }
     function folhaNovaValida(d) {
-      return d.estado in ['Por agendar', 'Agendada']
+      return d.estado == 'Por agendar'
         && d.historico.size() == 1
         && d.historico[0].estado == d.estado
         && d.historico[0].uid == request.auth.uid
@@ -161,6 +161,20 @@ service cloud.firestore {
         allow read: if eMaster();
         allow write: if false;
       }
+    }
+
+    // ---------- Colaboradores (nome e função para os registos de tempo; sem preços) ----------
+    function colaboradorValido(d) {
+      return d.nome is string && d.nome.size() >= 2 && d.nome.size() <= 120
+        && d.funcao in ['Técnico', 'Ajudante', 'Aprendiz']
+        && d.ativo is bool
+        && (!('externo' in d) || d.externo is bool)
+        && (!('uid' in d) || d.uid is string);
+    }
+    match /colaboradores/{id} {
+      allow read: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
+      allow create, update: if eMaster() && colaboradorValido(request.resource.data);
+      allow delete: if false;
     }
 
     // ---------- Configuração (tabela de preço/hora da mão de obra): só o Master ----------

@@ -15,7 +15,9 @@ function podeRegistarTrabalho(f) {
 }
 
 function fmtHoras(h) { return (Math.round((Number(h) || 0) * 100) / 100).toLocaleString('pt-PT') + ' h'; }
+function pessoasTempo(t) { return (t.equipa || []).length || ((t.tecnicos || 1) + (t.ajudantes || 0) + (t.aprendizes || 0)); }
 function equipaTexto(t) {
+  if ((t.equipa || []).length) return t.equipa.map((p) => p.nome).join(', ');
   const p = [`${t.tecnicos || 1} técnico${(t.tecnicos || 1) > 1 ? 's' : ''}`];
   if (t.ajudantes) p.push(`${t.ajudantes} ajudante${t.ajudantes > 1 ? 's' : ''}`);
   return p.join(' + ');
@@ -52,7 +54,7 @@ function htmlTrabalho(f) {
   const tempos = f.tempos || [];
   const mats = f.materiais || [];
   const tarefas = f.tarefas || {};
-  const total = tempos.reduce((s, t) => s + (Number(t.horas) || 0) * ((t.tecnicos || 1) + (t.ajudantes || 0)), 0);
+  const total = tempos.reduce((s, t) => s + (Number(t.horas) || 0) * pessoasTempo(t), 0);
   const podeApagar = (x) => pode && (staff || x.uid === sessao.uid);
   const ass = f.assinatura;
   return `
@@ -60,11 +62,11 @@ function htmlTrabalho(f) {
       <div class="cab-cartao"><h3>Registo de tempos</h3>${pode ? '<button class="btn btn-peq btn-primario" id="btnTempo">+ Tempo</button>' : ''}</div>
       ${tempos.length ? `<ul class="hist">${tempos.map((t) => `
         <li data-tempo="${esc(t.id)}"><b>${esc(fmtHoras(t.horas))}</b>
-          <span>${esc(fmtData(t.data))}${t.inicio ? ` · ${esc(t.inicio)}–${esc(t.fim)}` : ''} · ${esc(equipaTexto(t))}${t.nota ? `<br><span class="muted">${esc(t.nota)}</span>` : ''}</span>
+          <span><b class="equipa">${esc(equipaTexto(t))}</b><br>${esc(fmtData(t.data))}${t.inicio ? ` · das ${esc(t.inicio)} às ${esc(t.fim)}` : ''}${t.nota ? `<br><span class="muted">${esc(t.nota)}</span>` : ''}</span>
           <span class="muted">${esc(t.nome || '')}${podeApagar(t) ? ` <button class="lixo" data-apagar-tempo="${esc(t.id)}" aria-label="Apagar">✕</button>` : ''}</span></li>`).join('')}</ul>
         <p class="muted" style="margin:6px 0 0" id="totalHoras">Total: ${esc(fmtHoras(total))} de mão de obra (horas × pessoas)</p>`
         : '<p class="muted" style="margin:0">Sem tempos registados.</p>'}
-      ${sessao.perfil === 'master' && tempos.length ? '<div id="valorMO" style="margin-top:10px"><button class="btn btn-sec btn-bloco" id="btnValorMO">Calcular valor da mão de obra (só Master)</button></div>' : ''}
+      ${sessao.perfil === 'master' && tempos.length ? '<div id="valorMO" class="valor-mo"><p class="muted" style="margin:0">A calcular o valor…</p></div>' : ''}
     </div>
     <div class="cartao" id="cartaoMateriais">
       <div class="cab-cartao"><h3>Material aplicado</h3>${pode ? '<button class="btn btn-peq btn-primario" id="btnMaterial">+ Material</button>' : ''}</div>
@@ -94,7 +96,7 @@ function ligarTrabalho() {
   if ($('#btnTempo')) $('#btnTempo').onclick = () => formTempo();
   if ($('#btnMaterial')) $('#btnMaterial').onclick = () => formMaterial();
   if ($('#btnRelatorio')) $('#btnRelatorio').onclick = () => comBotao($('#btnRelatorio'), guardarRelatorio);
-  if ($('#btnValorMO')) $('#btnValorMO').onclick = () => comBotao($('#btnValorMO'), mostrarValorMO);
+  if ($('#valorMO')) mostrarValorMO();   // automático, só para o Master (a tabela de preços nunca chega aos outros perfis)
   $$('[data-apagar-tempo]').forEach((b) => b.onclick = async () => {
     if (!(await confirmar('Apagar este registo de tempo?', { ok: 'Apagar', perigo: true }))) return;
     alterarTrabalho((d) => ({ tempos: (d.tempos || []).filter((t) => t.id !== b.dataset.apagarTempo) }), 'Tempo apagado.');
@@ -109,18 +111,34 @@ function ligarTrabalho() {
   });
 }
 
-function formTempo() {
+// Colaboradores (nome + função: Técnico/Ajudante/Aprendiz) — lidos uma vez por página.
+let colaboradoresCache = null;
+async function carregarColaboradores() {
+  if (colaboradoresCache) return colaboradoresCache;
+  const snap = await getDocs(query(collection(db, 'colaboradores'), where('ativo', '==', true), limit(60)));
+  colaboradoresCache = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.externo ? 1 : 0) - (b.externo ? 1 : 0) || a.nome.localeCompare(b.nome, 'pt'));
+  return colaboradoresCache;
+}
+function contarFuncoes(equipa) {
+  const n = (f) => equipa.filter((p) => p.funcao === f).length;
+  return { tecnicos: n('Técnico'), ajudantes: n('Ajudante'), aprendizes: n('Aprendiz') };
+}
+
+async function formTempo() {
+  let cols;
+  try { cols = await carregarColaboradores(); } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+  if (!cols.length) { toast('Ainda não há colaboradores definidos (Utilizadores › Colaboradores).', 'erro', 6000); return; }
   const hoje = isoLocal(new Date());
-  const opt = (n, ini, sel) => Array.from({ length: n }, (_, i) => i + ini).map((v) => `<option ${v === sel ? 'selected' : ''}>${v}</option>`).join('');
+  const euMesmo = cols.find((p) => p.uid === sessao.uid) || cols.find((p) => p.uid && p.uid === atual.tecnicoUid);
   const c = abrirModal('Registar tempo', `
+    <div class="campo"><span>Quem esteve presente *</span>
+      <div class="tarefas" id="tEquipa">${cols.map((p) => `
+        <label class="tarefa"><input type="checkbox" value="${esc(p.id)}" ${euMesmo && euMesmo.id === p.id ? 'checked' : ''}>
+          <span>${esc(p.nome)} <span class="muted">· ${esc(p.funcao)}</span></span></label>`).join('')}</div></div>
     <label class="campo"><span>Dia *</span><input type="date" id="tData" value="${hoje}" max="${hoje}"></label>
     <div class="grelha-2">
-      <label class="campo"><span>Início *</span><input type="time" id="tIni" step="300"></label>
-      <label class="campo"><span>Fim *</span><input type="time" id="tFim" step="300"></label>
-    </div>
-    <div class="grelha-2">
-      <label class="campo"><span>Técnicos na equipa</span><select id="tTec">${opt(4, 1, 1)}</select></label>
-      <label class="campo"><span>Ajudantes</span><select id="tAju">${opt(4, 0, 0)}</select></label>
+      <label class="campo"><span>Das *</span><input type="time" id="tIni" step="300"></label>
+      <label class="campo"><span>Às *</span><input type="time" id="tFim" step="300"></label>
     </div>
     <label class="campo"><span>Nota</span><input id="tNota" maxlength="300" placeholder="Opcional"></label>
     <p class="muted" id="tResumo" style="margin:0 0 8px"></p>
@@ -132,12 +150,19 @@ function formTempo() {
     const [h1, m1] = a.split(':').map(Number), [h2, m2] = b.split(':').map(Number);
     return ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
   };
-  const resumo = () => { const h = horas(); $('#tResumo', c).textContent = h > 0 ? 'Duração: ' + fmtHoras(h) : ''; };
-  $('#tIni', c).oninput = resumo; $('#tFim', c).oninput = resumo;
+  const escolhidos = () => $$('#tEquipa input:checked', c).map((i) => cols.find((p) => p.id === i.value));
+  const resumo = () => {
+    const h = horas(), n = escolhidos().length;
+    $('#tResumo', c).textContent = h > 0 ? `Duração: ${fmtHoras(h)}${n > 1 ? ` × ${n} pessoas = ${fmtHoras(h * n)}` : ''}` : '';
+  };
+  $('#tIni', c).oninput = resumo; $('#tFim', c).oninput = resumo; $('#tEquipa', c).onchange = resumo;
   $('#tGuardar', c).onclick = () => {
     const erro = (m) => { $('#tErro', c).textContent = m; };
     const dia = $('#tData', c).value;
     const h = horas();
+    const equipa = escolhidos().map((p) => ({ id: p.id, nome: p.nome, funcao: p.funcao }));
+    if (!equipa.length) return erro('Indique quem esteve presente.');
+    if (!equipa.some((p) => p.funcao === 'Técnico')) return erro('Tem de estar pelo menos um técnico.');
     if (!dia) return erro('Indique o dia.');
     if (dia > hoje) return erro('Não pode registar tempo num dia futuro.');
     if (h === null) return erro('Indique a hora de início e de fim.');
@@ -145,7 +170,7 @@ function formTempo() {
     if (h > 16) return erro('Mais de 16 horas num só registo? Verifique as horas.');
     const t = {
       id: novoIdItem(), data: Timestamp.fromDate(deIsoLocal(dia, '12:00')), inicio: $('#tIni', c).value, fim: $('#tFim', c).value,
-      horas: Math.round(h * 100) / 100, tecnicos: +$('#tTec', c).value, ajudantes: +$('#tAju', c).value,
+      horas: Math.round(h * 100) / 100, equipa, ...contarFuncoes(equipa),
       nota: $('#tNota', c).value.trim(), uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(),
     };
     comBotao($('#tGuardar', c), async () => {
@@ -241,11 +266,12 @@ function reduzirAssinatura(cv) {
 }
 
 // ---------- Valor da mão de obra (só Master) ----------
-// Tabela em config/precosHora: linhas { tipo: 'Manutenção' | 'AT/Instalação', tecnicos, ajudantes, preco },
+// Tabela em config/precosHora: linhas { tipo: 'Manutenção' | 'AT/Instalação', composicao, tecnicos, ajudantes, aprendizes, preco },
 // acréscimos em %: primeiraHora, segundaHora, fimDeSemana.
 function chaveTipoPreco(tipo) { return tipo === 'Manutenção' ? 'Manutenção' : 'AT/Instalação'; }
 function valorTempo(t, tipoFolha, tabela) {
-  const linha = (tabela.linhas || []).find((l) => l.tipo === chaveTipoPreco(tipoFolha) && l.tecnicos === (t.tecnicos || 1) && (l.ajudantes || 0) === (t.ajudantes || 0));
+  const linha = (tabela.linhas || []).find((l) => l.tipo === chaveTipoPreco(tipoFolha) && l.tecnicos === (t.tecnicos || 1)
+    && (l.ajudantes || 0) === (t.ajudantes || 0) && (l.aprendizes || 0) === (t.aprendizes || 0));
   if (!linha) return null;
   const p = linha.preco, h = Number(t.horas) || 0;
   const a1 = 1 + (tabela.primeiraHora ?? 20) / 100, a2 = 1 + (tabela.segundaHora ?? 10) / 100;
@@ -253,22 +279,24 @@ function valorTempo(t, tipoFolha, tabela) {
   const dow = paraData(t.data).getDay();
   const fds = dow === 0 || dow === 6;
   if (fds) v *= 1 + (tabela.fimDeSemana ?? 100) / 100;
-  return { preco: p, valor: Math.round(v * 100) / 100, fds };
+  return { preco: p, valor: Math.round(v * 100) / 100, fds, composicao: linha.composicao || '' };
 }
+let tabelaPrecosCache = null;
 async function mostrarValorMO() {
   const eur = (v) => (Number(v) || 0).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
   try {
-    const s = await getDoc(doc(db, 'config', 'precosHora'));
-    if (!s.exists() || !(s.data().linhas || []).length) { $('#valorMO').innerHTML = '<p class="muted">Falta a tabela de preço/hora (Utilizadores › Preço/hora).</p>'; return; }
-    const tab = s.data();
+    if (!tabelaPrecosCache) { const s = await getDoc(doc(db, 'config', 'precosHora')); tabelaPrecosCache = s.exists() ? s.data() : { linhas: [] }; }
+    const tab = tabelaPrecosCache;
+    if (!$('#valorMO')) return;
+    if (!(tab.linhas || []).length) { $('#valorMO').innerHTML = '<p class="muted" style="margin:0">Falta a tabela de preço/hora (Utilizadores › Preço/hora).</p>'; return; }
     let total = 0, falta = false;
     const linhas = (atual.tempos || []).map((t) => {
       const r = valorTempo(t, atual.tipo, tab);
       if (!r) { falta = true; return `<li><span>${esc(fmtData(t.data))}</span><span>${esc(equipaTexto(t))}</span><b class="muted">sem preço</b></li>`; }
       total += r.valor;
-      return `<li><span>${esc(fmtData(t.data))}${r.fds ? ' (fim de semana)' : ''}</span><span>${esc(fmtHoras(t.horas))} · ${esc(equipaTexto(t))} · ${esc(eur(r.preco))}/h</span><b>${esc(eur(r.valor))}</b></li>`;
+      return `<li><span>${esc(fmtData(t.data))}${r.fds ? ' (fim de semana)' : ''}</span><span>${esc(fmtHoras(t.horas))} · ${esc(r.composicao)} · ${esc(eur(r.preco))}/h</span><b>${esc(eur(r.valor))}</b></li>`;
     }).join('');
-    $('#valorMO').innerHTML = `<h3>Mão de obra (só Master)</h3><ul class="hist">${linhas}</ul>
+    $('#valorMO').innerHTML = `<h3>Valor da mão de obra <span class="muted" style="font-weight:400">· só o Master vê</span></h3><ul class="hist">${linhas}</ul>
       <p style="text-align:right;margin:8px 0 0"><b id="totalMO">Total: ${esc(eur(total))}</b> <span class="muted">s/IVA</span></p>
       <p class="muted" style="margin:4px 0 0">1.ª hora +${esc(String(tab.primeiraHora ?? 20))}%, 2.ª hora +${esc(String(tab.segundaHora ?? 10))}%, fim de semana +${esc(String(tab.fimDeSemana ?? 100))}%.${falta ? ' Há equipas sem preço na tabela.' : ''}</p>`;
   } catch (e) { toast(erroFirebase(e), 'erro'); }
