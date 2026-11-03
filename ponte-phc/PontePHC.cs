@@ -1168,11 +1168,13 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                     c.CommandTimeout = 120;
                     for (int k = 0; k < parte.Count; k++) { if (k > 0) ps.Append(','); ps.Append("@r" + k); c.Parameters.AddWithValue("@r" + k, parte[k]); }
                     c.Parameters.AddWithValue("@a", ArmazemAC);
+                    c.Parameters.AddWithValue("@dg", DateTime.Today.AddDays(-cfg.GetInt("GuiasDiasAbertas", 30)));
                     c.CommandText = "SELECT st.ref, st.design, st.unidade, st.faminome, st.inactivo, st.epcusto, ISNULL(sa.stock, 0) AS stock, " +
                         "ISNULL((SELECT SUM(bi.qtt) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
                         "  WHERE bi.ref = st.ref AND bo.ndos = 114 AND bo.fechada = 0 AND bi.armazem = @a), 0) AS reservado, " +
-                        "ISNULL((SELECT SUM(bi.qtt) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
-                        "  WHERE bi.ref = st.ref AND bo.ndos = 111 AND bo.fechada = 0 AND bi.armazem = @a AND ISNULL(bi.fno, 0) = 0), 0) AS emguias " +
+                        // em guias abertas: o que levou (qtt) menos o que ja passou para FO (qtt2), so das guias dos ultimos GuiasDiasAbertas dias
+                        "ISNULL((SELECT SUM(CASE WHEN bi.qtt > ISNULL(bi.qtt2, 0) THEN bi.qtt - ISNULL(bi.qtt2, 0) ELSE 0 END) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
+                        "  WHERE bi.ref = st.ref AND bo.ndos = 111 AND bo.fechada = 0 AND bi.armazem = @a AND bo.dataobra >= @dg), 0) AS emguias " +
                         "FROM st WITH (NOLOCK) LEFT JOIN sa WITH (NOLOCK) ON sa.ref = st.ref AND sa.armazem = @a WHERE st.ref IN (" + ps + ")";
                     using (SqlDataReader r = c.ExecuteReader())
                         while (r.Read())
