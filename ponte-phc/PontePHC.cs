@@ -1195,6 +1195,52 @@ class PhcSql : IFonteClientes, IFonteFolhas
         return l;
     }
 
+    // Procura artigos pela designacao ou referencia, com o stock de cada armazem (so leitura).
+    public List<string> ProcurarArtigos(string texto)
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand("SELECT TOP 30 st.ref, st.design, st.unidade, " +
+            "(SELECT ' ' + CAST(sa.armazem AS varchar(10)) + ':' + CAST(CAST(sa.stock AS decimal(18,3)) AS varchar(30)) FROM sa WITH (NOLOCK) WHERE sa.ref = st.ref AND sa.stock <> 0 FOR XML PATH('')) AS stocks " +
+            "FROM st WITH (NOLOCK) WHERE st.ref LIKE @t OR st.design LIKE @t ORDER BY st.ref", cn))
+        {
+            c.Parameters.AddWithValue("@t", "%" + texto + "%");
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) l.Add(Valor(r["ref"]) + " | " + Valor(r["design"]) + " | " + Valor(r["unidade"]) + " | stock por armazem:" + (Valor(r["stocks"]) == "" ? " (nenhum)" : Valor(r["stocks"])));
+        }
+        if (l.Count == 0) l.Add("(nenhum artigo com \"" + texto + "\")");
+        return l;
+    }
+
+    // Como se usam as Guias 111: abertas/fechadas, ligadas a Folha de Obra, armazens das linhas (so leitura).
+    public List<string> ResumoGuias()
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            string[] q = {
+                "Guias por ano e estado|SELECT bo.boano AS a, bo.fechada AS f, COUNT(*) AS n FROM bo WITH (NOLOCK) WHERE bo.ndos = 111 GROUP BY bo.boano, bo.fechada ORDER BY bo.boano, bo.fechada",
+                "Linhas das guias (ultimos 12 meses) por documento de origem|SELECT ISNULL(bi.nmdoc,'') AS a, CASE WHEN bi.fno > 0 THEN 'com n.' ELSE 'sem n.' END AS f, COUNT(*) AS n FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp WHERE bo.ndos = 111 AND bo.dataobra >= DATEADD(month,-12,GETDATE()) GROUP BY bi.nmdoc, CASE WHEN bi.fno > 0 THEN 'com n.' ELSE 'sem n.' END",
+                "Linhas das guias (ultimos 12 meses) por armazem -> armazem destino|SELECT CAST(bi.armazem AS varchar(10)) AS a, CAST(bi.ar2mazem AS varchar(10)) AS f, COUNT(*) AS n FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp WHERE bo.ndos = 111 AND bo.dataobra >= DATEADD(month,-12,GETDATE()) GROUP BY bi.armazem, bi.ar2mazem",
+                "Guias por viatura (ultimos 12 meses)|SELECT ISNULL(bo.maquina,'') AS a, '' AS f, COUNT(*) AS n FROM bo WITH (NOLOCK) WHERE bo.ndos = 111 AND bo.dataobra >= DATEADD(month,-12,GETDATE()) GROUP BY bo.maquina",
+                "Folhas de Obra 114 por armazem das linhas (ultimos 12 meses), abertas/fechadas|SELECT CAST(bi.armazem AS varchar(10)) AS a, CAST(bo.fechada AS varchar(5)) AS f, COUNT(*) AS n FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp WHERE bo.ndos = 114 AND bi.ref <> '' AND bo.dataobra >= DATEADD(month,-12,GETDATE()) GROUP BY bi.armazem, bo.fechada",
+            };
+            foreach (string x in q)
+            {
+                string[] p = x.Split('|');
+                l.Add(""); l.Add("--- " + p[0]);
+                try
+                {
+                    using (SqlCommand c = new SqlCommand(p[1], cn))
+                    using (SqlDataReader r = c.ExecuteReader())
+                        while (r.Read()) l.Add("  " + Valor(r["a"]) + " | " + Valor(r["f"]) + " | " + r["n"]);
+                }
+                catch (Exception e) { l.Add("  (" + e.Message + ")"); }
+            }
+        }
+        return l;
+    }
+
     // Armazens existentes e quantos artigos/stock tem cada um (so leitura).
     public List<string> ListaArmazens()
     {
@@ -2405,6 +2451,22 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/procurar" && args.Length >= 2)
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.ProcurarArtigos(string.Join(" ", args, 1, args.Length - 1))) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
+            if (cmd == "/guias")
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.ResumoGuias()) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/armazens")
             {
                 PhcSql sql = m.Fonte as PhcSql;
@@ -2453,6 +2515,8 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /campos SERIE      que campos de texto estao preenchidos numa serie (ex.: 114)");
                 Console.WriteLine("  PontePHC.exe /artigo REF        ficha do artigo, stock por armazem e quantidades em dossiers");
                 Console.WriteLine("  PontePHC.exe /armazens          armazens e stock de cada um");
+                Console.WriteLine("  PontePHC.exe /procurar TEXTO    artigos com TEXTO na referencia ou designacao, e stock por armazem");
+                Console.WriteLine("  PontePHC.exe /guias             como sao usadas as Guias 111 (estado, origem, armazens, viaturas)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
