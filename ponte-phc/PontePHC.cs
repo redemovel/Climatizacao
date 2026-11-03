@@ -1126,6 +1126,88 @@ class PhcSql : IFonteClientes, IFonteFolhas
     }
 
     // Diagnostico: mostra um dossier interno completo (campos preenchidos de bo/bo2/bo3 e linhas bi) e um resumo da serie.
+    // Diagnostico de stock (so leitura): ficha do artigo, stock por armazem e quantidades em dossiers abertos.
+    public List<string> VerArtigo(string referencia)
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            string[] consultas = {
+                "st|SELECT TOP 1 * FROM st WITH (NOLOCK) WHERE ref = @r",
+                "sa (stock por armazem)|SELECT * FROM sa WITH (NOLOCK) WHERE ref = @r",
+            };
+            foreach (string q in consultas)
+            {
+                string[] p = q.Split('|');
+                l.Add("");
+                l.Add("--- " + p[0] + " (so campos preenchidos)");
+                using (SqlCommand c = new SqlCommand(p[1], cn))
+                {
+                    c.Parameters.AddWithValue("@r", referencia);
+                    try
+                    {
+                        using (SqlDataReader r = c.ExecuteReader())
+                        {
+                            int n = 0;
+                            while (r.Read() && n < 20)
+                            {
+                                n++;
+                                if (n > 1) l.Add("  --");
+                                for (int i = 0; i < r.FieldCount; i++) { string v = Valor(r[i]); if (v != "") l.Add("  " + r.GetName(i) + " = " + v); }
+                            }
+                            if (n == 0) l.Add("  (nada)");
+                        }
+                    }
+                    catch (Exception e) { l.Add("  (" + e.Message + ")"); }
+                }
+            }
+            l.Add("");
+            l.Add("--- quantidades desta referencia em dossiers (abertos / fechados), por serie e armazem");
+            using (SqlCommand c = new SqlCommand("SELECT bo.ndos, bo.nmdos, bi.armazem, bi.ar2mazem, bo.fechada, COUNT(*) AS linhas, SUM(bi.qtt) AS qtd " +
+                "FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp WHERE bi.ref = @r " +
+                "GROUP BY bo.ndos, bo.nmdos, bi.armazem, bi.ar2mazem, bo.fechada ORDER BY bo.ndos, bo.fechada", cn))
+            {
+                c.Parameters.AddWithValue("@r", referencia);
+                try
+                {
+                    using (SqlDataReader r = c.ExecuteReader())
+                        while (r.Read())
+                            l.Add("  serie " + r["ndos"] + " " + Valor(r["nmdos"]) + " | armazem " + Valor(r["armazem"]) + " -> " + Valor(r["ar2mazem"]) +
+                                  " | " + (Valor(r["fechada"]) == "1" || Valor(r["fechada"]).ToLower() == "true" ? "fechados" : "ABERTOS") + ": " + r["linhas"] + " linhas, qtd " + Valor(r["qtd"]));
+                }
+                catch (Exception e) { l.Add("  (" + e.Message + ")"); }
+            }
+            l.Add("");
+            l.Add("--- ultima linha desta referencia numa Guia (serie 111), campos preenchidos");
+            using (SqlCommand c = new SqlCommand("SELECT TOP 1 bi.* FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
+                "WHERE bi.ref = @r AND bo.ndos = 111 ORDER BY bo.dataobra DESC", cn))
+            {
+                c.Parameters.AddWithValue("@r", referencia);
+                try
+                {
+                    using (SqlDataReader r = c.ExecuteReader())
+                        if (r.Read()) { for (int i = 0; i < r.FieldCount; i++) { string v = Valor(r[i]); if (v != "") l.Add("  " + r.GetName(i) + " = " + v); } }
+                        else l.Add("  (nenhuma)");
+                }
+                catch (Exception e) { l.Add("  (" + e.Message + ")"); }
+            }
+        }
+        return l;
+    }
+
+    // Armazens existentes e quantos artigos/stock tem cada um (so leitura).
+    public List<string> ListaArmazens()
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand("SELECT armazem, COUNT(*) AS artigos, SUM(CASE WHEN stock <> 0 THEN 1 ELSE 0 END) AS comstock, SUM(stock) AS total " +
+            "FROM sa WITH (NOLOCK) GROUP BY armazem ORDER BY armazem", cn))
+        using (SqlDataReader r = c.ExecuteReader())
+            while (r.Read()) l.Add("armazem " + Valor(r["armazem"]) + ": " + r["artigos"] + " artigos, " + r["comstock"] + " com stock, total " + Valor(r["total"]));
+        if (l.Count == 0) l.Add("(tabela sa vazia)");
+        return l;
+    }
+
     public List<string> VerDossier(int ndos, long numero)
     {
         List<string> l = new List<string>();
@@ -2315,6 +2397,22 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/artigo" && args.Length >= 2)
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.VerArtigo(args[1])) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
+            if (cmd == "/armazens")
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.ListaArmazens()) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/testar-email" && args.Length >= 2)
             {
                 Correio.Enviar(cfg, args[1], "Teste da plataforma Climatizacao",
@@ -2353,6 +2451,8 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /series            series de faturas e dossiers (para SeriesFaturas/SeriesDossiers)");
                 Console.WriteLine("  PontePHC.exe /dossier SERIE [N]  mostra um dossier completo (o ultimo, ou o numero N)");
                 Console.WriteLine("  PontePHC.exe /campos SERIE      que campos de texto estao preenchidos numa serie (ex.: 114)");
+                Console.WriteLine("  PontePHC.exe /artigo REF        ficha do artigo, stock por armazem e quantidades em dossiers");
+                Console.WriteLine("  PontePHC.exe /armazens          armazens e stock de cada um");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
