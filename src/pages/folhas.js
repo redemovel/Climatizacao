@@ -121,9 +121,24 @@ async function fecharEmLote(btn) {
   await comBotao(btn, async () => {
     const ok = alvo.filter((f) => !invalidas.includes(f));
     try {
-      for (let i = 0; i < ok.length; i += 200) {
+      // folhas com material do stock da plataforma: uma a uma, para libertar as reservas na mesma transação
+      const comStock = (novo === 'Faturada' || novo === 'Anulada') ? ok.filter((f) => (f.materiais || []).some((m) => m.artigoId)) : [];
+      for (const f of comStock) {
+        await runTransaction(db, async (tx) => {
+          const s = await tx.get(doc(db, 'folhas', f.id));
+          const d = s.data();
+          const aplicar = await aplicarReservas(tx, movLibertarFolha(d));
+          tx.update(doc(db, 'folhas', f.id), {
+            estado: novo, historico: [...(d.historico || []), { estado: novo, de: d.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(), nota: 'Fecho em lote (folha antiga)' }],
+            pendencia: null, estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+          });
+          aplicar();
+        });
+      }
+      const resto = ok.filter((f) => !comStock.includes(f));
+      for (let i = 0; i < resto.length; i += 200) {
         const b = writeBatch(db);
-        for (const f of ok.slice(i, i + 200)) {
+        for (const f of resto.slice(i, i + 200)) {
           const entrada = { estado: novo, de: f.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(), nota: 'Fecho em lote (folha antiga)' };
           b.update(doc(db, 'folhas', f.id), {
             estado: novo, historico: [...(f.historico || []), entrada], pendencia: null,
@@ -343,6 +358,14 @@ async function mudarEstado(novo, btn) {
         const s = await tx.get(ref);
         const d = s.data();
         if (d.estado !== f.estado) throw Object.assign(new Error('A folha foi alterada por outra pessoa. Atualize a página.'), { code: 'alterada' });
+        // Faturada/Anulada: o material da folha deixa de estar reservado (e volta a estar se a folha for reaberta).
+        const fecha = (e) => e === 'Faturada' || e === 'Anulada';
+        let aplicar = null;
+        if (fecha(novo) !== fecha(d.estado)) {
+          const mov = movLibertarFolha(d);
+          if (!fecha(novo)) for (const k in mov) mov[k].resFolhas = -mov[k].resFolhas;
+          if (Object.keys(mov).length) aplicar = await aplicarReservas(tx, mov);
+        }
         const entrada = { estado: novo, de: d.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
         if (extra.pendencia) { entrada.motivo = extra.pendencia.motivo; if (extra.pendencia.nota) entrada.nota = extra.pendencia.nota; }
         const alt = {
@@ -352,6 +375,7 @@ async function mudarEstado(novo, btn) {
         };
         if (novo !== 'Pendente' && d.pendencia) alt.pendencia = null;
         tx.update(ref, alt);
+        if (aplicar) aplicar();
         return { ...d, ...alt, estadoAlteradoEm: Timestamp.now(), atualizadoEm: Timestamp.now() };
       });
       atual = { id: f.id, ...resultado };

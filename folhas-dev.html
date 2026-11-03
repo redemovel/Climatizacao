@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-03 21:59 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-03 22:57 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -95,7 +95,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .barra > * { flex: 1 1 140px; }
 .barra .btn { flex: 0 0 auto; }
-.titulo-pag { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.titulo-pag { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.titulo-pag > div { display: flex; gap: 8px; flex-wrap: wrap; }
 .titulo-pag h1 { margin: 0; }
 .seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; background: var(--branco); }
 .seg button { border: 0; background: transparent; min-height: 40px; padding: 0 14px; font: inherit; font-size: .9rem; cursor: pointer; color: var(--texto-2); }
@@ -214,6 +215,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .aviso-concl { background: #fef3c7; color: #92400e; padding: 8px 10px; border-radius: var(--raio); margin: 0 0 10px; }
 .valor-mo { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--linha); }
 .equipa { font-weight: 600; }
+.acoes-mat { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.lista-artigos { display: grid; gap: 6px; margin-bottom: 10px; max-height: 260px; overflow-y: auto; }
+.artigo-op { text-align: left; background: #fff; border: 1px solid var(--linha); border-radius: var(--raio); padding: 8px 10px; font: inherit; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; cursor: pointer; }
+.artigo-op .disp { margin-left: auto; color: #047857; font-weight: 600; white-space: nowrap; }
+.artigo-op .disp.zero { color: #b91c1c; }
+.stock-info { background: #ecfdf5; border-radius: var(--raio); padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.linha-imp { display: grid; grid-template-columns: 1fr 96px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.linha-imp input { min-width: 0; }
+.tabela-guia { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.tabela-guia th, .tabela-guia td { padding: 6px 4px; border-bottom: 1px solid var(--linha); text-align: left; vertical-align: top; }
+.tabela-guia td.n, .tabela-guia th.n { text-align: right; white-space: nowrap; }
+.aviso-at { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: var(--raio); padding: 10px; margin: 0 0 10px; }
+.ok-at { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; border-radius: var(--raio); padding: 10px; margin: 0 0 10px; }
+.estado-por-comunicar { background: #fee2e2; color: #991b1b; }
+.estado-comunicada { background: #dcfce7; color: #166534; }
+.estado-fechada { background: #e2e8f0; color: #334155; }
+.lista-item.b-por-comunicar { border-left-color: #dc2626; }
+.lista-item.b-comunicada { border-left-color: #16a34a; }
+.lista-item.b-fechada { border-left-color: #94a3b8; }
+@media print { #topo, #nav, .voltar, .acoes, .estados-acoes, .btn { display: none !important; } body { background: #fff; } .cartao { box-shadow: none; border: 0; } }
 
 </style>
 </head>
@@ -259,7 +280,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-03 21:59 UTC';
+const BUILD = '2026-11-03 22:57 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -447,11 +468,13 @@ const ICONES = {
   agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
   folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
   clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
   utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
 };
 const MENU = [
   { id: 'agenda', label: 'Agenda', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'folhas', label: 'Folhas de obra', curto: 'Folhas', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
   { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
 ];
@@ -525,6 +548,53 @@ async function pesquisarClientes(texto, { soAtivos = false } = {}) {
     .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
     .filter((c) => !soAtivos || c.ativo !== false)
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+}
+
+// ---------- Artigos (stock do armazém da climatização, vindo do PHC) ----------
+// disponível = stock − reservado em FO abertas no PHC − ainda em guias abertas no PHC
+//              − reservado em folhas da plataforma − em guias abertas da plataforma
+const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+function disponivel(a) {
+  return r3((a.stock || 0) - (a.reservadoPHC || 0) - (a.emGuiasPHC || 0) - (a.resFolhas || 0) - (a.resGuias || 0));
+}
+const fmtQtd = (n) => r3(n).toLocaleString('pt-PT', { maximumFractionDigits: 3 });
+async function pesquisarArtigos(texto) {
+  const palavras = normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  if (!palavras.length) return [];
+  const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+  const snap = await getDocs(query(collection(db, 'artigos'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((a) => a.ativo !== false && palavras.every((p) => (a.pesquisa || []).includes(p)))
+    .sort((a, b) => disponivel(b) - disponivel(a) || (a.ref || '').localeCompare(b.ref || ''));
+}
+// Acumula movimentos de reserva por artigo e aplica-os dentro de uma transação (lê primeiro, escreve depois).
+// mov: { artigoId: { resFolhas: +x, resGuias: -y } }; exigeDisponivel: artigos que não podem ficar negativos.
+async function aplicarReservas(tx, mov, exigeDisponivel = new Set()) {
+  const ids = Object.keys(mov);
+  const docs = {};
+  for (const id of ids) {
+    const s = await tx.get(doc(db, 'artigos', id));
+    if (!s.exists()) throw Object.assign(new Error('Artigo não encontrado: ' + id), { code: 'artigo' });
+    docs[id] = s.data();
+  }
+  return () => {
+    for (const id of ids) {
+      const a = docs[id];
+      const novo = { resFolhas: r3((a.resFolhas || 0) + (mov[id].resFolhas || 0)), resGuias: r3((a.resGuias || 0) + (mov[id].resGuias || 0)) };
+      if (novo.resFolhas < 0) novo.resFolhas = 0;
+      if (novo.resGuias < 0) novo.resGuias = 0;
+      if (exigeDisponivel.has(id) && disponivel({ ...a, ...novo }) < -0.0005) {
+        throw Object.assign(new Error(`Sem stock disponível de ${a.ref} (disponível: ${fmtQtd(disponivel(a))} ${a.unidade || ''}).`), { code: 'stock' });
+      }
+      tx.update(doc(db, 'artigos', id), { ...novo, resAtualizadoEm: serverTimestamp() });
+    }
+  };
+}
+// Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
+function movLibertarFolha(f) {
+  const mov = {};
+  for (const m of f.materiais || []) if (m.artigoId) (mov[m.artigoId] = mov[m.artigoId] || { resFolhas: 0 }).resFolhas -= Number(m.qtd) || 0;
+  return mov;
 }
 
 // Lista de técnicos ativos (coleção pequena; lida uma vez por página).
@@ -666,9 +736,24 @@ async function fecharEmLote(btn) {
   await comBotao(btn, async () => {
     const ok = alvo.filter((f) => !invalidas.includes(f));
     try {
-      for (let i = 0; i < ok.length; i += 200) {
+      // folhas com material do stock da plataforma: uma a uma, para libertar as reservas na mesma transação
+      const comStock = (novo === 'Faturada' || novo === 'Anulada') ? ok.filter((f) => (f.materiais || []).some((m) => m.artigoId)) : [];
+      for (const f of comStock) {
+        await runTransaction(db, async (tx) => {
+          const s = await tx.get(doc(db, 'folhas', f.id));
+          const d = s.data();
+          const aplicar = await aplicarReservas(tx, movLibertarFolha(d));
+          tx.update(doc(db, 'folhas', f.id), {
+            estado: novo, historico: [...(d.historico || []), { estado: novo, de: d.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(), nota: 'Fecho em lote (folha antiga)' }],
+            pendencia: null, estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+          });
+          aplicar();
+        });
+      }
+      const resto = ok.filter((f) => !comStock.includes(f));
+      for (let i = 0; i < resto.length; i += 200) {
         const b = writeBatch(db);
-        for (const f of ok.slice(i, i + 200)) {
+        for (const f of resto.slice(i, i + 200)) {
           const entrada = { estado: novo, de: f.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now(), nota: 'Fecho em lote (folha antiga)' };
           b.update(doc(db, 'folhas', f.id), {
             estado: novo, historico: [...(f.historico || []), entrada], pendencia: null,
@@ -888,6 +973,14 @@ async function mudarEstado(novo, btn) {
         const s = await tx.get(ref);
         const d = s.data();
         if (d.estado !== f.estado) throw Object.assign(new Error('A folha foi alterada por outra pessoa. Atualize a página.'), { code: 'alterada' });
+        // Faturada/Anulada: o material da folha deixa de estar reservado (e volta a estar se a folha for reaberta).
+        const fecha = (e) => e === 'Faturada' || e === 'Anulada';
+        let aplicar = null;
+        if (fecha(novo) !== fecha(d.estado)) {
+          const mov = movLibertarFolha(d);
+          if (!fecha(novo)) for (const k in mov) mov[k].resFolhas = -mov[k].resFolhas;
+          if (Object.keys(mov).length) aplicar = await aplicarReservas(tx, mov);
+        }
         const entrada = { estado: novo, de: d.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
         if (extra.pendencia) { entrada.motivo = extra.pendencia.motivo; if (extra.pendencia.nota) entrada.nota = extra.pendencia.nota; }
         const alt = {
@@ -897,6 +990,7 @@ async function mudarEstado(novo, btn) {
         };
         if (novo !== 'Pendente' && d.pendencia) alt.pendencia = null;
         tx.update(ref, alt);
+        if (aplicar) aplicar();
         return { ...d, ...alt, estadoAlteradoEm: Timestamp.now(), atualizadoEm: Timestamp.now() };
       });
       atual = { id: f.id, ...resultado };
@@ -1095,17 +1189,25 @@ function equipaTexto(t) {
 function novoIdItem() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 // Altera a folha numa transação (vários técnicos/backoffice podem estar a escrever ao mesmo tempo).
-async function alterarTrabalho(fn, msgOk) {
+// fn(d, guia) devolve as alterações da folha, ou { alt, mov, exige, guiaId, guiaAlt } quando mexe em stock/guias.
+async function alterarTrabalho(fn, msgOk, { guiaId = null } = {}) {
   const ref = doc(db, 'folhas', atual.id);
   try {
     const res = await runTransaction(db, async (tx) => {
       const s = await tx.get(ref);
       const d = s.data();
-      const alt = fn(d);
-      if (!alt) return null;
+      let guia = null;
+      if (guiaId) { const g = await tx.get(doc(db, 'guias', guiaId)); guia = g.exists() ? { id: g.id, ...g.data() } : null; }
+      let r = fn(d, guia);
+      if (!r) return null;
+      if (!r.alt) r = { alt: r };
+      const aplicar = r.mov && Object.keys(r.mov).length ? await aplicarReservas(tx, r.mov, r.exige || new Set()) : null;
+      const alt = r.alt;
       alt.atualizadoEm = serverTimestamp();
       alt.atualizadoPor = sessao.uid;
       tx.update(ref, alt);
+      if (r.guiaAlt && guia) tx.update(doc(db, 'guias', guia.id), { ...r.guiaAlt, atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+      if (aplicar) aplicar();
       return { ...d, ...alt, atualizadoEm: Timestamp.now() };
     });
     if (!res) return false;
@@ -1115,7 +1217,7 @@ async function alterarTrabalho(fn, msgOk) {
     if (msgOk) toast(msgOk, 'ok');
     renderDetalhe();
     return true;
-  } catch (e) { toast(erroFirebase(e), 'erro', 5000); return false; }
+  } catch (e) { toast(['stock', 'artigo', 'guia'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); return false; }
 }
 
 // ---------- HTML dos cartões (chamado por renderDetalhe) ----------
@@ -1140,8 +1242,10 @@ function htmlTrabalho(f) {
     </div>
     <div class="cartao" id="cartaoMateriais">
       <div class="cab-cartao"><h3>Material aplicado</h3>${pode ? '<button class="btn btn-peq btn-primario" id="btnMaterial">+ Material</button>' : ''}</div>
+      ${pode ? `<div class="acoes-mat"><button class="btn btn-peq" id="btnImportarGuia">Importar da guia</button>
+        <a class="btn btn-peq" id="btnNovaGuia" href="${pagina('guias', { nova: 1, folha: f.id })}">Nova guia de transporte</a></div>` : ''}
       ${mats.length ? `<ul class="hist">${mats.map((m) => `
-        <li><b>${esc(String(m.qtd).replace('.', ','))} ${esc(m.unidade || '')}</b><span>${esc(m.descricao)}${m.ref ? `<br><span class="muted">${esc(m.ref)}</span>` : ''}</span>
+        <li><b>${esc(fmtQtd(m.qtd))} ${esc(m.unidade || '')}</b><span>${esc(m.descricao)}${m.ref ? `<br><span class="muted">${esc(m.ref)}${m.guiaNumero ? ' · guia ' + esc(m.guiaNumero) : m.artigoId ? ' · do stock' : ' · fora do stock'}</span>` : ''}</span>
           <span class="muted">${esc(m.nome || '')}${podeApagar(m) ? ` <button class="lixo" data-apagar-mat="${esc(m.id)}" aria-label="Apagar">✕</button>` : ''}</span></li>`).join('')}</ul>`
         : '<p class="muted" style="margin:0">Sem material registado.</p>'}
     </div>
@@ -1171,9 +1275,23 @@ function ligarTrabalho() {
     if (!(await confirmar('Apagar este registo de tempo?', { ok: 'Apagar', perigo: true }))) return;
     alterarTrabalho((d) => ({ tempos: (d.tempos || []).filter((t) => t.id !== b.dataset.apagarTempo) }), 'Tempo apagado.');
   });
+  if ($('#btnImportarGuia')) $('#btnImportarGuia').onclick = () => comBotao($('#btnImportarGuia'), importarDaGuia);
   $$('[data-apagar-mat]').forEach((b) => b.onclick = async () => {
-    if (!(await confirmar('Apagar este material?', { ok: 'Apagar', perigo: true }))) return;
-    alterarTrabalho((d) => ({ materiais: (d.materiais || []).filter((m) => m.id !== b.dataset.apagarMat) }), 'Material apagado.');
+    const m0 = (atual.materiais || []).find((m) => m.id === b.dataset.apagarMat);
+    if (!m0) return;
+    if (!(await confirmar(m0.guiaId ? 'Apagar este material? Volta a ficar disponível na guia.' : 'Apagar este material?', { ok: 'Apagar', perigo: true }))) return;
+    alterarTrabalho((d, guia) => {
+      const m = (d.materiais || []).find((x) => x.id === m0.id);
+      if (!m) return null;
+      const r = { alt: { materiais: (d.materiais || []).filter((x) => x.id !== m.id) }, mov: {} };
+      if (m.artigoId) {
+        const volta = guia && guia.estado === 'Comunicada';   // guia ainda aberta: o material volta para a guia
+        r.mov[m.artigoId] = { resFolhas: -m.qtd, resGuias: volta ? m.qtd : 0 };
+        if (volta) r.guiaAlt = { linhas: guia.linhas.map((l) => l.id !== m.guiaLinha ? l
+          : { ...l, consumido: r3((l.consumido || 0) - m.qtd), consumos: (l.consumos || []).filter((c) => c.materialId !== m.id) }) };
+      }
+      return r;
+    }, 'Material apagado.', { guiaId: m0.guiaId || null });
   });
   $$('[data-tarefa]').forEach((c) => c.onchange = () => {
     const t = c.dataset.tarefa, v = c.checked;
@@ -1253,8 +1371,13 @@ async function formTempo() {
 }
 
 function formMaterial() {
+  let artigo = null;
   const c = abrirModal('Registar material', `
-    <label class="campo"><span>Descrição *</span><input id="mDesc" maxlength="200" placeholder="Ex.: Tubo cobre 1/4&quot;"></label>
+    <label class="campo"><span>Procurar no stock (referência ou nome)</span>
+      <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Ex.: tubo cobre 1/4"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
+    <div id="mRes"></div>
+    <div id="mEscolhido"></div>
+    <label class="campo"><span>Descrição *</span><input id="mDesc" maxlength="200" placeholder="Ou escreva, se não for material do stock"></label>
     <label class="campo"><span>Referência</span><input id="mRef" maxlength="60" placeholder="Opcional" autocomplete="off"></label>
     <div class="grelha-2">
       <label class="campo"><span>Quantidade *</span><input id="mQtd" type="number" inputmode="decimal" min="0" step="any"></label>
@@ -1262,21 +1385,103 @@ function formMaterial() {
     </div>
     <div class="msg-erro" id="mErro"></div>
     <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="mGuardar">Guardar</button></div>`);
+  const procurar = () => comBotao($('#mProcBtn', c), async () => {
+    const t = $('#mProc', c).value.trim();
+    if (t.length < 2) return;
+    try {
+      const l = await pesquisarArtigos(t);
+      $('#mRes', c).innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
+        <button type="button" class="artigo-op" data-i="${i}"><b>${esc(x.ref)}</b> ${esc(x.design)}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`
+        : '<p class="muted">Nenhum artigo encontrado.</p>';
+      $$('.artigo-op', c).forEach((bt) => bt.onclick = () => {
+        artigo = l[+bt.dataset.i];
+        $('#mRes', c).innerHTML = '';
+        $('#mDesc', c).value = artigo.design; $('#mRef', c).value = artigo.ref;
+        $('#mDesc', c).disabled = true; $('#mRef', c).disabled = true;
+        const un = $('#mUn', c);
+        if (artigo.unidade && ![...un.options].some((o) => o.value === artigo.unidade)) un.insertAdjacentHTML('beforeend', `<option>${esc(artigo.unidade)}</option>`);
+        if (artigo.unidade) un.value = artigo.unidade;
+        un.disabled = true;
+        $('#mEscolhido', c).innerHTML = `<p class="stock-info" id="mDisp">Stock ${esc(fmtQtd(artigo.stock))} · disponível <b>${esc(fmtQtd(disponivel(artigo)))} ${esc(artigo.unidade || '')}</b>
+          <button type="button" class="btn btn-peq" id="mOutro">Outro</button></p>`;
+        $('#mOutro', c).onclick = () => { artigo = null; $('#mEscolhido', c).innerHTML = ''; ['#mDesc', '#mRef', '#mUn'].forEach((k) => { $(k, c).disabled = false; }); $('#mDesc', c).value = ''; $('#mRef', c).value = ''; };
+        $('#mQtd', c).focus();
+      });
+    } catch (e) { toast(erroFirebase(e), 'erro'); }
+  });
+  $('#mProcBtn', c).onclick = procurar;
+  $('#mProc', c).onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); procurar(); } };
   $('#mGuardar', c).onclick = () => {
     const erro = (m) => { $('#mErro', c).textContent = m; };
     const descricao = $('#mDesc', c).value.trim();
-    const qtd = Number(String($('#mQtd', c).value).replace(',', '.'));
+    const qtd = r3(String($('#mQtd', c).value).replace(',', '.'));
     if (descricao.length < 2) return erro('Indique a descrição do material.');
     if (!(qtd > 0)) return erro('Indique a quantidade.');
+    if (artigo && qtd > disponivel(artigo) + 0.0005) return erro(`Só há ${fmtQtd(disponivel(artigo))} ${artigo.unidade || ''} disponíveis.`);
     const m = { id: novoIdItem(), descricao, ref: $('#mRef', c).value.trim(), qtd, unidade: $('#mUn', c).value, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+    if (artigo) m.artigoId = artigo.id;
     comBotao($('#mGuardar', c), async () => {
       if (await alterarTrabalho((d) => {
         if ((d.materiais || []).length >= 300) { erro('Limite de linhas atingido.'); return null; }
-        return { materiais: [...(d.materiais || []), m] };
+        const alt = { materiais: [...(d.materiais || []), m] };
+        return artigo ? { alt, mov: { [artigo.id]: { resFolhas: qtd } }, exige: new Set([artigo.id]) } : alt;
       }, 'Material registado.')) fecharModal();
     });
   };
 }
+
+// ---------- Importar da guia de transporte: só o que foi gasto passa para a folha ----------
+async function importarDaGuia() {
+  const f = atual;
+  const c0 = [where('clienteId', '==', f.clienteId), where('estado', '==', 'Comunicada')];
+  if (tecnico) c0.unshift(where('tecnicoUid', '==', sessao.uid));
+  let guias;
+  try {
+    const snap = await getDocs(query(collection(db, 'guias'), ...c0, limit(10)));
+    guias = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .filter((g) => (g.linhas || []).some((l) => saldoLinha(l) > 0.0005));
+  } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+  if (!guias.length) { toast('Não há guias comunicadas à AT com material por gastar para este cliente.', 'erro', 6000); return; }
+  const c = abrirModal('Importar da guia', `
+    <p class="muted" style="margin-top:0">Indique só o que foi gasto nesta obra. O resto fica na guia.</p>
+    ${guias.map((g) => `<div class="guia-imp">
+      <h3 style="margin:8px 0 4px">${esc(g.numero || 'Guia')} · ${esc(g.viatura || '')} · ${esc(fmtData(g.dataSaida))}</h3>
+      ${(g.linhas || []).filter((l) => saldoLinha(l) > 0.0005).map((l) => `
+        <label class="linha-imp"><span><b>${esc(l.ref)}</b> ${esc(l.design)}<br><span class="muted">levou ${esc(fmtQtd(l.qtd))} · por gastar ${esc(fmtQtd(saldoLinha(l)))} ${esc(l.unidade || '')}</span></span>
+          <input type="number" inputmode="decimal" min="0" step="any" max="${saldoLinha(l)}" data-g="${esc(g.id)}" data-l="${esc(l.id)}" placeholder="0"></label>`).join('')}
+    </div>`).join('')}
+    <div class="msg-erro" id="iErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="iOk">Importar</button></div>`);
+  $('#iOk', c).onclick = () => {
+    const erro = (m) => { $('#iErro', c).textContent = m; };
+    const pedidos = $$('input[data-g]', c).map((i) => ({ g: i.dataset.g, l: i.dataset.l, q: r3(String(i.value).replace(',', '.')) })).filter((x) => x.q > 0);
+    if (!pedidos.length) return erro('Indique a quantidade gasta em pelo menos uma linha.');
+    const porGuia = [...new Set(pedidos.map((p) => p.g))];
+    comBotao($('#iOk', c), async () => {
+      let ok = true;
+      for (const gid of porGuia) {   // uma transação por guia
+        ok = ok && await alterarTrabalho((d, guia) => {
+          if (!guia || guia.estado !== 'Comunicada') throw Object.assign(new Error('A guia já não está aberta.'), { code: 'guia' });
+          const novos = [], mov = {};
+          const linhas = guia.linhas.map((l) => {
+            const p = pedidos.find((x) => x.g === gid && x.l === l.id);
+            if (!p) return l;
+            if (p.q > saldoLinha(l) + 0.0005) throw Object.assign(new Error(`${l.ref}: só há ${fmtQtd(saldoLinha(l))} ${l.unidade || ''} por gastar na guia.`), { code: 'guia' });
+            const m = { id: novoIdItem(), descricao: l.design, ref: l.ref, qtd: p.q, unidade: l.unidade || '', artigoId: l.artigoId,
+              guiaId: guia.id, guiaNumero: guia.numero || '', guiaLinha: l.id, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+            novos.push(m);
+            const mv = (mov[l.artigoId] = mov[l.artigoId] || { resFolhas: 0, resGuias: 0 });
+            mv.resFolhas += p.q; mv.resGuias -= p.q;   // passa de «na guia» para «na folha»: o disponível não muda
+            return { ...l, consumido: r3((l.consumido || 0) + p.q), consumos: [...(l.consumos || []), { folhaId: atual.id, numero: d.numero, materialId: m.id, qtd: p.q }] };
+          });
+          return { alt: { materiais: [...(d.materiais || []), ...novos] }, mov, guiaAlt: { linhas } };
+        }, null, { guiaId: gid });
+      }
+      if (ok) { fecharModal(); toast('Material importado da guia.', 'ok'); }
+    });
+  };
+}
+function saldoLinha(l) { return r3((l.qtd || 0) - (l.consumido || 0) - (l.devolvido || 0)); }
 
 async function guardarRelatorio() {
   const txt = $('#relatorio').value.trim();

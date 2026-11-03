@@ -21,7 +21,7 @@ const SO = (args.find((a) => a.startsWith('--so=')) || '').slice(5);
 const CAPTURAS = args.includes('--capturas');
 const DIR_CAP = path.join(__dirname, 'capturas');
 const INDICES = JSON.parse(fs.readFileSync(path.join(ROOT, 'firestore.indexes.json'), 'utf8')).indexes;
-const PAGINAS = ['index', 'agenda', 'folhas', 'clientes', 'utilizadores'];
+const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'clientes', 'utilizadores'];
 
 // ---------- 1 e 2: build + sintaxe ----------
 execFileSync('node', [path.join(ROOT, 'build.js')], { stdio: 'inherit' });
@@ -151,7 +151,7 @@ teste('login: utilizador inativo é bloqueado', async () => {
 
 teste('sessão: sem login, páginas internas redirecionam para o login', async () => {
   const { ctx, page } = await contexto();
-  for (const p of ['agenda', 'folhas', 'clientes', 'utilizadores']) {
+  for (const p of ['agenda', 'folhas', 'guias', 'clientes', 'utilizadores']) {
     await page.goto(`${BASE}/${p}.html`);
     await page.waitForURL(/index\.html/);
   }
@@ -161,7 +161,7 @@ teste('sessão: sem login, páginas internas redirecionam para o login', async (
 // =====================================================================
 // MENU POR PERFIL
 // =====================================================================
-for (const [quem, menus] of [['master', ['agenda', 'folhas', 'clientes', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'clientes']], ['tecnico1', ['agenda', 'folhas']]]) {
+for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'clientes', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
   teste(`menu: ${quem} vê ${menus.join(', ')}`, async () => {
     const { ctx, page } = await contexto();
     await entrar(page, quem);
@@ -877,6 +877,122 @@ teste('clientes: ficha mostra folhas do cliente (índice clienteId + criadoEm)',
   await page.click('#btnVerFolhas');
   await page.waitForFunction(() => document.querySelectorAll('#folhasCli .lista-item').length === 3);
   await captura(page, 'cliente-ficha-375');
+  semErros(page); await ctx.close();
+});
+
+// =====================================================================
+// FASE 3: STOCK E GUIAS DE TRANSPORTE AC
+// =====================================================================
+teste('fase 3: importar da guia só o gasto (10 de 50); apagar devolve à guia', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/folhas.html?id=fo003');
+  await page.click('#btnImportarGuia');
+  await page.waitForSelector('input[data-g=g1]');
+  assert((await page.textContent('.modal')).includes('por gastar 50'), 'mostra 50 por gastar');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'importar ' + vp.width); await captura(page, 'importar-guia-' + vp.width); }
+  await page.fill('input[data-g=g1]', '60');
+  await page.click('#iOk');
+  await page.waitForSelector('.toast-erro >> text=só há 50');
+  await page.fill('input[data-g=g1]', '10');
+  await page.click('#iOk');
+  await page.waitForSelector('.toast-ok >> text=Material importado da guia.');
+  assert((await page.textContent('#cartaoMateriais')).includes('guia 353/'), 'material com referência à guia');
+  let g = await fake(page, () => window.__fake.doc('guias/g1'));
+  let a = await fake(page, () => window.__fake.doc('artigos/TC14'));
+  const f = await fake(page, () => window.__fake.doc('folhas/fo003'));
+  igual(g.linhas[0].consumido + ' ' + a.resGuias + ' ' + a.resFolhas, '10 40 10', 'guia 10 gastos; reservas passam da guia para a folha');
+  igual(f.materiais[0].qtd + ' ' + f.materiais[0].guiaId + ' ' + g.linhas[0].consumos[0].numero, `10 g1 FO-${new Date().getFullYear()}-0003`, 'ligação folha ↔ guia');
+  await page.click('[data-apagar-mat]');
+  await page.click('[data-r="1"]');
+  await page.waitForSelector('.toast-ok >> text=Material apagado.');
+  g = await fake(page, () => window.__fake.doc('guias/g1'));
+  a = await fake(page, () => window.__fake.doc('artigos/TC14'));
+  igual(g.linhas[0].consumido + ' ' + a.resGuias + ' ' + a.resFolhas, '0 50 0', 'apagar devolve à guia');
+  semErros(page); await ctx.close();
+});
+
+teste('fase 3: material do stock na folha respeita o disponível e reserva; faturar liberta', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'master');
+  await page.goto(BASE + '/folhas.html?id=fo003');
+  await page.click('#btnMaterial');
+  await page.fill('#mProc', 'cobre');
+  await page.click('#mProcBtn');
+  await page.waitForSelector('.artigo-op');
+  const txt = await page.textContent('#mRes');
+  assert(txt.includes('TC38') && txt.includes('80 m disp.') && txt.includes('60 m disp.') && !txt.includes('ANTIGO1'), 'disponíveis (TC14: 120−10−50 = 60) e sem inativos: ' + txt);
+  await captura(page, 'material-stock-375');
+  await page.click('.artigo-op >> text=TC38');
+  await page.fill('#mQtd', '81');
+  await page.click('#mGuardar');
+  igual(await page.textContent('#mErro'), 'Só há 80 m disponíveis.', 'não passa do disponível');
+  await page.fill('#mQtd', '5');
+  await page.click('#mGuardar');
+  await page.waitForSelector('.toast-ok >> text=Material registado.');
+  igual((await fake(page, () => window.__fake.doc('artigos/TC38'))).resFolhas, 5, 'reservado na folha');
+  await page.selectOption('#selCorrigir', 'Faturada');
+  await page.fill('#tVal', 'FT 1');
+  await page.click('#tOk');
+  await page.waitForSelector('.det-cab .estado-faturada');
+  igual((await fake(page, () => window.__fake.doc('artigos/TC38'))).resFolhas, 0, 'faturada liberta a reserva');
+  semErros(page); await ctx.close();
+});
+
+teste('fase 3: técnico cria guia a partir da folha (por comunicar, sem impressão); master fecha guia comunicada', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/folhas.html?id=fo003');
+  await page.click('#btnNovaGuia');
+  await page.waitForSelector('#gViatura');
+  assert((await page.textContent('#gCliente')).includes(await fake(page, () => window.__fake.doc('folhas/fo003').clienteNome)), 'cliente da folha');
+  await page.selectOption('#gViatura', 'AV-78-ER');
+  await page.fill('#gProc', 'desinf');
+  await page.click('#gProcBtn');
+  await page.click('[data-a="0"]');
+  await page.fill('[data-q="0"]', '1');
+  await page.click('#gGuardar');
+  igual(await page.textContent('#gErro'), 'SOLDESINFECTANTE: só há 0,5 l disponíveis.', 'limite do disponível');
+  await page.fill('[data-q="0"]', '0.5');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'nova guia ' + vp.width); await captura(page, 'guia-nova-' + vp.width); }
+  await page.click('#gGuardar');
+  await page.waitForSelector('#avisoAT');
+  igual(await contar(page, '#btnImprimir'), 0, 'sem código AT não imprime');
+  const gs = await fake(page, () => Object.entries(window.__fake.db()).filter(([k, v]) => k.startsWith('guias/') && v.estado === 'Por comunicar').map(([, v]) => v));
+  igual(gs.length + ' ' + gs[0].viatura + ' ' + gs[0].tecnicoUid + ' ' + gs[0].folhaId, '1 AV-78-ER u-tec1 fo003', 'guia gravada');
+  igual((await fake(page, () => window.__fake.doc('artigos/SOLDESINFECTANTE'))).resGuias, 0.5, 'reservado na guia');
+  await captura(page, 'guia-por-comunicar-375');
+  await page.goto(BASE + '/guias.html');
+  await page.waitForSelector('#lista .lista-item');
+  igual(await contar(page, '#lista .lista-item'), 2, 'técnico vê as suas guias abertas');
+  await semOverflow(page, 'lista guias');
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'master');
+  await page.goto(BASE + '/guias.html?id=g1');
+  await page.waitForSelector('#codigoAT');
+  assert(await page.locator('#btnImprimir').isVisible(), 'com código AT pode imprimir');
+  await page.click('#btnFechar');
+  assert((await page.textContent('.modal')).includes('50 m de TC14'), 'avisa o que é devolvido');
+  await page.click('[data-r="1"]');
+  await page.waitForSelector('.det-cab .estado-fechada');
+  const g = await fake(page, () => window.__fake.doc('guias/g1'));
+  igual(g.linhas[0].devolvido + ' ' + (await fake(page, () => window.__fake.doc('artigos/TC14'))).resGuias, '50 0', 'sobra devolvida e reserva libertada');
+  await captura(page, 'guia-fechada-375');
+  semErros(page); await ctx.close();
+});
+
+teste('fase 3: regras — técnico não vê guias de outros nem mexe no stock; custo só Master', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico2');
+  const r = await page.evaluate(async () => {
+    const out = {};
+    try { await window.__fake.lerComoUtilizador('guias/g1'); out.g = 'lido'; } catch (e) { out.g = e.code; }
+    try { await window.__fake.atualizarComoUtilizador('artigos/TC14', { stock: 999 }); out.s = 'ok'; } catch (e) { out.s = e.code; }
+    try { await window.__fake.lerComoUtilizador('artigos/TC14/privado/custo'); out.c = 'lido'; } catch (e) { out.c = e.code; }
+    return out;
+  });
+  igual(JSON.stringify(r), JSON.stringify({ g: 'permission-denied', s: 'permission-denied', c: 'permission-denied' }), 'recusas');
   semErros(page); await ctx.close();
 });
 

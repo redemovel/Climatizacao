@@ -173,6 +173,12 @@ function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   if (!s.uid) negar('sem sessão');
   if (colecao === 'config') { if (s.perfil === 'master') return; negar('config só master'); }
   if (colecao === 'colaboradores') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('colaboradores'); }
+  if (colecao === 'artigos' || colecao === 'listas') { if (s.perfil) return; negar(colecao); }
+  if (colecao === 'guias' && s.perfil === 'tecnico') {
+    if (consulta) { if (consulta.some((c) => c.k === 'where' && c.campo === 'tecnicoUid' && c.op === '==' && c.valor === s.uid)) return; negar('técnico tem de filtrar guias por tecnicoUid'); }
+    if (docRaw && docRaw.tecnicoUid === s.uid) return;
+    negar('guia de outro técnico');
+  }
   if (colecao === 'utilizadores') {
     if (!consulta && id === s.uid) return;
     if (STAFF.includes(s.perfil)) return;
@@ -209,6 +215,34 @@ function regraEscrever(dbRaw, path, antes, depois) {
   }
   if (colecao === 'contadores') { if (!staff) negar('contadores'); return; }
   if (colecao === 'config') { if (s.perfil !== 'master') negar('config só master'); return; }
+  if (colecao === 'listas') { if (s.perfil !== 'master') negar('listas só master'); return; }
+  if (colecao === 'artigos') {
+    if (path.includes('/privado/')) negar('privado');
+    if (!antes || !depois) negar('artigos: só a PontePHC cria/apaga');
+    const mud = Object.keys({ ...antes, ...depois }).filter((k) => JSON.stringify(antes[k]) !== JSON.stringify(depois[k]));
+    if (mud.some((k) => !['resFolhas', 'resGuias', 'resAtualizadoEm'].includes(k))) negar('artigos: só reservas ' + mud);
+    if ((depois.resFolhas || 0) < 0 || (depois.resGuias || 0) < 0) negar('reserva negativa');
+    return;
+  }
+  if (colecao === 'guias') {
+    if (!depois) negar('apagar guia');
+    const okBase = depois.clienteId && depois.clienteNome && depois.tecnicoUid && depois.viatura && depois.viatura.length >= 6
+      && ['Por comunicar', 'Comunicada', 'Fechada', 'Anulada'].includes(depois.estado) && Array.isArray(depois.linhas) && depois.linhas.length >= 1 && depois.dataSaida;
+    if (!okBase) negar('guia inválida');
+    if (!antes) {
+      if (!(staff || (s.perfil === 'tecnico' && depois.tecnicoUid === s.uid))) negar('criar guia');
+      if (depois.estado !== 'Por comunicar' || depois.codigoAT !== '' || depois.numero !== '' || depois.criadoPor !== s.uid) negar('guia nova inválida');
+      return;
+    }
+    if (['Fechada', 'Anulada'].includes(antes.estado)) negar('guia fechada');
+    const mud = Object.keys({ ...antes, ...depois }).filter((k) => JSON.stringify(antes[k]) !== JSON.stringify(depois[k]));
+    if (mud.some((k) => ['codigoAT', 'numero', 'criadoEm', 'criadoPor', 'clienteId', 'dataSaida', 'viatura'].includes(k))) negar('guia: campo protegido');
+    const okT = antes.estado === depois.estado || (antes.estado === 'Comunicada' && depois.estado === 'Fechada') || (antes.estado === 'Por comunicar' && depois.estado === 'Anulada');
+    if (!okT) negar('transição de guia');
+    if (staff) return;
+    if (s.perfil === 'tecnico' && antes.tecnicoUid === s.uid && mud.every((k) => ['linhas', 'estado', 'historico', 'atualizadoEm', 'atualizadoPor'].includes(k))) return;
+    negar('guia de outro técnico');
+  }
   if (colecao === 'colaboradores') {
     if (s.perfil !== 'master' || !depois) negar('colaboradores só master');
     if (!depois.nome || !['Técnico', 'Ajudante', 'Aprendiz'].includes(depois.funcao) || typeof depois.ativo !== 'boolean') negar('colaborador inválido');

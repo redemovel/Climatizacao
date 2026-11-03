@@ -161,6 +161,26 @@ async function abrirPrecos() {
 }
 $('#btnPrecos').onclick = () => comBotao($('#btnPrecos'), abrirPrecos);
 
+// ---------- Viaturas (matrículas usadas nas guias de transporte) ----------
+async function abrirViaturas() {
+  let itens = [];
+  try { const s = await getDoc(doc(db, 'listas', 'viaturas')); if (s.exists()) itens = s.data().itens || []; } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+  const c = abrirModal('Viaturas', `
+    <label class="campo"><span>Matrículas (uma por linha)</span><textarea id="vLista" rows="5" style="font-family:monospace">${esc(itens.join('\n'))}</textarea></label>
+    <div class="msg-erro" id="vErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="vGuardar">Guardar</button></div>`);
+  $('#vGuardar', c).onclick = () => {
+    const l = [...new Set($('#vLista', c).value.split(/\r?\n/).map((x) => x.trim().toUpperCase().replace(/\s+/g, '')).filter(Boolean))];
+    if (l.some((x) => !/^[A-Z0-9]{2}-?[A-Z0-9]{2}-?[A-Z0-9]{2}$/.test(x))) { $('#vErro', c).textContent = 'Matrícula inválida (ex.: AV-78-ER).'; return; }
+    const norm = l.map((x) => x.includes('-') ? x : x.slice(0, 2) + '-' + x.slice(2, 4) + '-' + x.slice(4));
+    comBotao($('#vGuardar', c), async () => {
+      try { await setDoc(doc(db, 'listas', 'viaturas'), { itens: norm, atualizadoEm: serverTimestamp() }); fecharModal(); toast('Viaturas guardadas.', 'ok'); }
+      catch (e) { $('#vErro', c).textContent = erroFirebase(e); }
+    });
+  };
+}
+$('#btnViaturas').onclick = () => comBotao($('#btnViaturas'), abrirViaturas);
+
 // ---------- Colaboradores (quem aparece nos registos de tempo) ----------
 const FUNCOES = ['Técnico', 'Ajudante', 'Aprendiz'];
 let colaboradores = [];

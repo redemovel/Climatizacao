@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-03 22:57 UTC -->
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#008080">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Climatização">
+<link rel="icon" type="image/png" sizes="32x32" href="img/icone-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="img/icone-192.png">
+<link rel="apple-touch-icon" href="img/icone-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Guias de transporte [DEV] · Arpuro Climatização</title>
+<style>
+/* ===== style.css — partilhado (mobile-first) ===== */
+:root {
+  --azul: #008080; --azul-esc: #005f5f; --azul-claro: #e0f2f1;
+  --texto: #1b2530; --texto-2: #5b6775; --linha: #dde3ea; --fundo: #f4f6f9; --branco: #fff;
+  --verde: #1f8a4c; --ambar: #b7791f; --laranja: #c2410c; --vermelho: #b42318; --cinza: #6b7280; --roxo: #6d28d9;
+  --raio: 12px; --sombra: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --nav-h: 64px; --topo-h: 52px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--texto); background: var(--fundo); }
+body.com-modal { overflow: hidden; }
+a { color: var(--azul); }
+h1 { font-size: 1.25rem; margin: 0 0 12px; }
+h2 { font-size: 1.1rem; margin: 0; }
+h3 { font-size: 1rem; margin: 16px 0 8px; }
+.oculto { display: none !important; }
+.muted { color: var(--texto-2); font-size: .9rem; }
+
+/* --- Topo --- */
+#topo { position: sticky; top: 0; z-index: 20; height: var(--topo-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--azul); color: #fff; }
+#topo:empty { display: none; }
+.marca { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05rem; flex: 1; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.marca img { width: 28px; height: 28px; }
+.tag-dev { background: #facc15; color: #000; border-radius: 4px; padding: 1px 6px; font-size: .7rem; vertical-align: middle; }
+.env-dev #topo { background: #7c3aed; }
+.utilizador { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.u-nome { font-weight: 600; font-size: .9rem; }
+.u-perfil { font-size: .72rem; opacity: .85; }
+.btn-sair { background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; font-size: .85rem; cursor: pointer; }
+
+/* --- Menu inferior (telemóvel) / lateral superior (desktop) --- */
+#nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--branco); border-top: 1px solid var(--linha); padding-bottom: var(--safe-b); }
+#nav:empty { display: none; }
+#nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--nav-h); text-decoration: none; color: var(--texto-2); font-size: .72rem; }
+#nav a svg { width: 24px; height: 24px; fill: currentColor; }
+#nav a.ativo { color: var(--azul); font-weight: 600; }
+main { padding: 14px 12px calc(var(--nav-h) + var(--safe-b) + 20px); max-width: 1100px; margin: 0 auto; }
+
+@media (min-width: 900px) {
+  #nav { top: var(--topo-h); bottom: auto; justify-content: center; border-top: 0; border-bottom: 1px solid var(--linha); padding: 0; }
+  #nav a { flex: 0 0 auto; flex-direction: row; gap: 8px; height: 46px; padding: 0 18px; font-size: .95rem; }
+  #nav a.ativo { box-shadow: inset 0 -3px 0 var(--azul); }
+  main { padding: 64px 20px 40px; }
+}
+
+/* --- Botões e formulários --- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--linha); background: var(--branco); color: var(--texto); font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primario { background: var(--azul); border-color: var(--azul); color: #fff; }
+.btn-perigo { background: var(--vermelho); border-color: var(--vermelho); color: #fff; }
+.btn-sec { background: var(--azul-claro); border-color: transparent; color: var(--azul-esc); }
+.btn-bloco { width: 100%; }
+.btn-peq { min-height: 36px; padding: 0 12px; font-size: .85rem; }
+.btn-icone { border: 0; background: transparent; font-size: 1.2rem; width: 40px; height: 40px; cursor: pointer; color: var(--texto-2); }
+.a-carregar { position: relative; color: transparent !important; }
+.a-carregar::after { content: ""; position: absolute; width: 18px; height: 18px; border: 2px solid currentColor; border-color: #999 transparent #999 transparent; border-radius: 50%; animation: rodar .8s linear infinite; }
+@keyframes rodar { to { transform: rotate(360deg); } }
+.acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 16px; }
+.acoes .btn { flex: 1 1 auto; }
+
+.campo { display: block; margin-bottom: 12px; }
+.campo > span { display: block; font-size: .85rem; font-weight: 600; color: var(--texto-2); margin-bottom: 4px; }
+input, select, textarea { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; background: var(--branco); color: var(--texto); min-height: 44px; }
+textarea { min-height: 90px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outline-offset: -1px; border-color: var(--azul); }
+.campo-erro input, .campo-erro select { border-color: var(--vermelho); }
+.msg-erro { color: var(--vermelho); font-size: .85rem; margin-top: 4px; }
+.linha2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips label { flex: 1 1 auto; }
+.chips input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chips span { display: flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 12px; border: 1px solid var(--linha); border-radius: 999px; background: var(--branco); font-size: .9rem; cursor: pointer; }
+.chips input:checked + span { background: var(--azul); border-color: var(--azul); color: #fff; }
+
+/* --- Barra de ferramentas --- */
+.barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.barra > * { flex: 1 1 140px; }
+.barra .btn { flex: 0 0 auto; }
+.titulo-pag { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.titulo-pag > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.titulo-pag h1 { margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; background: var(--branco); }
+.seg button { border: 0; background: transparent; min-height: 40px; padding: 0 14px; font: inherit; font-size: .9rem; cursor: pointer; color: var(--texto-2); }
+.seg button.ativo { background: var(--azul); color: #fff; font-weight: 600; }
+
+/* --- Cartões e listas --- */
+.cartao { background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 14px; margin-bottom: 10px; }
+.lista-item { display: block; background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 12px 14px; margin-bottom: 8px; color: inherit; text-decoration: none; cursor: pointer; border-left: 4px solid transparent; }
+.lista-item:active { background: #f8fafc; }
+.li-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.li-titulo { font-weight: 700; }
+.li-sub { color: var(--texto-2); font-size: .9rem; margin-top: 2px; overflow-wrap: anywhere; }
+.li-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: .82rem; color: var(--texto-2); align-items: center; }
+.li-desc { margin-top: 6px; font-size: .9rem; color: var(--texto); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.vazio { text-align: center; color: var(--texto-2); padding: 28px 12px; }
+.mais { display: flex; justify-content: center; margin: 12px 0; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; background: #eef2f6; color: var(--texto-2); }
+.estado-agendada { background: #e0efff; color: #0b4f8a; }
+.estado-em-curso { background: #fff4d6; color: #8a5a00; }
+.estado-por-agendar { background: #f1f5f9; color: #475569; }
+.estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-revista { background: #e0f2f1; color: #00695c; }
+.estado-aguarda-ne { background: #fef3c7; color: #92400e; }
+.estado-anulada { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
+.estado-concluida { background: #dcf5e6; color: var(--verde); }
+.estado-faturada { background: #ede9fe; color: var(--roxo); }
+.lista-item.b-agendada { border-left-color: #3b82f6; }
+.lista-item.b-em-curso { border-left-color: #f59e0b; }
+.lista-item.b-por-agendar { border-left-color: #94a3b8; }
+.lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-revista { border-left-color: #0d9488; }
+.lista-item.b-aguarda-ne { border-left-color: #d97706; }
+.lista-item.b-anulada { border-left-color: #cbd5e1; opacity: .75; }
+.sel-lote { display: flex; align-items: center; gap: 10px; }
+.sel-lote input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.barra-lote { position: sticky; top: var(--topo-h); z-index: 5; background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 10px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.interruptor { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--texto-2); }
+.interruptor input { width: 20px; height: 20px; min-height: 0; }
+.lista-item.b-concluida { border-left-color: #22c55e; }
+.lista-item.b-faturada { border-left-color: #8b5cf6; }
+.tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
+
+/* --- Detalhe --- */
+.det-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.det-cab h1 { margin: 0; }
+.dl { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0 0; }
+.dl div { min-width: 0; }
+.dl dt { font-size: .78rem; color: var(--texto-2); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+.dl dd { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (min-width: 600px) { .dl { grid-template-columns: 1fr 1fr; } }
+.acoes-rapidas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.estados-acoes { display: grid; gap: 8px; }
+.pendencia { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.pendencia b { color: var(--laranja); }
+.hist { list-style: none; padding: 0; margin: 0; }
+.hist li { padding: 8px 0; border-bottom: 1px solid var(--linha); font-size: .9rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hist li:last-child { border-bottom: 0; }
+.voltar { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 10px; text-decoration: none; font-weight: 600; background: none; border: 0; color: var(--azul); font-size: .95rem; padding: 6px 0; cursor: pointer; }
+
+/* --- Agenda --- */
+.agenda-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.agenda-nav .periodo { flex: 1; text-align: center; font-weight: 700; }
+.dia-cab { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 6px; font-weight: 700; }
+.dia-cab.hoje { color: var(--azul); }
+.hora { font-weight: 800; font-size: 1.05rem; min-width: 52px; }
+.ag-item { display: flex; gap: 10px; }
+.ag-corpo { flex: 1; min-width: 0; }
+.ag-acoes { display: flex; gap: 8px; margin-top: 8px; }
+.ag-acoes .btn { flex: 1; }
+.hora-data { display: block; font-size: .72rem; font-weight: 600; color: var(--laranja); }
+.atrasos { background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 8px 8px 0; margin-bottom: 12px; }
+.atrasos summary { cursor: pointer; font-weight: 700; color: var(--laranja); padding: 4px 6px 8px; display: flex; gap: 8px; align-items: center; list-style: none; }
+.atrasos summary::-webkit-details-marker { display: none; }
+.atrasos summary::before { content: "▸"; transition: transform .15s; }
+.atrasos[open] summary::before { transform: rotate(90deg); }
+
+/* --- Modal (folha inferior no telemóvel) --- */
+.modal-fundo { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; justify-content: center; }
+.modal { background: var(--branco); width: 100%; max-width: 560px; max-height: 92vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; }
+.modal-topo { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 6px 16px; border-bottom: 1px solid var(--linha); }
+.modal-corpo { padding: 14px 16px calc(16px + var(--safe-b)); overflow-y: auto; }
+@media (min-width: 600px) { .modal-fundo { align-items: center; } .modal { border-radius: 16px; } }
+.resultados { max-height: 240px; overflow-y: auto; border: 1px solid var(--linha); border-radius: 10px; margin-top: 6px; }
+.resultados button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--linha); background: var(--branco); padding: 10px 12px; font: inherit; cursor: pointer; }
+.resultados button:last-child { border-bottom: 0; }
+.cliente-escolhido { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--azul-claro); border-radius: 10px; padding: 10px 12px; }
+
+/* --- Toast --- */
+#toasts { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + var(--safe-b) + 12px); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.toast { background: #1f2937; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.2); max-width: 520px; }
+.toast-erro { background: var(--vermelho); }
+.toast-ok { background: var(--verde); }
+
+/* --- Login --- */
+.login { max-width: 380px; margin: 8vh auto 0; }
+.login .logo { text-align: center; margin-bottom: 20px; }
+.login .logo img { width: 220px; max-width: 70%; height: auto; display: block; margin: 0 auto 6px; }
+.login .logo b { display: block; font-size: 1.35rem; color: var(--azul); letter-spacing: .02em; }
+.login .logo small { color: var(--texto-2); }
+.uid { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f5f9; padding: 8px; border-radius: 8px; word-break: break-all; user-select: all; display: block; margin: 8px 0; }
+.rodape-versao { text-align: center; font-size: .72rem; color: #9aa4b2; margin-top: 24px; }
+
+/* Fase 2: trabalho no local */
+.cab-cartao { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cab-cartao h3 { margin: 0; }
+.lixo { background: none; border: 0; color: #b91c1c; font-size: 1rem; min-height: 0; padding: 4px 6px; cursor: pointer; }
+.tarefas { display: grid; gap: 6px; }
+.tarefa { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: var(--raio); }
+.tarefa input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.grelha-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quadro-ass { width: 100%; height: auto; aspect-ratio: 5 / 2; border: 1px dashed #94a3b8; border-radius: var(--raio); background: #fff; touch-action: none; display: block; }
+.quadro-ass.desativado { opacity: .35; pointer-events: none; }
+.assinatura { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.assinatura img { max-width: 300px; width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); background: #fff; }
+.aviso-concl { background: #fef3c7; color: #92400e; padding: 8px 10px; border-radius: var(--raio); margin: 0 0 10px; }
+.valor-mo { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--linha); }
+.equipa { font-weight: 600; }
+.acoes-mat { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.lista-artigos { display: grid; gap: 6px; margin-bottom: 10px; max-height: 260px; overflow-y: auto; }
+.artigo-op { text-align: left; background: #fff; border: 1px solid var(--linha); border-radius: var(--raio); padding: 8px 10px; font: inherit; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; cursor: pointer; }
+.artigo-op .disp { margin-left: auto; color: #047857; font-weight: 600; white-space: nowrap; }
+.artigo-op .disp.zero { color: #b91c1c; }
+.stock-info { background: #ecfdf5; border-radius: var(--raio); padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.linha-imp { display: grid; grid-template-columns: 1fr 96px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.linha-imp input { min-width: 0; }
+.tabela-guia { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.tabela-guia th, .tabela-guia td { padding: 6px 4px; border-bottom: 1px solid var(--linha); text-align: left; vertical-align: top; }
+.tabela-guia td.n, .tabela-guia th.n { text-align: right; white-space: nowrap; }
+.aviso-at { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: var(--raio); padding: 10px; margin: 0 0 10px; }
+.ok-at { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; border-radius: var(--raio); padding: 10px; margin: 0 0 10px; }
+.estado-por-comunicar { background: #fee2e2; color: #991b1b; }
+.estado-comunicada { background: #dcfce7; color: #166534; }
+.estado-fechada { background: #e2e8f0; color: #334155; }
+.lista-item.b-por-comunicar { border-left-color: #dc2626; }
+.lista-item.b-comunicada { border-left-color: #16a34a; }
+.lista-item.b-fechada { border-left-color: #94a3b8; }
+@media print { #topo, #nav, .voltar, .acoes, .estados-acoes, .btn { display: none !important; } body { background: #fff; } .cartao { box-shadow: none; border: 0; } }
+
+</style>
+</head>
+<body class="env-dev pagina-guias">
+<header id="topo"></header>
+<main id="main">
+<!-- titulo: Guias de transporte -->
+<section id="vLista">
+  <div class="titulo-pag">
+    <h1 id="tituloLista">Guias de transporte</h1>
+    <button class="btn btn-primario oculto" id="btnNova">+ Nova</button>
+  </div>
+  <div class="barra">
+    <select id="fEstado" aria-label="Estado">
+      <option value="abertas">Abertas</option>
+      <option value="Por comunicar">Por comunicar à AT</option>
+      <option value="Comunicada">Comunicadas</option>
+      <option value="Fechada">Fechadas</option>
+      <option value="Anulada">Anuladas</option>
+    </select>
+  </div>
+  <div id="lista"><div class="vazio">A carregar…</div></div>
+  <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>
+</section>
+<section id="vDetalhe" class="oculto"></section>
+
+</main>
+<nav id="nav" aria-label="Menu principal"></nav>
+<div id="toasts" aria-live="polite"></div>
+<script type="module">
+// ===== core.js — código partilhado por todas as páginas (inserido pelo build.js) =====
+import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
+  sendPasswordResetEmail, createUserWithEmailAndPassword,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, orderBy,
+  limit, startAfter, serverTimestamp, Timestamp, runTransaction, writeBatch,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+
+const ENV = 'dev';          // 'prod' ou 'dev'
+const BUILD = '2026-11-03 22:57 UTC';
+const PAGINA = 'guias';
+
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDFAu5HWTkNOMX79TGbk14HJ-37wywVUyA',
+  authDomain: 'climatizacao-c482a.firebaseapp.com',
+  projectId: 'climatizacao-c482a',
+  storageBucket: 'climatizacao-c482a.firebasestorage.app',
+  messagingSenderId: '31045556625',
+  appId: '1:31045556625:web:a03ccd9fe4d2b141542230',
+};
+
+const fbApp = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(fbApp);
+auth.languageCode = 'pt';
+// Cache local persistente: a agenda continua visível sem rede e poupa leituras repetidas.
+const db = initializeFirestore(fbApp, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
+// ---------- Constantes de negócio ----------
+const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
+const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];   // revisão, NE, faturação e anulação: só o Master
+const DIAS_ATRASO = 60;   // «Em atraso» na agenda: só os últimos 60 dias; mais antigas vão para a lista de folhas antigas
+const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
+const TIPOS = ['Instalação', 'Manutenção', 'AT'];
+const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
+// Transições "normais" (botões principais). Têm de bater com firestore.rules.
+const TRANSICOES = {
+  'Por agendar': ['Agendada'],
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso', 'Agendada'],
+  'Concluída': ['Revista'],
+  'Revista': ['Aguarda NE', 'Faturada'],
+  'Aguarda NE': ['Faturada'],
+  'Faturada': [],
+  'Anulada': [],
+};
+const TRANSICOES_TECNICO = {
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso'],
+};
+const PAGINA_TAM = 20;
+
+const ehStaff = (p) => p === 'master' || p === 'backoffice';
+
+// Estados para onde o perfil pode mudar a folha (o servidor valida o mesmo nas regras).
+function transicoesPermitidas(perfil, estado) {
+  if (perfil === 'tecnico') return TRANSICOES_TECNICO[estado] || [];
+  if (perfil === 'master') return ESTADOS.filter((e) => e !== estado);
+  if (perfil === 'backoffice') return ESTADOS_MASTER.includes(estado) ? [] : ESTADOS.filter((e) => e !== estado && !ESTADOS_MASTER.includes(e));
+  return [];
+}
+
+// ---------- Utilitários ----------
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function pagina(nome, params) {
+  let u = nome + (ENV === 'dev' ? '-dev' : '') + '.html';
+  if (params) {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
+    if ([...q].length) u += '?' + q;
+  }
+  return u;
+}
+
+function paraData(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (typeof v.toDate === 'function') return v.toDate();
+  return new Date(v);
+}
+const fmtData = (v, o = { day: '2-digit', month: '2-digit', year: 'numeric' }) => { const d = paraData(v); return d ? d.toLocaleDateString('pt-PT', o) : '—'; };
+const fmtHora = (v) => { const d = paraData(v); return d ? d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : ''; };
+const fmtDataHora = (v) => { const d = paraData(v); return d ? fmtData(d) + ' ' + fmtHora(d) : '—'; };
+const fmtDiaSemana = (d) => { const t = d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+function inicioDia(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function addDias(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function inicioSemana(d) { const x = inicioDia(d); const dow = (x.getDay() + 6) % 7; return addDias(x, -dow); } // segunda-feira
+function isoLocal(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function deIsoLocal(s, hora = '00:00') { const [y, m, d] = s.split('-').map(Number); const [h, mi] = hora.split(':').map(Number); return new Date(y, m - 1, d, h || 0, mi || 0); }
+
+function linkMapa(f) {
+  const q = [f.morada, f.codigoPostal, f.localidade].filter(Boolean).join(', ');
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
+}
+const linkTel = (t) => (t ? 'tel:' + String(t).replace(/[^\d+]/g, '') : '');
+const classeEstado = (e) => 'estado-' + String(e || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-');
+const badgeEstado = (e) => `<span class="badge ${classeEstado(e)}">${esc(e)}</span>`;
+
+// NIF: português com dígito de controlo; estrangeiro com indicativo do país (ex.: ES B12345678).
+function validarNIF(entrada) {
+  const v = String(entrada || '').toUpperCase().replace(/[\s.\-/]/g, '');
+  if (!v) return { ok: false, erro: 'O NIF é obrigatório.' };
+  const pt = v.startsWith('PT') ? v.slice(2) : v;
+  if (/^\d+$/.test(pt)) {
+    if (pt.length !== 9) return { ok: false, erro: 'O NIF português tem 9 dígitos.' };
+    if (!/^([1235689]|45|7[0-9])/.test(pt)) return { ok: false, erro: 'NIF português com início inválido.' };
+    let soma = 0;
+    for (let i = 0; i < 8; i++) soma += Number(pt[i]) * (9 - i);
+    let ctrl = 11 - (soma % 11);
+    if (ctrl >= 10) ctrl = 0;
+    if (ctrl !== Number(pt[8])) return { ok: false, erro: 'NIF inválido (dígito de controlo errado).' };
+    return { ok: true, nif: pt, pais: 'PT' };
+  }
+  const m = v.match(/^([A-Z]{2})([A-Z0-9]{2,13})$/);
+  if (m && m[1] !== 'PT' && /\d/.test(m[2])) return { ok: true, nif: v, pais: m[1] };
+  return { ok: false, erro: 'NIF inválido. Estrangeiro: indicativo do país + número (ex.: ES B12345678).' };
+}
+
+function erroFirebase(e) {
+  const c = (e && e.code) || '';
+  const mapa = {
+    'auth/invalid-credential': 'Email ou palavra-passe incorretos.',
+    'auth/wrong-password': 'Email ou palavra-passe incorretos.',
+    'auth/user-not-found': 'Email ou palavra-passe incorretos.',
+    'auth/invalid-email': 'Email inválido.',
+    'auth/too-many-requests': 'Demasiadas tentativas. Aguarde uns minutos.',
+    'auth/network-request-failed': 'Sem ligação à internet.',
+    'auth/email-already-in-use': 'Já existe uma conta com este email.',
+    'auth/user-disabled': 'Esta conta está desativada.',
+    'permission-denied': 'Sem permissão para esta operação.',
+    'unavailable': 'Sem ligação ao servidor. Tente de novo.',
+    'failed-precondition': 'Falta um índice na base de dados (ver consola do browser).',
+  };
+  if (c === 'failed-precondition') console.error('[Firestore] índice em falta:', e.message);
+  return mapa[c] || (e && e.message) || 'Erro inesperado.';
+}
+
+function toast(msg, tipo = 'info', ms = 3500) {
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + tipo;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+
+// Modal genérico (folha inferior no telemóvel). Devolve o elemento do conteúdo.
+function abrirModal(titulo, html, { aoFechar } = {}) {
+  fecharModal();
+  const fundo = document.createElement('div');
+  fundo.className = 'modal-fundo';
+  fundo.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(titulo)}">
+    <div class="modal-topo"><h2>${esc(titulo)}</h2><button class="btn-icone" data-fechar aria-label="Fechar">✕</button></div>
+    <div class="modal-corpo">${html}</div></div>`;
+  fundo.addEventListener('click', (ev) => { if (ev.target === fundo || ev.target.closest('[data-fechar]')) { fecharModal(); aoFechar && aoFechar(); } });
+  document.body.appendChild(fundo);
+  document.body.classList.add('com-modal');
+  return $('.modal-corpo', fundo);
+}
+function fecharModal() { $$('.modal-fundo').forEach((m) => m.remove()); document.body.classList.remove('com-modal'); }
+
+function confirmar(msg, { ok = 'Confirmar', perigo = false } = {}) {
+  return new Promise((resolve) => {
+    const c = abrirModal('Confirmar', `<p>${esc(msg)}</p><div class="acoes">
+      <button class="btn" data-r="0">Cancelar</button>
+      <button class="btn ${perigo ? 'btn-perigo' : 'btn-primario'}" data-r="1">${esc(ok)}</button></div>`,
+    { aoFechar: () => resolve(false) });
+    c.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-r]');
+      if (!b) return;
+      fecharModal();
+      resolve(b.dataset.r === '1');
+    });
+  });
+}
+
+async function comBotao(btn, fn) {
+  if (btn.disabled) return;
+  const txt = btn.textContent;
+  btn.disabled = true; btn.classList.add('a-carregar');
+  try { return await fn(); }
+  finally { btn.disabled = false; btn.classList.remove('a-carregar'); btn.textContent = txt; }
+}
+
+// ---------- Sessão, cabeçalho e menu ----------
+let SESSAO = null;
+
+const ICONES = {
+  agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
+  folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
+  clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
+  utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
+};
+const MENU = [
+  { id: 'agenda', label: 'Agenda', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'folhas', label: 'Folhas de obra', curto: 'Folhas', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
+  { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
+];
+
+function montarCabecalho() {
+  const nome = (SESSAO.nome || SESSAO.email || '').split(' ')[0];
+  $('#topo').innerHTML = `
+    <a class="marca" href="${pagina('agenda')}"><img src="img/arvore-branca.png" alt="">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
+    <div class="utilizador"><span class="u-nome">${esc(nome)}</span><span class="u-perfil">${esc(PERFIS[SESSAO.perfil] || SESSAO.perfil)}</span></div>
+    <button class="btn-sair" id="btnSair" title="Terminar sessão">Sair</button>`;
+  $('#btnSair').onclick = async () => { await signOut(auth); location.replace(pagina('index')); };
+  $('#nav').innerHTML = MENU.filter((m) => m.perfis.includes(SESSAO.perfil)).map((m) =>
+    `<a href="${pagina(m.id)}" class="${m.id === PAGINA ? 'ativo' : ''}" data-menu="${m.id}">${ICONES[m.id]}<span>${esc(m.curto || m.label)}</span></a>`).join('');
+}
+
+// Garante sessão iniciada com perfil ativo. Sem sessão → login. Sem perfil → login (mostra o UID).
+function iniciarPagina({ perfis = null } = {}) {
+  return new Promise((resolve) => {
+    let feito = false;
+    onAuthStateChanged(auth, async (user) => {
+      if (feito) return;
+      feito = true;
+      if (!user) { location.replace(pagina('index')); return; }
+      try {
+        const snap = await getDoc(doc(db, 'utilizadores', user.uid));
+        if (!snap.exists() || snap.data().ativo !== true) { location.replace(pagina('index')); return; }
+        SESSAO = { uid: user.uid, email: user.email, ...snap.data() };
+      } catch (e) {
+        $('#main').innerHTML = `<div class="vazio">Não foi possível carregar o perfil: ${esc(erroFirebase(e))}</div>`;
+        return;
+      }
+      montarCabecalho();
+      if (perfis && !perfis.includes(SESSAO.perfil)) {
+        $('#main').innerHTML = '<div class="vazio">Não tem acesso a esta página.</div>';
+        return;
+      }
+      document.body.classList.add('perfil-' + SESSAO.perfil);
+      resolve(SESSAO);
+    });
+  });
+}
+
+// ---------- Pesquisa de clientes ----------
+// Cada cliente guarda `pesquisa`: prefixos (2+ letras) de cada palavra do nome e da localidade.
+// Assim "hot" encontra "Hotel Meliá" e "meli" também, com uma só consulta (array-contains).
+const normalizar = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function tokensPesquisa(...textos) {
+  const set = new Set();
+  for (const t of textos) {
+    for (const p of normalizar(t).split(/[^a-z0-9]+/)) {
+      for (let i = 2; i <= Math.min(p.length, 15); i++) set.add(p.slice(0, i));
+    }
+  }
+  return [...set];
+}
+
+async function pesquisarClientes(texto, { soAtivos = false } = {}) {
+  const t = String(texto || '').trim();
+  const n = validarNIF(t);
+  let snap;
+  if (n.ok) {
+    snap = await getDocs(query(collection(db, 'clientes'), where('nif', '==', n.nif), limit(10)));
+  } else {
+    const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+    if (!palavras.length) return [];
+    const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+    snap = await getDocs(query(collection(db, 'clientes'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  }
+  const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
+    .filter((c) => !soAtivos || c.ativo !== false)
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+}
+
+// ---------- Artigos (stock do armazém da climatização, vindo do PHC) ----------
+// disponível = stock − reservado em FO abertas no PHC − ainda em guias abertas no PHC
+//              − reservado em folhas da plataforma − em guias abertas da plataforma
+const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+function disponivel(a) {
+  return r3((a.stock || 0) - (a.reservadoPHC || 0) - (a.emGuiasPHC || 0) - (a.resFolhas || 0) - (a.resGuias || 0));
+}
+const fmtQtd = (n) => r3(n).toLocaleString('pt-PT', { maximumFractionDigits: 3 });
+async function pesquisarArtigos(texto) {
+  const palavras = normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  if (!palavras.length) return [];
+  const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+  const snap = await getDocs(query(collection(db, 'artigos'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((a) => a.ativo !== false && palavras.every((p) => (a.pesquisa || []).includes(p)))
+    .sort((a, b) => disponivel(b) - disponivel(a) || (a.ref || '').localeCompare(b.ref || ''));
+}
+// Acumula movimentos de reserva por artigo e aplica-os dentro de uma transação (lê primeiro, escreve depois).
+// mov: { artigoId: { resFolhas: +x, resGuias: -y } }; exigeDisponivel: artigos que não podem ficar negativos.
+async function aplicarReservas(tx, mov, exigeDisponivel = new Set()) {
+  const ids = Object.keys(mov);
+  const docs = {};
+  for (const id of ids) {
+    const s = await tx.get(doc(db, 'artigos', id));
+    if (!s.exists()) throw Object.assign(new Error('Artigo não encontrado: ' + id), { code: 'artigo' });
+    docs[id] = s.data();
+  }
+  return () => {
+    for (const id of ids) {
+      const a = docs[id];
+      const novo = { resFolhas: r3((a.resFolhas || 0) + (mov[id].resFolhas || 0)), resGuias: r3((a.resGuias || 0) + (mov[id].resGuias || 0)) };
+      if (novo.resFolhas < 0) novo.resFolhas = 0;
+      if (novo.resGuias < 0) novo.resGuias = 0;
+      if (exigeDisponivel.has(id) && disponivel({ ...a, ...novo }) < -0.0005) {
+        throw Object.assign(new Error(`Sem stock disponível de ${a.ref} (disponível: ${fmtQtd(disponivel(a))} ${a.unidade || ''}).`), { code: 'stock' });
+      }
+      tx.update(doc(db, 'artigos', id), { ...novo, resAtualizadoEm: serverTimestamp() });
+    }
+  };
+}
+// Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
+function movLibertarFolha(f) {
+  const mov = {};
+  for (const m of f.materiais || []) if (m.artigoId) (mov[m.artigoId] = mov[m.artigoId] || { resFolhas: 0 }).resFolhas -= Number(m.qtd) || 0;
+  return mov;
+}
+
+// Lista de técnicos ativos (coleção pequena; lida uma vez por página).
+let _tecnicos = null;
+async function carregarTecnicos() {
+  if (_tecnicos) return _tecnicos;
+  const col = collection(db, 'utilizadores');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50))),
+    getDocs(query(col, where('tecnico', '==', true), where('ativo', '==', true), limit(50))),
+  ]);
+  const mapa = new Map();
+  for (const d of [...a.docs, ...b.docs]) mapa.set(d.id, { uid: d.id, ...d.data() });
+  _tecnicos = [...mapa.values()].sort((x, y) => (x.nome || '').localeCompare(y.nome || '', 'pt'));
+  return _tecnicos;
+}
+
+// ===== página: guias =====
+// Guias de Transporte AC (série 111 no PHC): uma por viatura, com o cliente como destinatário.
+// Só podem levar até ao stock disponível do armazém da climatização. A comunicação à AT (código AT) é feita
+// pela PontePHC + GuiasAT (Fase 5): sem código AT a guia não pode sair nem ser impressa.
+// Da guia importa-se para a folha de obra só o que foi gasto; o que sobra é devolvido ao fechar a guia.
+const sessao = await iniciarPagina({ perfis: ['master', 'backoffice', 'tecnico'] });
+const staff = ehStaff(sessao.perfil);
+const tecnico = sessao.perfil === 'tecnico';
+const ESTADOS_GUIA_ABERTOS = ['Por comunicar', 'Comunicada'];
+
+let lista = [];
+let cursor = null;
+let atual = null;
+
+if (tecnico) $('#tituloLista').textContent = 'As minhas guias';
+$('#btnNova').classList.remove('oculto');
+$('#btnNova').onclick = () => irPara({ nova: 1 });
+$('#fEstado').onchange = () => carregarLista();
+$('#btnMais').onclick = () => comBotao($('#btnMais'), () => carregarLista(true));
+
+const saldo = (l) => r3((l.qtd || 0) - (l.consumido || 0) - (l.devolvido || 0));
+const nomeGuia = (g) => g.numero ? 'GTAC ' + g.numero : 'Guia por comunicar';
+
+// ---------- Lista ----------
+async function carregarLista(mais = false) {
+  if (!mais) { lista = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
+  const est = $('#fEstado').value;
+  const c = [];
+  if (tecnico) c.push(where('tecnicoUid', '==', sessao.uid));
+  c.push(est === 'abertas' ? where('estado', 'in', ESTADOS_GUIA_ABERTOS) : where('estado', '==', est));
+  c.push(orderBy('criadoEm', 'desc'));
+  if (cursor) c.push(startAfter(cursor));
+  c.push(limit(PAGINA_TAM));
+  try {
+    const snap = await getDocs(query(collection(db, 'guias'), ...c));
+    lista = lista.concat(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    cursor = snap.docs[snap.docs.length - 1] || cursor;
+    $('#maisWrap').classList.toggle('oculto', snap.docs.length < PAGINA_TAM);
+    $('#lista').innerHTML = lista.length ? lista.map((g) => `
+      <a class="lista-item ${classeEstado(g.estado).replace('estado-', 'b-')}" href="${pagina('guias', { id: g.id })}" data-id="${esc(g.id)}">
+        <div class="li-topo"><span class="li-titulo">${esc(nomeGuia(g))} · ${esc(g.clienteNome)}</span>${badgeEstado(g.estado)}</div>
+        <div class="li-sub">${esc(g.viatura)} · ${esc(fmtDataHora(g.dataSaida))} · ${esc(g.tecnicoNome || '')}</div>
+        <div class="li-meta">${(g.linhas || []).length} artigos${g.folhaNumero ? ' · ' + esc(g.folhaNumero) : ''}${(g.linhas || []).some((l) => saldo(l) > 0) && g.estado === 'Comunicada' ? ' · com material por gastar' : ''}</div>
+      </a>`).join('') : '<div class="vazio">Sem guias.</div>';
+  } catch (e) { $('#lista').innerHTML = `<div class="vazio">${esc(erroFirebase(e))}</div>`; }
+}
+$('#lista').addEventListener('click', (ev) => {
+  const a = ev.target.closest('a[data-id]');
+  if (!a || ev.metaKey || ev.ctrlKey) return;
+  ev.preventDefault();
+  irPara({ id: a.dataset.id });
+});
+
+function irPara(params) { history.pushState({}, '', pagina('guias', params)); rota(); }
+window.addEventListener('popstate', rota);
+function rota() {
+  const p = new URLSearchParams(location.search);
+  fecharModal();
+  if (p.get('nova')) { formNova(p.get('folha')); return; }
+  if (p.get('id')) { abrirDetalhe(p.get('id')); return; }
+  $('#vDetalhe').classList.add('oculto');
+  $('#vLista').classList.remove('oculto');
+  if (!lista.length) carregarLista();
+}
+const voltar = () => `<button class="voltar" id="btnVoltar">‹ ${tecnico ? 'As minhas guias' : 'Guias de transporte'}</button>`;
+function ligarVoltar() { $('#btnVoltar').onclick = () => { if (history.state !== null && history.length > 1) history.back(); else irPara(null); }; }
+function mostrar(html) {
+  $('#vLista').classList.add('oculto');
+  const v = $('#vDetalhe');
+  v.classList.remove('oculto');
+  v.innerHTML = voltar() + html;
+  ligarVoltar();
+  window.scrollTo(0, 0);
+}
+
+// ---------- Detalhe ----------
+async function abrirDetalhe(id) {
+  mostrar('<div class="vazio">A carregar…</div>');
+  try {
+    const s = await getDoc(doc(db, 'guias', id));
+    if (!s.exists()) { mostrar('<div class="vazio">Guia não encontrada.</div>'); return; }
+    atual = { id: s.id, ...s.data() };
+    renderDetalhe();
+  } catch (e) { mostrar(`<div class="vazio">${esc(erroFirebase(e))}</div>`); }
+}
+
+function renderDetalhe() {
+  const g = atual;
+  const meu = staff || g.tecnicoUid === sessao.uid;
+  mostrar(`
+    <div class="cartao">
+      <div class="det-cab"><div><h1 id="detNumero">${esc(nomeGuia(g))}</h1><span class="tipo">Guia de Transporte AC · viatura ${esc(g.viatura)}</span></div>
+        <div>${badgeEstado(g.estado)}</div></div>
+      ${g.estado === 'Por comunicar' ? `<p class="aviso-at" id="avisoAT"><b>Sem código AT.</b> A guia ainda não foi comunicada à Autoridade Tributária: o material não pode sair e a guia não pode ser impressa.</p>`
+        : g.codigoAT ? `<p class="ok-at">Código AT <b id="codigoAT">${esc(g.codigoAT)}</b></p>` : ''}
+      <dl class="dl">
+        <div><dt>Destinatário (cliente)</dt><dd>${esc(g.clienteNome)}${g.clienteNif ? `<br><span class="muted">NIF ${esc(g.clienteNif)}</span>` : ''}</dd></div>
+        <div><dt>Local de descarga</dt><dd>${esc([g.morada, [g.codigoPostal, g.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
+        <div><dt>Carga</dt><dd>Armazém ${esc(String(g.armazem || 99))} · ${esc(fmtDiaSemana(paraData(g.dataSaida)))}, ${esc(fmtHora(g.dataSaida))}</dd></div>
+        <div><dt>Técnico</dt><dd>${esc(g.tecnicoNome || '—')}</dd></div>
+        ${g.folhaId ? `<div><dt>Folha de obra prevista</dt><dd><a href="${pagina('folhas', { id: g.folhaId })}">${esc(g.folhaNumero || 'abrir')}</a></dd></div>` : ''}
+      </dl>
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0">Material</h3>
+      <table class="tabela-guia" id="linhasGuia"><thead><tr><th>Artigo</th><th class="n">Levou</th><th class="n">Gasto</th><th class="n">${g.estado === 'Fechada' ? 'Devolvido' : 'Por gastar'}</th></tr></thead><tbody>
+        ${(g.linhas || []).map((l) => `<tr><td><b>${esc(l.ref)}</b><br>${esc(l.design)}${(l.consumos || []).length ? `<br><span class="muted">${l.consumos.map((c) => `${esc(c.numero)}: ${esc(fmtQtd(c.qtd))}`).join(' · ')}</span>` : ''}</td>
+          <td class="n">${esc(fmtQtd(l.qtd))} ${esc(l.unidade || '')}</td><td class="n">${esc(fmtQtd(l.consumido || 0))}</td>
+          <td class="n">${esc(fmtQtd(g.estado === 'Fechada' ? (l.devolvido || 0) : saldo(l)))}</td></tr>`).join('')}
+      </tbody></table>
+    </div>
+    ${meu && ['Por comunicar', 'Comunicada'].includes(g.estado) ? `<div class="cartao estados-acoes">
+      ${g.codigoAT ? '<button class="btn btn-sec" id="btnImprimir">Imprimir</button>' : ''}
+      ${g.estado === 'Comunicada' ? '<button class="btn" id="btnFechar">Fechar guia (devolver o que sobrou)</button>' : ''}
+      ${g.estado === 'Por comunicar' ? '<button class="btn btn-perigo" id="btnAnular">Anular guia</button>' : ''}
+    </div>` : ''}
+    <div class="cartao">
+      <h3 style="margin-top:0">Histórico</h3>
+      <ul class="hist">${(g.historico || []).slice().reverse().map((h) => `<li>${badgeEstado(h.estado)}<span>${esc(h.nome || '')}${h.nota ? ' · ' + esc(h.nota) : ''}</span><span class="muted">${esc(fmtDataHora(h.em))}</span></li>`).join('')}</ul>
+    </div>`);
+  if ($('#btnImprimir')) $('#btnImprimir').onclick = () => window.print();
+  if ($('#btnFechar')) $('#btnFechar').onclick = () => fecharGuia($('#btnFechar'));
+  if ($('#btnAnular')) $('#btnAnular').onclick = () => anularGuia($('#btnAnular'));
+}
+
+// Fechar: o que não foi gasto deixa de estar na guia (volta ao disponível do armazém).
+async function fecharGuia(btn) {
+  const sobra = (atual.linhas || []).filter((l) => saldo(l) > 0.0005);
+  const msg = sobra.length
+    ? `Fechar a guia? Fica registado como devolvido: ${sobra.map((l) => `${fmtQtd(saldo(l))} ${l.unidade || ''} de ${l.ref}`).join(', ')}. O regresso deste material ao armazém precisa de documento de transporte próprio.`
+    : 'Fechar a guia? Todo o material foi passado para folhas de obra.';
+  if (!(await confirmar(msg, { ok: 'Fechar guia' }))) return;
+  await mudarGuia(btn, 'Fechada', (g) => {
+    const mov = {};
+    const linhas = g.linhas.map((l) => {
+      const x = saldo(l);
+      if (x > 0) (mov[l.artigoId] = mov[l.artigoId] || { resGuias: 0 }).resGuias -= x;
+      return { ...l, devolvido: r3((l.devolvido || 0) + Math.max(x, 0)) };
+    });
+    return { alt: { linhas }, mov };
+  }, sobra.length ? 'Devolvido o que sobrou' : '');
+}
+async function anularGuia(btn) {
+  if (!(await confirmar('Anular esta guia? O material volta a ficar disponível.', { ok: 'Anular', perigo: true }))) return;
+  await mudarGuia(btn, 'Anulada', (g) => {
+    const mov = {};
+    for (const l of g.linhas) (mov[l.artigoId] = mov[l.artigoId] || { resGuias: 0 }).resGuias -= saldo(l);
+    return { alt: {}, mov };
+  }, '');
+}
+async function mudarGuia(btn, novo, fn, nota) {
+  await comBotao(btn, async () => {
+    try {
+      const ref = doc(db, 'guias', atual.id);
+      const res = await runTransaction(db, async (tx) => {
+        const s = await tx.get(ref);
+        const g = s.data();
+        if (g.estado !== atual.estado) throw Object.assign(new Error('A guia foi alterada por outra pessoa. Atualize a página.'), { code: 'guia' });
+        const { alt, mov } = fn(g);
+        const aplicar = Object.keys(mov).length ? await aplicarReservas(tx, mov) : null;
+        const h = { estado: novo, de: g.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+        if (nota) h.nota = nota;
+        const tudo = { ...alt, estado: novo, historico: [...(g.historico || []), h], atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid };
+        tx.update(ref, tudo);
+        if (aplicar) aplicar();
+        return { ...g, ...tudo };
+      });
+      atual = { id: atual.id, ...res };
+      lista = [];
+      toast('Guia ' + (novo === 'Fechada' ? 'fechada.' : 'anulada.'), 'ok');
+      renderDetalhe();
+    } catch (e) { toast(['stock', 'artigo', 'guia'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); }
+  });
+}
+
+// ---------- Nova guia ----------
+async function formNova(folhaId) {
+  let folha = null, cliente = null;
+  const linhas = [];
+  mostrar('<div class="vazio">A carregar…</div>');
+  try {
+    if (folhaId) {
+      const s = await getDoc(doc(db, 'folhas', folhaId));
+      if (s.exists()) folha = { id: s.id, ...s.data() };
+    }
+  } catch (e) { toast(erroFirebase(e), 'erro'); }
+  if (tecnico && !folha) {
+    mostrar('<div class="cartao"><p style="margin:0">Para criar uma guia, abra a folha de obra e use «Nova guia de transporte».</p></div>');
+    return;
+  }
+  if (folha) cliente = { id: folha.clienteId, nome: folha.clienteNome, nif: folha.clienteNif || '', morada: folha.morada || '', cp: folha.codigoPostal || '', loc: folha.localidade || '' };
+  let viaturas = [];
+  try { const v = await getDoc(doc(db, 'listas', 'viaturas')); if (v.exists()) viaturas = v.data().itens || []; } catch (e) { /* sem lista */ }
+  const tecs = staff ? await carregarTecnicos().catch(() => []) : [];
+  const agora = new Date(Date.now() + 10 * 60000);
+  mostrar(`
+    <div class="cartao">
+      <h1 style="margin-top:0">Nova guia de transporte</h1>
+      <p class="muted" style="margin-top:0">Fica «Por comunicar»: só pode sair depois de ter código AT.</p>
+      <div class="campo"><span>Cliente (destinatário) *</span><div id="gCliente"></div></div>
+      ${folha ? `<p class="muted">Folha de obra: <b>${esc(folha.numero)}</b></p>` : ''}
+      ${staff ? `<label class="campo"><span>Técnico *</span><select id="gTec"><option value="">—</option>${tecs.map((t) => `<option value="${esc(t.uid)}" ${folha && folha.tecnicoUid === t.uid ? 'selected' : ''}>${esc(t.nome)}</option>`).join('')}</select></label>` : ''}
+      <label class="campo"><span>Viatura (matrícula) *</span>${viaturas.length
+        ? `<select id="gViatura"><option value="">—</option>${viaturas.map((v) => `<option>${esc(v)}</option>`).join('')}</select>`
+        : '<input id="gViatura" maxlength="12" placeholder="AA-00-AA" autocomplete="off">'}</label>
+      <div class="grelha-2">
+        <label class="campo"><span>Dia de saída *</span><input type="date" id="gDia" value="${isoLocal(agora)}"></label>
+        <label class="campo"><span>Hora *</span><input type="time" id="gHora" value="${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}"></label>
+      </div>
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0">Material (armazém 99)</h3>
+      <div style="display:flex;gap:8px"><input id="gProc" autocomplete="off" placeholder="Procurar referência ou nome"><button class="btn" id="gProcBtn" type="button">Procurar</button></div>
+      <div id="gRes" style="margin-top:8px"></div>
+      <div id="gLinhas"></div>
+    </div>
+    <div class="msg-erro" id="gErro"></div>
+    <div class="acoes"><button class="btn" id="gCancelar">Cancelar</button><button class="btn btn-primario" id="gGuardar">Criar guia</button></div>`);
+  const desenharCliente = () => {
+    $('#gCliente').innerHTML = cliente
+      ? `<div class="cliente-escolhido"><b>${esc(cliente.nome)}</b><br><span class="muted">${esc([cliente.morada, cliente.cp, cliente.loc].filter(Boolean).join(', '))}</span>${!folha ? ' <button type="button" class="btn btn-peq" id="gTrocar">Trocar</button>' : ''}</div>`
+      : `<div style="display:flex;gap:8px"><input id="gCliProc" placeholder="Nome, NIF ou localidade" autocomplete="off"><button type="button" class="btn" id="gCliBtn">Procurar</button></div><div id="gCliRes"></div>`;
+    if ($('#gTrocar')) $('#gTrocar').onclick = () => { cliente = null; desenharCliente(); };
+    if ($('#gCliBtn')) $('#gCliBtn').onclick = () => comBotao($('#gCliBtn'), async () => {
+      const l = await pesquisarClientes($('#gCliProc').value, { soAtivos: true }).catch((e) => { toast(erroFirebase(e), 'erro'); return []; });
+      $('#gCliRes').innerHTML = l.map((x, i) => `<button type="button" class="artigo-op" data-c="${i}"><b>${esc(x.nome)}</b> <span class="muted">${esc(x.localidade || '')}</span></button>`).join('') || '<p class="muted">Nenhum cliente.</p>';
+      $$('[data-c]').forEach((b) => b.onclick = () => {
+        const x = l[+b.dataset.c];
+        cliente = { id: x.id, nome: x.nome, nif: x.nif || '', morada: x.morada || '', cp: x.codigoPostal || '', loc: x.localidade || '' };
+        desenharCliente();
+      });
+    });
+  };
+  desenharCliente();
+  const desenharLinhas = () => {
+    $('#gLinhas').innerHTML = linhas.length ? `<table class="tabela-guia"><thead><tr><th>Artigo</th><th class="n">Qtd.</th><th></th></tr></thead><tbody>
+      ${linhas.map((l, i) => `<tr><td><b>${esc(l.a.ref)}</b><br>${esc(l.a.design)}<br><span class="muted">disponível ${esc(fmtQtd(disponivel(l.a)))} ${esc(l.a.unidade || '')}</span></td>
+        <td class="n"><input type="number" inputmode="decimal" min="0" step="any" value="${l.qtd || ''}" data-q="${i}" style="width:86px"></td>
+        <td><button type="button" class="lixo" data-x="${i}" aria-label="Tirar">✕</button></td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted">Ainda sem material.</p>';
+    $$('[data-q]').forEach((inp) => inp.oninput = () => { linhas[+inp.dataset.q].qtd = r3(String(inp.value).replace(',', '.')); });
+    $$('[data-x]').forEach((b) => b.onclick = () => { linhas.splice(+b.dataset.x, 1); desenharLinhas(); });
+  };
+  desenharLinhas();
+  const procurar = () => comBotao($('#gProcBtn'), async () => {
+    const t = $('#gProc').value.trim();
+    if (t.length < 2) return;
+    const l = await pesquisarArtigos(t).catch((e) => { toast(erroFirebase(e), 'erro'); return []; });
+    $('#gRes').innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
+      <button type="button" class="artigo-op" data-a="${i}" ${disponivel(x) > 0 ? '' : 'disabled'}><b>${esc(x.ref)}</b> ${esc(x.design)}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`
+      : '<p class="muted">Nenhum artigo encontrado.</p>';
+    $$('[data-a]').forEach((b) => b.onclick = () => {
+      const a = l[+b.dataset.a];
+      if (!linhas.some((x) => x.a.id === a.id)) linhas.push({ a, qtd: 0 });
+      $('#gRes').innerHTML = ''; $('#gProc').value = '';
+      desenharLinhas();
+      const ult = $$('[data-q]').pop(); if (ult) ult.focus();
+    });
+  });
+  $('#gProcBtn').onclick = procurar;
+  $('#gProc').onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); procurar(); } };
+  $('#gCancelar').onclick = () => { if (folha) location.href = pagina('folhas', { id: folha.id }); else irPara(null); };
+  $('#gGuardar').onclick = () => {
+    const erro = (m) => { $('#gErro').textContent = m; };
+    const viatura = $('#gViatura').value.trim().toUpperCase().replace(/\s+/g, '');
+    const tecUid = staff ? $('#gTec').value : sessao.uid;
+    const tecNome = staff ? ((tecs.find((t) => t.uid === tecUid) || {}).nome || '') : (sessao.nome || sessao.email);
+    if (!cliente) return erro('Escolha o cliente (destinatário).');
+    if (!tecUid) return erro('Escolha o técnico.');
+    if (viatura.length < 6) return erro('Indique a matrícula da viatura.');
+    if (!$('#gDia').value || !$('#gHora').value) return erro('Indique o dia e a hora de saída.');
+    const saida = deIsoLocal($('#gDia').value, $('#gHora').value);
+    if (saida < new Date(Date.now() - 5 * 60000)) return erro('A hora de saída não pode ser no passado: a guia tem de ser comunicada antes de o material sair.');
+    if (!linhas.length) return erro('Acrescente pelo menos um artigo.');
+    const sem = linhas.find((l) => !(l.qtd > 0));
+    if (sem) return erro(`Indique a quantidade de ${sem.a.ref}.`);
+    const excede = linhas.find((l) => l.qtd > disponivel(l.a) + 0.0005);
+    if (excede) return erro(`${excede.a.ref}: só há ${fmtQtd(disponivel(excede.a))} ${excede.a.unidade || ''} disponíveis.`);
+    comBotao($('#gGuardar'), async () => {
+      try {
+        const ref = doc(collection(db, 'guias'));
+        await runTransaction(db, async (tx) => {
+          const mov = {};
+          for (const l of linhas) (mov[l.a.id] = mov[l.a.id] || { resGuias: 0 }).resGuias += l.qtd;
+          const aplicar = await aplicarReservas(tx, mov, new Set(Object.keys(mov)));
+          tx.set(ref, {
+            numero: '', codigoAT: '', estado: 'Por comunicar', armazem: 99,
+            clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif, morada: cliente.morada, codigoPostal: cliente.cp, localidade: cliente.loc,
+            folhaId: folha ? folha.id : '', folhaNumero: folha ? folha.numero : '',
+            tecnicoUid: tecUid, tecnicoNome: tecNome, viatura, dataSaida: Timestamp.fromDate(saida),
+            linhas: linhas.map((l) => ({ id: novoId(), artigoId: l.a.id, ref: l.a.ref, design: l.a.design, unidade: l.a.unidade || '', qtd: l.qtd, consumido: 0, devolvido: 0, consumos: [] })),
+            historico: [{ estado: 'Por comunicar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
+            criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email,
+          });
+          aplicar();
+        });
+        toast('Guia criada. Aguarda comunicação à AT.', 'ok', 5000);
+        lista = [];
+        history.replaceState({}, '', pagina('guias', { id: ref.id }));
+        abrirDetalhe(ref.id);
+      } catch (e) { erro(['stock', 'artigo'].includes(e.code) ? e.message : erroFirebase(e)); }
+    });
+  };
+}
+function novoId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+rota();
+
+</script>
+</body>
+</html>

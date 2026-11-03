@@ -199,11 +199,13 @@ const ICONES = {
   agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
   folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
   clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
   utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
 };
 const MENU = [
   { id: 'agenda', label: 'Agenda', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'folhas', label: 'Folhas de obra', curto: 'Folhas', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
   { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
 ];
@@ -277,6 +279,53 @@ async function pesquisarClientes(texto, { soAtivos = false } = {}) {
     .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
     .filter((c) => !soAtivos || c.ativo !== false)
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+}
+
+// ---------- Artigos (stock do armazém da climatização, vindo do PHC) ----------
+// disponível = stock − reservado em FO abertas no PHC − ainda em guias abertas no PHC
+//              − reservado em folhas da plataforma − em guias abertas da plataforma
+const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+function disponivel(a) {
+  return r3((a.stock || 0) - (a.reservadoPHC || 0) - (a.emGuiasPHC || 0) - (a.resFolhas || 0) - (a.resGuias || 0));
+}
+const fmtQtd = (n) => r3(n).toLocaleString('pt-PT', { maximumFractionDigits: 3 });
+async function pesquisarArtigos(texto) {
+  const palavras = normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  if (!palavras.length) return [];
+  const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+  const snap = await getDocs(query(collection(db, 'artigos'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((a) => a.ativo !== false && palavras.every((p) => (a.pesquisa || []).includes(p)))
+    .sort((a, b) => disponivel(b) - disponivel(a) || (a.ref || '').localeCompare(b.ref || ''));
+}
+// Acumula movimentos de reserva por artigo e aplica-os dentro de uma transação (lê primeiro, escreve depois).
+// mov: { artigoId: { resFolhas: +x, resGuias: -y } }; exigeDisponivel: artigos que não podem ficar negativos.
+async function aplicarReservas(tx, mov, exigeDisponivel = new Set()) {
+  const ids = Object.keys(mov);
+  const docs = {};
+  for (const id of ids) {
+    const s = await tx.get(doc(db, 'artigos', id));
+    if (!s.exists()) throw Object.assign(new Error('Artigo não encontrado: ' + id), { code: 'artigo' });
+    docs[id] = s.data();
+  }
+  return () => {
+    for (const id of ids) {
+      const a = docs[id];
+      const novo = { resFolhas: r3((a.resFolhas || 0) + (mov[id].resFolhas || 0)), resGuias: r3((a.resGuias || 0) + (mov[id].resGuias || 0)) };
+      if (novo.resFolhas < 0) novo.resFolhas = 0;
+      if (novo.resGuias < 0) novo.resGuias = 0;
+      if (exigeDisponivel.has(id) && disponivel({ ...a, ...novo }) < -0.0005) {
+        throw Object.assign(new Error(`Sem stock disponível de ${a.ref} (disponível: ${fmtQtd(disponivel(a))} ${a.unidade || ''}).`), { code: 'stock' });
+      }
+      tx.update(doc(db, 'artigos', id), { ...novo, resAtualizadoEm: serverTimestamp() });
+    }
+  };
+}
+// Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
+function movLibertarFolha(f) {
+  const mov = {};
+  for (const m of f.materiais || []) if (m.artigoId) (mov[m.artigoId] = mov[m.artigoId] || { resFolhas: 0 }).resFolhas -= Number(m.qtd) || 0;
+  return mov;
 }
 
 // Lista de técnicos ativos (coleção pequena; lida uma vez por página).

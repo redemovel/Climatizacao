@@ -135,6 +135,24 @@ function gerar() {
     ['col4', 'Equipa externa — ajudante', 'Ajudante', ''], ['col5', 'Aprendiz', 'Aprendiz', '']]
     .forEach(([id, nome, funcao, uid]) => { db['colaboradores/' + id] = { nome, funcao, uid, externo: id === 'col4', ativo: true }; });
   db['colaboradores/col9'] = { nome: 'Antigo Colaborador', funcao: 'Técnico', uid: '', externo: false, ativo: false };
+  // artigos do armazém 99 (vindos do PHC pela PontePHC) — disponível = stock − reservadoPHC − emGuiasPHC − resFolhas − resGuias
+  db['artigos/TC14'] = { ref: 'TC14', design: 'Tubo cobre 1/4"', unidade: 'm', familia: 'Ar Condicionado', ativo: true, stock: 120, reservadoPHC: 10, emGuiasPHC: 0,
+    resFolhas: 0, resGuias: 50, origem: 'phc', pesquisa: ['tc', 'tc1', 'tc14', 'tu', 'tub', 'tubo', 'co', 'cob', 'cobr', 'cobre', '14'] };
+  db['artigos/TC14/privado/custo'] = { custo: 2.77 };
+  db['artigos/TC38'] = { ref: 'TC38', design: 'Tubo cobre 3/8"', unidade: 'm', familia: 'Ar Condicionado', ativo: true, stock: 80, reservadoPHC: 0, emGuiasPHC: 0,
+    origem: 'phc', pesquisa: ['tc', 'tc3', 'tc38', 'tu', 'tub', 'tubo', 'co', 'cob', 'cobr', 'cobre', '38'] };
+  db['artigos/SOLDESINFECTANTE'] = { ref: 'SOLDESINFECTANTE', design: 'Desinfectante Liquido', unidade: 'l', familia: 'Ar Condicionado', ativo: true, stock: 5, reservadoPHC: 4.5, emGuiasPHC: 0,
+    origem: 'phc', pesquisa: ['so', 'sol', 'sold', 'solde', 'soldes', 'soldesi', 'soldesin', 'soldesinf', 'de', 'des', 'desi', 'desin', 'desinf', 'desinfe', 'desinfec', 'desinfect', 'li', 'liq', 'liqu', 'liqui', 'liquid', 'liquido'] };
+  db['artigos/ANTIGO1'] = { ref: 'ANTIGO1', design: 'Tubo cobre antigo', unidade: 'm', ativo: false, stock: 0, origem: 'phc', pesquisa: ['tu', 'tub', 'tubo', 'co', 'cob', 'cobr', 'cobre'] };
+  db['listas/viaturas'] = { itens: ['AV-78-ER', 'BB-86-IN'] };
+  // guia comunicada (com código AT) do João para o cliente da fo003, com 50 m de tubo
+  const c3 = clientes[2];
+  db['guias/g1'] = { numero: '353/' + ano, codigoAT: '19948614006', estado: 'Comunicada', armazem: 99,
+    clienteId: c3.id, clienteNome: c3.nome, clienteNif: c3.nif, morada: c3.morada, codigoPostal: c3.cp, localidade: c3.loc,
+    folhaId: 'fo003', folhaNumero: `FO-${ano}-0003`, tecnicoUid: 'u-tec1', tecnicoNome: 'João Silva', viatura: 'BB-86-IN', dataSaida: ts(dia(0, 8)),
+    linhas: [{ id: 'l1', artigoId: 'TC14', ref: 'TC14', design: 'Tubo cobre 1/4"', unidade: 'm', qtd: 50, consumido: 0, devolvido: 0, consumos: [] }],
+    historico: [{ estado: 'Por comunicar', de: null, uid: 'u-bo', nome: 'Ana Ferreira', em: ts(dia(0, 7)) }, { estado: 'Comunicada', de: 'Por comunicar', uid: 'phc', nome: 'PHC (código AT)', em: ts(dia(0, 7)) }],
+    criadoEm: ts(dia(0, 7)), criadoPor: 'u-bo', criadoPorNome: 'Ana Ferreira' };
   db['contadores/folhas-' + ano] = { valor: F.length };
   return { db, users };
 }

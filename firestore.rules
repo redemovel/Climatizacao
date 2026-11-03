@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-03 — colaboradores nos registos de tempo; folha nova sempre «Por agendar»
+// Atualizado: 2026-11-03 (2) — Fase 3: artigos/stock do PHC, reservas, guias de transporte AC, viaturas
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -175,6 +175,58 @@ service cloud.firestore {
       allow read: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
       allow create, update: if eMaster() && colaboradorValido(request.resource.data);
       allow delete: if false;
+    }
+
+    // ---------- Artigos do armazém da climatização (escritos pela PontePHC) ----------
+    // A plataforma só mexe nas reservas: resFolhas (material em folhas não faturadas) e resGuias (material em guias abertas).
+    match /artigos/{id} {
+      allow read: if ativo();
+      allow update: if ativo() && perfil() in ['master', 'backoffice', 'tecnico']
+        && alterados().hasOnly(['resFolhas', 'resGuias', 'resAtualizadoEm'])
+        && request.resource.data.get('resFolhas', 0) is number && request.resource.data.get('resFolhas', 0) >= 0
+        && request.resource.data.get('resGuias', 0) is number && request.resource.data.get('resGuias', 0) >= 0;
+      allow create, delete: if false;
+      // preço de custo: só o Master
+      match /privado/{doc} {
+        allow read: if eMaster();
+        allow write: if false;
+      }
+    }
+
+    // ---------- Guias de Transporte AC (uma por viatura, destinatário = cliente) ----------
+    // Criadas «Por comunicar»; o código AT e o número vêm do PHC/GuiasAT pela PontePHC (fora destas regras).
+    function guiaValida(d) {
+      return d.clienteId is string && d.clienteNome is string && d.clienteNome.size() > 0
+        && d.tecnicoUid is string && d.tecnicoUid.size() > 0
+        && d.viatura is string && d.viatura.size() >= 6 && d.viatura.size() <= 12
+        && d.estado in ['Por comunicar', 'Comunicada', 'Fechada', 'Anulada']
+        && d.dataSaida is timestamp
+        && d.linhas is list && d.linhas.size() >= 1 && d.linhas.size() <= 100
+        && d.historico is list && d.historico.size() <= 200;
+    }
+    match /guias/{id} {
+      allow get, list: if eStaff() || (eTecnico() && resource.data.tecnicoUid == request.auth.uid);
+      allow create: if (eStaff() || (eTecnico() && request.resource.data.tecnicoUid == request.auth.uid))
+        && guiaValida(request.resource.data)
+        && request.resource.data.estado == 'Por comunicar'
+        && request.resource.data.codigoAT == '' && request.resource.data.numero == ''
+        && request.resource.data.criadoPor == request.auth.uid && request.resource.data.criadoEm == request.time;
+      allow update: if guiaValida(request.resource.data)
+        && !(resource.data.estado in ['Fechada', 'Anulada'])
+        && !alterados().hasAny(['codigoAT', 'numero', 'criadoEm', 'criadoPor', 'clienteId', 'dataSaida', 'viatura'])
+        && quemAlterouCerto()
+        && (request.resource.data.estado == resource.data.estado
+            || (resource.data.estado == 'Comunicada' && request.resource.data.estado == 'Fechada')
+            || (resource.data.estado == 'Por comunicar' && request.resource.data.estado == 'Anulada'))
+        && (eStaff() || (eTecnico() && resource.data.tecnicoUid == request.auth.uid
+            && alterados().hasOnly(['linhas', 'estado', 'historico', 'atualizadoEm', 'atualizadoPor'])));
+      allow delete: if false;
+    }
+
+    // ---------- Listas simples (ex.: viaturas): todos leem, só o Master altera ----------
+    match /listas/{id} {
+      allow read: if ativo();
+      allow write: if eMaster();
     }
 
     // ---------- Configuração (tabela de preço/hora da mão de obra): só o Master ----------

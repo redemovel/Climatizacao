@@ -250,6 +250,26 @@ open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\
 cod, out = ponte('/sincronizar')
 verifica(BD['contadores/folhas-2026']['valor'] == {'integerValue': '1800'}, 'contador nunca desce')
 
+# 5b) artigos do armazém da climatização (stock, reservado em FO abertas, em guias abertas; custo só no privado)
+arts = ['ref;design;unidade;familia;inactivo;stock;reservado;guias;custo;usrdata',
+        'TC14;Tubo cobre 1/4";m;Ar Condicionado;0;120;10;50;2.77;2026-11-01',
+        'AB/12;Abraçadeira 12 mm;un;Ar Condicionado;0;30;0;0;0.1;2026-11-01']
+open(os.path.join(d, 'artigos.csv'), 'w', encoding='utf-8').write('\n'.join(arts) + '\n')
+open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nImportarArtigos=1\nFonteTesteArtigos=artigos.csv\n')
+cod, out = ponte('/sincronizar')
+A = BD.get('artigos/TC14', {})
+verifica('2 artigos com alteracoes' in out and A.get('stock') == {'doubleValue': 120} and A.get('reservadoPHC') == {'doubleValue': 10} and A.get('emGuiasPHC') == {'doubleValue': 50}, 'artigos: stock, reservado e em guias ' + out[-200:])
+verifica('custo' not in json.dumps(A) and BD.get('artigos/TC14/privado/custo', {}).get('custo') == {'doubleValue': 2.77}, 'custo só no documento privado')
+verifica('artigos/AB~2F12' in BD and BD['artigos/AB~2F12']['ref'] == {'stringValue': 'AB/12'}, 'referência com «/» fica com id válido')
+verifica('tu' in json.dumps(A.get('pesquisa')) and 'cobre' in json.dumps(A.get('pesquisa')), 'pesquisa por referência e designação')
+n = len(PEDIDOS)
+cod, out = ponte('/sincronizar')
+verifica(not [p for p in PEDIDOS[n:] if p[0].endswith(':commit') and 'artigos/' in p[2]], 'sem alterações não volta a enviar artigos')
+arts[1] = arts[1].replace(';120;10;50;', ';100;10;50;').replace('2026-11-01', datetime.date.today().isoformat())
+open(os.path.join(d, 'artigos.csv'), 'w', encoding='utf-8').write('\n'.join(arts) + '\n')
+cod, out = ponte('/sincronizar')
+verifica(BD['artigos/TC14']['stock'] == {'doubleValue': 100} and '1 artigos com alteracoes' in out, 'stock alterado → só esse artigo reenviado')
+
 # 6) limite diário de escritas
 open(os.path.join(d, 'estado_escritas.txt'), 'w').write(datetime.date.today().isoformat() + '|100')
 os.remove(os.path.join(d, 'estado_clientes.txt'))

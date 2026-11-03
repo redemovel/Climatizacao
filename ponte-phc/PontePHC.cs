@@ -717,7 +717,7 @@ interface IFonteClientes
     int Total();
 }
 
-class PhcSql : IFonteClientes, IFonteFolhas
+class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
 {
     Config cfg;
     HashSet<string> colunas;
@@ -1126,6 +1126,69 @@ class PhcSql : IFonteClientes, IFonteFolhas
     }
 
     // Diagnostico: mostra um dossier interno completo (campos preenchidos de bo/bo2/bo3 e linhas bi) e um resumo da serie.
+    // ---- artigos do armazem da climatizacao (ArmazemAC, por omissao 99)
+    int ArmazemAC { get { return cfg.GetInt("ArmazemAC", 99); } }
+
+    public List<string> ArtigosAlterados(DateTime? desde)
+    {
+        List<string> l = new List<string>();
+        HashSet<string> vistos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string sqlTxt = desde.HasValue
+            ? "SELECT DISTINCT x.ref FROM (" +
+              " SELECT st.ref FROM st WITH (NOLOCK) JOIN sa WITH (NOLOCK) ON sa.ref = st.ref AND sa.armazem = @a WHERE st.usrdata >= @d OR sa.usrdata >= @d" +
+              " UNION SELECT bi.ref FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp" +
+              "   WHERE bo.ndos IN (114, 111) AND bi.armazem = @a AND bi.ref <> '' AND (bo.usrdata >= @d OR bi.usrdata >= @d)" +
+              ") x"
+            : "SELECT st.ref FROM st WITH (NOLOCK) JOIN sa WITH (NOLOCK) ON sa.ref = st.ref AND sa.armazem = @a WHERE st.inactivo = 0";
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand(sqlTxt, cn))
+        {
+            c.CommandTimeout = 120;
+            c.Parameters.AddWithValue("@a", ArmazemAC);
+            if (desde.HasValue) c.Parameters.AddWithValue("@d", desde.Value.Date);
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) { string x = Valor(r[0]); if (x != "" && vistos.Add(x)) l.Add(x); }
+        }
+        return l;
+    }
+
+    // Stock no armazem, reservado em FO abertas (114) e ainda em Guias abertas (111) sem passar para FO.
+    public List<ArtigoPHC> LerArtigos(List<string> refs)
+    {
+        List<ArtigoPHC> l = new List<ArtigoPHC>();
+        if (refs.Count == 0) return l;
+        using (SqlConnection cn = Abrir())
+            for (int i = 0; i < refs.Count; i += 100)
+            {
+                List<string> parte = refs.GetRange(i, Math.Min(100, refs.Count - i));
+                StringBuilder ps = new StringBuilder();
+                using (SqlCommand c = new SqlCommand())
+                {
+                    c.Connection = cn;
+                    c.CommandTimeout = 120;
+                    for (int k = 0; k < parte.Count; k++) { if (k > 0) ps.Append(','); ps.Append("@r" + k); c.Parameters.AddWithValue("@r" + k, parte[k]); }
+                    c.Parameters.AddWithValue("@a", ArmazemAC);
+                    c.CommandText = "SELECT st.ref, st.design, st.unidade, st.faminome, st.inactivo, st.epcusto, ISNULL(sa.stock, 0) AS stock, " +
+                        "ISNULL((SELECT SUM(bi.qtt) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
+                        "  WHERE bi.ref = st.ref AND bo.ndos = 114 AND bo.fechada = 0 AND bi.armazem = @a), 0) AS reservado, " +
+                        "ISNULL((SELECT SUM(bi.qtt) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
+                        "  WHERE bi.ref = st.ref AND bo.ndos = 111 AND bo.fechada = 0 AND bi.armazem = @a AND ISNULL(bi.fno, 0) = 0), 0) AS emguias " +
+                        "FROM st WITH (NOLOCK) LEFT JOIN sa WITH (NOLOCK) ON sa.ref = st.ref AND sa.armazem = @a WHERE st.ref IN (" + ps + ")";
+                    using (SqlDataReader r = c.ExecuteReader())
+                        while (r.Read())
+                        {
+                            ArtigoPHC a = new ArtigoPHC();
+                            a.Ref = Valor(r["ref"]); a.Design = Valor(r["design"]); a.Unidade = Valor(r["unidade"]); a.Familia = Valor(r["faminome"]);
+                            a.Inativo = Valor(r["inactivo"]) == "1" || Valor(r["inactivo"]).ToLower() == "true";
+                            a.Stock = Dec(r["stock"]); a.Reservado = Dec(r["reservado"]); a.EmGuias = Dec(r["emguias"]); a.Custo = Dec(r["epcusto"]);
+                            l.Add(a);
+                        }
+                }
+            }
+        return l;
+    }
+    static decimal Dec(object o) { return o == null || o == DBNull.Value ? 0m : Math.Round(Convert.ToDecimal(o), 3); }
+
     // Diagnostico de stock (so leitura): ficha do artigo, stock por armazem e quantidades em dossiers abertos.
     public List<string> VerArtigo(string referencia)
     {
@@ -1593,6 +1656,62 @@ interface IFonteFolhas
 {
     List<FolhaPHC> FolhasSeguintes(Marca desde, int max);
     long MaiorNumero(int ano);
+}
+
+// ---------------------------------------------------------------- artigos e stock (armazem da climatizacao)
+class ArtigoPHC
+{
+    public string Ref = "", Design = "", Unidade = "", Familia = "";
+    public bool Inativo;
+    public decimal Stock, Reservado, EmGuias, Custo;
+    // Identifica o estado enviado (para so reenviar quando muda).
+    public string Assinatura()
+    {
+        return string.Join("|", new string[] { Design, Unidade, Familia, Inativo ? "1" : "0",
+            Stock.ToString(CultureInfo.InvariantCulture), Reservado.ToString(CultureInfo.InvariantCulture),
+            EmGuias.ToString(CultureInfo.InvariantCulture), Custo.ToString(CultureInfo.InvariantCulture) });
+    }
+}
+
+interface IFonteArtigos
+{
+    // Referencias com alteracoes (ficha, stock ou linhas de FO/guias) desde a data; desde == null: todas as do armazem.
+    List<string> ArtigosAlterados(DateTime? desde);
+    List<ArtigoPHC> LerArtigos(List<string> refs);
+}
+
+// So para testes: artigos num CSV (ref;design;unidade;familia;inactivo;stock;reservado;guias;custo;usrdata).
+class FonteCsvArtigos : IFonteArtigos
+{
+    List<ArtigoPHC> todos = new List<ArtigoPHC>();
+    Dictionary<string, DateTime> alt = new Dictionary<string, DateTime>();
+    public FonteCsvArtigos(string f)
+    {
+        string[] ls = File.ReadAllLines(f, Encoding.UTF8);
+        for (int i = 1; i < ls.Length; i++)
+        {
+            string[] v = ls[i].Split(';');
+            if (v.Length < 10) continue;
+            ArtigoPHC a = new ArtigoPHC();
+            a.Ref = v[0]; a.Design = v[1]; a.Unidade = v[2]; a.Familia = v[3]; a.Inativo = v[4] == "1";
+            a.Stock = decimal.Parse(v[5], CultureInfo.InvariantCulture); a.Reservado = decimal.Parse(v[6], CultureInfo.InvariantCulture);
+            a.EmGuias = decimal.Parse(v[7], CultureInfo.InvariantCulture); a.Custo = decimal.Parse(v[8], CultureInfo.InvariantCulture);
+            todos.Add(a);
+            alt[a.Ref] = DateTime.ParseExact(v[9], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+    }
+    public List<string> ArtigosAlterados(DateTime? desde)
+    {
+        List<string> l = new List<string>();
+        foreach (ArtigoPHC a in todos) if (!desde.HasValue || alt[a.Ref] >= desde.Value) l.Add(a.Ref);
+        return l;
+    }
+    public List<ArtigoPHC> LerArtigos(List<string> refs)
+    {
+        List<ArtigoPHC> l = new List<ArtigoPHC>();
+        foreach (ArtigoPHC a in todos) if (refs.Contains(a.Ref)) l.Add(a);
+        return l;
+    }
 }
 
 // So para testes: folhas num CSV (separador ;) e linhas noutro.
@@ -2110,6 +2229,99 @@ class Motor
         return enviados;
     }
 
+    // ---- artigos: PHC -> artigos/{id} (sem precos) + artigos/{id}/privado/custo (so Master)
+    IFonteArtigos fonteArtigos;
+    IFonteArtigos FonteArtigos
+    {
+        get
+        {
+            if (fonteArtigos == null)
+            {
+                string teste = cfg.Caminho("FonteTesteArtigos");
+                fonteArtigos = teste != "" ? (IFonteArtigos)new FonteCsvArtigos(teste) : (IFonteArtigos)new PhcSql(cfg);
+            }
+            return fonteArtigos;
+        }
+    }
+
+    // Id do documento: a referencia, com os caracteres que o Firestore nao aceita trocados por ~XX.
+    public static string IdArtigo(string r)
+    {
+        StringBuilder sb = new StringBuilder();
+        foreach (char ch in r.Trim())
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.') sb.Append(ch);
+            else sb.Append('~').Append(((int)ch).ToString("X2"));
+        string id = sb.ToString();
+        return id == "." || id == ".." || id == "" ? "~" + id : id;
+    }
+
+    public int CicloArtigos()
+    {
+        if (!cfg.GetBool("ImportarArtigos", false)) return 0;
+        bool sim = cfg.Simular || cfg.GetBool("SimularArtigos", false);
+        int enviados = 0;
+        try
+        {
+            if (fs == null && !sim) fs = new Firestore(cfg);
+            string fMarcaA = Path.Combine(cfg.Pasta, "estado_artigos.txt");
+            string fCache = Path.Combine(cfg.Pasta, "estado_artigos_enviados.txt");
+            DateTime? desde = null;
+            if (File.Exists(fMarcaA)) desde = DateTime.ParseExact(File.ReadAllText(fMarcaA).Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture);
+            DateTime inicio = DateTime.Today;
+            Dictionary<string, string> cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(fCache))
+                foreach (string ln in File.ReadAllLines(fCache, Encoding.UTF8)) { int k = ln.IndexOf('\t'); if (k > 0) cache[ln.Substring(0, k)] = ln.Substring(k + 1); }
+            List<string> refs = FonteArtigos.ArtigosAlterados(desde);
+            int limite = cfg.GetInt("MaxEscritasPorDia", 15000);
+            bool completo = true;
+            for (int i = 0; i < refs.Count; i += 200)
+            {
+                List<ArtigoPHC> l = FonteArtigos.LerArtigos(refs.GetRange(i, Math.Min(200, refs.Count - i)));
+                List<Documento> docs = new List<Documento>();
+                List<ArtigoPHC> mudados = new List<ArtigoPHC>();
+                foreach (ArtigoPHC a in l)
+                {
+                    string ass;
+                    if (cache.TryGetValue(a.Ref, out ass) && ass == a.Assinatura()) continue;
+                    mudados.Add(a);
+                    Documento d = new Documento();
+                    d.Id = IdArtigo(a.Ref);
+                    d.Texto("ref", a.Ref); d.Texto("design", a.Design); d.Texto("unidade", a.Unidade); d.Texto("familia", a.Familia);
+                    d.Bool("ativo", !a.Inativo);
+                    d.Decimal("stock", a.Stock); d.Decimal("reservadoPHC", a.Reservado); d.Decimal("emGuiasPHC", a.EmGuias);
+                    d.Lista("pesquisa", Regras.Tokens(a.Ref, a.Design));
+                    d.Texto("origem", "phc");
+                    docs.Add(d);
+                    Documento p = new Documento();
+                    p.Id = d.Id + "/privado/custo";
+                    p.Decimal("custo", a.Custo);
+                    docs.Add(p);
+                }
+                if (docs.Count == 0) continue;
+                if (EscritasHoje() + docs.Count > limite) { Log.Info("Limite diario de escritas atingido; os artigos continuam amanha."); completo = false; break; }
+                if (sim) Log.Info("SIMULACAO: enviaria " + mudados.Count + " artigos (ex.: " + mudados[0].Ref + " stock " + mudados[0].Stock + ", reservado " + mudados[0].Reservado + ", em guias " + mudados[0].EmGuias + ")");
+                else
+                {
+                    fs.Gravar("artigos", docs); ContarEscritas(docs.Count);
+                    foreach (ArtigoPHC a in mudados) cache[a.Ref] = a.Assinatura();
+                    StringBuilder sb = new StringBuilder();
+                    foreach (KeyValuePair<string, string> kv in cache) sb.Append(kv.Key).Append('\t').Append(kv.Value).Append("\r\n");
+                    File.WriteAllText(fCache, sb.ToString(), Encoding.UTF8);
+                }
+                enviados += mudados.Count;
+            }
+            // a marca so avanca quando tudo foi enviado (o dia de hoje volta a ser visto no ciclo seguinte; a cache evita reenvios)
+            if (!sim && completo) File.WriteAllText(fMarcaA, inicio.ToString("yyyy-MM-dd"));
+            if (enviados > 0) Log.Info((sim ? "SIMULACAO: " : "") + enviados + " artigos " + (sim ? "seriam enviados." : "enviados (stock / reservas)."));
+        }
+        catch (Exception e)
+        {
+            Log.Erro("Falha na sincronizacao de artigos: " + e.GetType().Name + ": " + e.Message);
+            ultimoErro = e.Message;
+        }
+        return enviados;
+    }
+
     void AcertarContador(int ano)
     {
         long maior = FonteFolhas.MaiorNumero(ano);
@@ -2313,6 +2525,7 @@ class Servico : ServiceBase
                 {
                     m.Ciclo();
                     m.CicloFolhas();
+                    m.CicloArtigos();
                     for (int i = 0; i < intervalo * 2 && !parar; i++) Thread.Sleep(500);
                 }
             }
@@ -2519,6 +2732,8 @@ static class Programa
                 m.Preparar();
                 int n = m.Ciclo();
                 int nf = m.CicloFolhas();
+                int na = m.CicloArtigos();
+                if (cfg.GetBool("ImportarArtigos", false)) Console.WriteLine(((cfg.Simular || cfg.GetBool("SimularArtigos", false)) ? "SIMULACAO: " : "") + na + " artigos com alteracoes.");
                 bool simF = cfg.Simular || cfg.GetBool("SimularFolhas", false);
                 if (cfg.GetBool("ImportarFolhas", false)) Console.WriteLine((simF ? "SIMULACAO: " : "") + nf + " folhas de obra " + (simF ? "seriam enviadas." : "enviadas."));
                 Console.WriteLine((cfg.Simular ? "SIMULACAO: " : "") + n + " clientes " + (cfg.Simular ? "seriam enviados (nada enviado; veja Simular no .ini)." : "enviados."));

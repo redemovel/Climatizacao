@@ -25,17 +25,25 @@ function equipaTexto(t) {
 function novoIdItem() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 // Altera a folha numa transação (vários técnicos/backoffice podem estar a escrever ao mesmo tempo).
-async function alterarTrabalho(fn, msgOk) {
+// fn(d, guia) devolve as alterações da folha, ou { alt, mov, exige, guiaId, guiaAlt } quando mexe em stock/guias.
+async function alterarTrabalho(fn, msgOk, { guiaId = null } = {}) {
   const ref = doc(db, 'folhas', atual.id);
   try {
     const res = await runTransaction(db, async (tx) => {
       const s = await tx.get(ref);
       const d = s.data();
-      const alt = fn(d);
-      if (!alt) return null;
+      let guia = null;
+      if (guiaId) { const g = await tx.get(doc(db, 'guias', guiaId)); guia = g.exists() ? { id: g.id, ...g.data() } : null; }
+      let r = fn(d, guia);
+      if (!r) return null;
+      if (!r.alt) r = { alt: r };
+      const aplicar = r.mov && Object.keys(r.mov).length ? await aplicarReservas(tx, r.mov, r.exige || new Set()) : null;
+      const alt = r.alt;
       alt.atualizadoEm = serverTimestamp();
       alt.atualizadoPor = sessao.uid;
       tx.update(ref, alt);
+      if (r.guiaAlt && guia) tx.update(doc(db, 'guias', guia.id), { ...r.guiaAlt, atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+      if (aplicar) aplicar();
       return { ...d, ...alt, atualizadoEm: Timestamp.now() };
     });
     if (!res) return false;
@@ -45,7 +53,7 @@ async function alterarTrabalho(fn, msgOk) {
     if (msgOk) toast(msgOk, 'ok');
     renderDetalhe();
     return true;
-  } catch (e) { toast(erroFirebase(e), 'erro', 5000); return false; }
+  } catch (e) { toast(['stock', 'artigo', 'guia'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); return false; }
 }
 
 // ---------- HTML dos cartões (chamado por renderDetalhe) ----------
@@ -70,8 +78,10 @@ function htmlTrabalho(f) {
     </div>
     <div class="cartao" id="cartaoMateriais">
       <div class="cab-cartao"><h3>Material aplicado</h3>${pode ? '<button class="btn btn-peq btn-primario" id="btnMaterial">+ Material</button>' : ''}</div>
+      ${pode ? `<div class="acoes-mat"><button class="btn btn-peq" id="btnImportarGuia">Importar da guia</button>
+        <a class="btn btn-peq" id="btnNovaGuia" href="${pagina('guias', { nova: 1, folha: f.id })}">Nova guia de transporte</a></div>` : ''}
       ${mats.length ? `<ul class="hist">${mats.map((m) => `
-        <li><b>${esc(String(m.qtd).replace('.', ','))} ${esc(m.unidade || '')}</b><span>${esc(m.descricao)}${m.ref ? `<br><span class="muted">${esc(m.ref)}</span>` : ''}</span>
+        <li><b>${esc(fmtQtd(m.qtd))} ${esc(m.unidade || '')}</b><span>${esc(m.descricao)}${m.ref ? `<br><span class="muted">${esc(m.ref)}${m.guiaNumero ? ' · guia ' + esc(m.guiaNumero) : m.artigoId ? ' · do stock' : ' · fora do stock'}</span>` : ''}</span>
           <span class="muted">${esc(m.nome || '')}${podeApagar(m) ? ` <button class="lixo" data-apagar-mat="${esc(m.id)}" aria-label="Apagar">✕</button>` : ''}</span></li>`).join('')}</ul>`
         : '<p class="muted" style="margin:0">Sem material registado.</p>'}
     </div>
@@ -101,9 +111,23 @@ function ligarTrabalho() {
     if (!(await confirmar('Apagar este registo de tempo?', { ok: 'Apagar', perigo: true }))) return;
     alterarTrabalho((d) => ({ tempos: (d.tempos || []).filter((t) => t.id !== b.dataset.apagarTempo) }), 'Tempo apagado.');
   });
+  if ($('#btnImportarGuia')) $('#btnImportarGuia').onclick = () => comBotao($('#btnImportarGuia'), importarDaGuia);
   $$('[data-apagar-mat]').forEach((b) => b.onclick = async () => {
-    if (!(await confirmar('Apagar este material?', { ok: 'Apagar', perigo: true }))) return;
-    alterarTrabalho((d) => ({ materiais: (d.materiais || []).filter((m) => m.id !== b.dataset.apagarMat) }), 'Material apagado.');
+    const m0 = (atual.materiais || []).find((m) => m.id === b.dataset.apagarMat);
+    if (!m0) return;
+    if (!(await confirmar(m0.guiaId ? 'Apagar este material? Volta a ficar disponível na guia.' : 'Apagar este material?', { ok: 'Apagar', perigo: true }))) return;
+    alterarTrabalho((d, guia) => {
+      const m = (d.materiais || []).find((x) => x.id === m0.id);
+      if (!m) return null;
+      const r = { alt: { materiais: (d.materiais || []).filter((x) => x.id !== m.id) }, mov: {} };
+      if (m.artigoId) {
+        const volta = guia && guia.estado === 'Comunicada';   // guia ainda aberta: o material volta para a guia
+        r.mov[m.artigoId] = { resFolhas: -m.qtd, resGuias: volta ? m.qtd : 0 };
+        if (volta) r.guiaAlt = { linhas: guia.linhas.map((l) => l.id !== m.guiaLinha ? l
+          : { ...l, consumido: r3((l.consumido || 0) - m.qtd), consumos: (l.consumos || []).filter((c) => c.materialId !== m.id) }) };
+      }
+      return r;
+    }, 'Material apagado.', { guiaId: m0.guiaId || null });
   });
   $$('[data-tarefa]').forEach((c) => c.onchange = () => {
     const t = c.dataset.tarefa, v = c.checked;
@@ -183,8 +207,13 @@ async function formTempo() {
 }
 
 function formMaterial() {
+  let artigo = null;
   const c = abrirModal('Registar material', `
-    <label class="campo"><span>Descrição *</span><input id="mDesc" maxlength="200" placeholder="Ex.: Tubo cobre 1/4&quot;"></label>
+    <label class="campo"><span>Procurar no stock (referência ou nome)</span>
+      <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Ex.: tubo cobre 1/4"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
+    <div id="mRes"></div>
+    <div id="mEscolhido"></div>
+    <label class="campo"><span>Descrição *</span><input id="mDesc" maxlength="200" placeholder="Ou escreva, se não for material do stock"></label>
     <label class="campo"><span>Referência</span><input id="mRef" maxlength="60" placeholder="Opcional" autocomplete="off"></label>
     <div class="grelha-2">
       <label class="campo"><span>Quantidade *</span><input id="mQtd" type="number" inputmode="decimal" min="0" step="any"></label>
@@ -192,21 +221,103 @@ function formMaterial() {
     </div>
     <div class="msg-erro" id="mErro"></div>
     <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="mGuardar">Guardar</button></div>`);
+  const procurar = () => comBotao($('#mProcBtn', c), async () => {
+    const t = $('#mProc', c).value.trim();
+    if (t.length < 2) return;
+    try {
+      const l = await pesquisarArtigos(t);
+      $('#mRes', c).innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
+        <button type="button" class="artigo-op" data-i="${i}"><b>${esc(x.ref)}</b> ${esc(x.design)}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`
+        : '<p class="muted">Nenhum artigo encontrado.</p>';
+      $$('.artigo-op', c).forEach((bt) => bt.onclick = () => {
+        artigo = l[+bt.dataset.i];
+        $('#mRes', c).innerHTML = '';
+        $('#mDesc', c).value = artigo.design; $('#mRef', c).value = artigo.ref;
+        $('#mDesc', c).disabled = true; $('#mRef', c).disabled = true;
+        const un = $('#mUn', c);
+        if (artigo.unidade && ![...un.options].some((o) => o.value === artigo.unidade)) un.insertAdjacentHTML('beforeend', `<option>${esc(artigo.unidade)}</option>`);
+        if (artigo.unidade) un.value = artigo.unidade;
+        un.disabled = true;
+        $('#mEscolhido', c).innerHTML = `<p class="stock-info" id="mDisp">Stock ${esc(fmtQtd(artigo.stock))} · disponível <b>${esc(fmtQtd(disponivel(artigo)))} ${esc(artigo.unidade || '')}</b>
+          <button type="button" class="btn btn-peq" id="mOutro">Outro</button></p>`;
+        $('#mOutro', c).onclick = () => { artigo = null; $('#mEscolhido', c).innerHTML = ''; ['#mDesc', '#mRef', '#mUn'].forEach((k) => { $(k, c).disabled = false; }); $('#mDesc', c).value = ''; $('#mRef', c).value = ''; };
+        $('#mQtd', c).focus();
+      });
+    } catch (e) { toast(erroFirebase(e), 'erro'); }
+  });
+  $('#mProcBtn', c).onclick = procurar;
+  $('#mProc', c).onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); procurar(); } };
   $('#mGuardar', c).onclick = () => {
     const erro = (m) => { $('#mErro', c).textContent = m; };
     const descricao = $('#mDesc', c).value.trim();
-    const qtd = Number(String($('#mQtd', c).value).replace(',', '.'));
+    const qtd = r3(String($('#mQtd', c).value).replace(',', '.'));
     if (descricao.length < 2) return erro('Indique a descrição do material.');
     if (!(qtd > 0)) return erro('Indique a quantidade.');
+    if (artigo && qtd > disponivel(artigo) + 0.0005) return erro(`Só há ${fmtQtd(disponivel(artigo))} ${artigo.unidade || ''} disponíveis.`);
     const m = { id: novoIdItem(), descricao, ref: $('#mRef', c).value.trim(), qtd, unidade: $('#mUn', c).value, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+    if (artigo) m.artigoId = artigo.id;
     comBotao($('#mGuardar', c), async () => {
       if (await alterarTrabalho((d) => {
         if ((d.materiais || []).length >= 300) { erro('Limite de linhas atingido.'); return null; }
-        return { materiais: [...(d.materiais || []), m] };
+        const alt = { materiais: [...(d.materiais || []), m] };
+        return artigo ? { alt, mov: { [artigo.id]: { resFolhas: qtd } }, exige: new Set([artigo.id]) } : alt;
       }, 'Material registado.')) fecharModal();
     });
   };
 }
+
+// ---------- Importar da guia de transporte: só o que foi gasto passa para a folha ----------
+async function importarDaGuia() {
+  const f = atual;
+  const c0 = [where('clienteId', '==', f.clienteId), where('estado', '==', 'Comunicada')];
+  if (tecnico) c0.unshift(where('tecnicoUid', '==', sessao.uid));
+  let guias;
+  try {
+    const snap = await getDocs(query(collection(db, 'guias'), ...c0, limit(10)));
+    guias = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .filter((g) => (g.linhas || []).some((l) => saldoLinha(l) > 0.0005));
+  } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+  if (!guias.length) { toast('Não há guias comunicadas à AT com material por gastar para este cliente.', 'erro', 6000); return; }
+  const c = abrirModal('Importar da guia', `
+    <p class="muted" style="margin-top:0">Indique só o que foi gasto nesta obra. O resto fica na guia.</p>
+    ${guias.map((g) => `<div class="guia-imp">
+      <h3 style="margin:8px 0 4px">${esc(g.numero || 'Guia')} · ${esc(g.viatura || '')} · ${esc(fmtData(g.dataSaida))}</h3>
+      ${(g.linhas || []).filter((l) => saldoLinha(l) > 0.0005).map((l) => `
+        <label class="linha-imp"><span><b>${esc(l.ref)}</b> ${esc(l.design)}<br><span class="muted">levou ${esc(fmtQtd(l.qtd))} · por gastar ${esc(fmtQtd(saldoLinha(l)))} ${esc(l.unidade || '')}</span></span>
+          <input type="number" inputmode="decimal" min="0" step="any" max="${saldoLinha(l)}" data-g="${esc(g.id)}" data-l="${esc(l.id)}" placeholder="0"></label>`).join('')}
+    </div>`).join('')}
+    <div class="msg-erro" id="iErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="iOk">Importar</button></div>`);
+  $('#iOk', c).onclick = () => {
+    const erro = (m) => { $('#iErro', c).textContent = m; };
+    const pedidos = $$('input[data-g]', c).map((i) => ({ g: i.dataset.g, l: i.dataset.l, q: r3(String(i.value).replace(',', '.')) })).filter((x) => x.q > 0);
+    if (!pedidos.length) return erro('Indique a quantidade gasta em pelo menos uma linha.');
+    const porGuia = [...new Set(pedidos.map((p) => p.g))];
+    comBotao($('#iOk', c), async () => {
+      let ok = true;
+      for (const gid of porGuia) {   // uma transação por guia
+        ok = ok && await alterarTrabalho((d, guia) => {
+          if (!guia || guia.estado !== 'Comunicada') throw Object.assign(new Error('A guia já não está aberta.'), { code: 'guia' });
+          const novos = [], mov = {};
+          const linhas = guia.linhas.map((l) => {
+            const p = pedidos.find((x) => x.g === gid && x.l === l.id);
+            if (!p) return l;
+            if (p.q > saldoLinha(l) + 0.0005) throw Object.assign(new Error(`${l.ref}: só há ${fmtQtd(saldoLinha(l))} ${l.unidade || ''} por gastar na guia.`), { code: 'guia' });
+            const m = { id: novoIdItem(), descricao: l.design, ref: l.ref, qtd: p.q, unidade: l.unidade || '', artigoId: l.artigoId,
+              guiaId: guia.id, guiaNumero: guia.numero || '', guiaLinha: l.id, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+            novos.push(m);
+            const mv = (mov[l.artigoId] = mov[l.artigoId] || { resFolhas: 0, resGuias: 0 });
+            mv.resFolhas += p.q; mv.resGuias -= p.q;   // passa de «na guia» para «na folha»: o disponível não muda
+            return { ...l, consumido: r3((l.consumido || 0) + p.q), consumos: [...(l.consumos || []), { folhaId: atual.id, numero: d.numero, materialId: m.id, qtd: p.q }] };
+          });
+          return { alt: { materiais: [...(d.materiais || []), ...novos] }, mov, guiaAlt: { linhas } };
+        }, null, { guiaId: gid });
+      }
+      if (ok) { fecharModal(); toast('Material importado da guia.', 'ok'); }
+    });
+  };
+}
+function saldoLinha(l) { return r3((l.qtd || 0) - (l.consumido || 0) - (l.devolvido || 0)); }
 
 async function guardarRelatorio() {
   const txt = $('#relatorio').value.trim();
