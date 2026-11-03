@@ -1241,6 +1241,23 @@ class PhcSql : IFonteClientes, IFonteFolhas
         return l;
     }
 
+    // Linhas de Guias 111 ainda abertas: quanto levou, quanto ja passou para Folha de Obra (so leitura).
+    public List<string> GuiasAbertas()
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand("SELECT TOP 40 bo.obrano, bo.boano, bo.dataobra, bo.maquina, bo.nome, bi.ref, bi.design, bi.qtt, bi.qtt2, bi.fno, bi.nmdoc, bi.unidade " +
+            "FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
+            "WHERE bo.ndos = 111 AND bo.fechada = 0 AND bi.ref <> '' ORDER BY bo.dataobra DESC, bo.obrano DESC, bi.lordem", cn))
+        using (SqlDataReader r = c.ExecuteReader())
+            while (r.Read())
+                l.Add("GTAC " + Valor(r["obrano"]) + "/" + Valor(r["boano"]) + " " + Convert.ToDateTime(r["dataobra"]).ToString("yyyy-MM-dd") + " " + Valor(r["maquina"]) + " " + Valor(r["nome"]) +
+                      " | " + Valor(r["ref"]) + " " + Valor(r["design"]) + " | qtt " + Valor(r["qtt"]) + " qtt2 " + Valor(r["qtt2"]) + " " + Valor(r["unidade"]) +
+                      " | " + (Valor(r["fno"]) == "" || Valor(r["fno"]) == "0" ? "sem FO" : Valor(r["nmdoc"]) + " " + Valor(r["fno"])));
+        if (l.Count == 0) l.Add("(nenhuma guia aberta com linhas)");
+        return l;
+    }
+
     // Armazens existentes e quantos artigos/stock tem cada um (so leitura).
     public List<string> ListaArmazens()
     {
@@ -2467,6 +2484,14 @@ static class Programa
                 Console.WriteLine("Nada foi enviado.");
                 return 0;
             }
+            if (cmd == "/guias-abertas")
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.GuiasAbertas()) Console.WriteLine(v);
+                Console.WriteLine("Nada foi enviado.");
+                return 0;
+            }
             if (cmd == "/armazens")
             {
                 PhcSql sql = m.Fonte as PhcSql;
@@ -2517,6 +2542,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /armazens          armazens e stock de cada um");
                 Console.WriteLine("  PontePHC.exe /procurar TEXTO    artigos com TEXTO na referencia ou designacao, e stock por armazem");
                 Console.WriteLine("  PontePHC.exe /guias             como sao usadas as Guias 111 (estado, origem, armazens, viaturas)");
+                Console.WriteLine("  PontePHC.exe /guias-abertas     linhas das Guias 111 abertas (levado e ja passado para FO)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
