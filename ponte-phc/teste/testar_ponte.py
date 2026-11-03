@@ -105,6 +105,11 @@ class G(http.server.BaseHTTPRequestHandler):
                         doc.setdefault(t['fieldPath'], {'arrayValue': {'values': []}})['arrayValue'].setdefault('values', []).extend(t['appendMissingElements']['values'])
                     else: doc[t['fieldPath']] = {'timestampValue': 'agora'}
             return self.responder(200, {'writeResults': [{}] * len(pedido['writes'])})
+        if self.path == f'/v1/projects/{PROJETO}/databases/(default)/documents:runQuery':
+            q = json.loads(corpo)['structuredQuery']; col = q['from'][0]['collectionId']; ff = q['where']['fieldFilter']
+            out = [{'document': {'name': f'projects/{PROJETO}/databases/(default)/documents/{k}', 'fields': v}}
+                   for k, v in BD.items() if k.startswith(col + '/') and k.count('/') == 1 and v.get(ff['field']['fieldPath']) == ff['value']][:q.get('limit', 100)]
+            return self.responder(200, out or [{'readTime': 'agora'}])
         if self.path == f'/v1/projects/{PROJETO}/databases/(default)/documents:batchGet':
             pedido = json.loads(corpo); out = []
             for n in pedido['documents']:
@@ -269,6 +274,33 @@ arts[1] = arts[1].replace(';120;10;50;', ';100;10;50;').replace('2026-11-01', da
 open(os.path.join(d, 'artigos.csv'), 'w', encoding='utf-8').write('\n'.join(arts) + '\n')
 cod, out = ponte('/sincronizar')
 verifica(BD['artigos/TC14']['stock'] == {'doubleValue': 100} and '1 artigos com alteracoes' in out, 'stock alterado → só esse artigo reenviado')
+
+# 5c) emails pedidos pela plataforma (relatório ao cliente), com a assinatura em anexo inline; modo de teste
+try:
+    from aiosmtpd.controller import Controller
+    import email as _email
+    REC2 = []
+    class H2:
+        async def handle_DATA(self, server, session, envelope):
+            REC2.append(envelope); return '250 OK'
+    ctl2 = Controller(H2(), hostname='127.0.0.1', port=10026); ctl2.start()
+    png = base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'0' * 20).decode()
+    BD['emails/e1'] = {'estado': sv('Pendente'), 'para': sv('cliente@exemplo.pt'), 'assunto': sv('Relatório FO-2026-1785'),
+                       'html': sv('<p>Relatório</p><img src="cid:assinatura">'), 'texto': sv('Relatório'), 'folhaId': sv('phc-2026-1785'),
+                       'assinaturaPng': sv('data:image/png;base64,' + png)}
+    BD['emails/e2'] = {'estado': sv('Enviado'), 'para': sv('outro@exemplo.pt'), 'assunto': sv('x'), 'html': sv('x'), 'folhaId': sv('')}
+    open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nEnviarEmails=1\nSmtpServidor=127.0.0.1\nSmtpPorta=10026\nEmailDe=noreply@arpuro.pt\nEmailsTeste=rbastos@arpuro.pt\n')
+    cod, out = ponte('/sincronizar')
+    ctl2.stop()
+    verifica('1 emails enviados' in out and len(REC2) == 1, 'só o email pendente é enviado ' + out[-200:])
+    if REC2:
+        m = _email.message_from_bytes(REC2[0].content)
+        verifica(REC2[0].rcpt_tos == ['rbastos@arpuro.pt'] and 'TESTE' in str(_email.header.make_header(_email.header.decode_header(m['Subject']))), 'modo de teste: vai para rbastos com aviso no assunto')
+        c2 = REC2[0].content.decode(errors='ignore'); verifica('assinatura' in c2.lower().split('content-id')[1][:40] if 'content-id' in c2.lower() else False, 'assinatura em anexo inline (cid) ' + c2[c2.lower().find('content-'):][:300])
+    verifica(BD['emails/e1']['estado'] == sv('Enviado') and BD['folhas/phc-2026-1785']['relatorioEnviado']['mapValue']['fields']['estado'] == sv('Enviado'), 'email e folha marcados como enviados')
+    cfg = open(os.path.join(d, 'PontePHC.ini')).read().replace('EnviarEmails=1', 'EnviarEmails=0'); open(os.path.join(d, 'PontePHC.ini'), 'w').write(cfg)
+except ImportError:
+    print('  (aiosmtpd não instalado: teste de emails ignorado)')
 
 # 6) limite diário de escritas
 open(os.path.join(d, 'estado_escritas.txt'), 'w').write(datetime.date.today().isoformat() + '|100')

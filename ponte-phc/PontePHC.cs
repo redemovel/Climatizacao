@@ -644,6 +644,30 @@ class Firestore
         return r;
     }
 
+    // Documentos de uma colecao com campo == valor (texto), ate 'max'.
+    public List<KeyValuePair<string, Dictionary<string, object>>> Consultar(string colecao, string campo, string valor, int max)
+    {
+        List<KeyValuePair<string, Dictionary<string, object>>> r = new List<KeyValuePair<string, Dictionary<string, object>>>();
+        string q = "{\"structuredQuery\":{\"from\":[{\"collectionId\":" + Json.Texto(colecao) + "}],\"where\":{\"fieldFilter\":{\"field\":{\"fieldPath\":" +
+                   Json.Texto(campo) + "},\"op\":\"EQUAL\",\"value\":{\"stringValue\":" + Json.Texto(valor) + "}}},\"limit\":" + max + "}}";
+        Resposta res = Https.Pedir(cfg, host, "POST", Base + ":runQuery", "application/json; charset=utf-8", q, conta.Token());
+        if (res.Estado != 200) throw new Exception("Firestore recusou a consulta de " + colecao + " (HTTP " + res.Estado + "): " + ContaServico.Resumir(res.Corpo));
+        List<object> l = Json.Ler(res.Corpo) as List<object>;
+        if (l == null) return r;
+        foreach (object o in l)
+        {
+            Dictionary<string, object> e = o as Dictionary<string, object>;
+            object dd;
+            if (e == null || !e.TryGetValue("document", out dd)) continue;
+            Dictionary<string, object> doc = (Dictionary<string, object>)dd;
+            string nome = Json.Campo(doc, "name");
+            object campos;
+            doc.TryGetValue("fields", out campos);
+            r.Add(new KeyValuePair<string, Dictionary<string, object>>(nome.Substring(nome.LastIndexOf('/') + 1), (campos as Dictionary<string, object>) ?? new Dictionary<string, object>()));
+        }
+        return r;
+    }
+
     // Valor simples de um campo devolvido pela API (stringValue, integerValue, booleanValue...).
     public static string Valor(Dictionary<string, object> campos, string k)
     {
@@ -1875,6 +1899,12 @@ static class Correio
 {
     public static void Enviar(Config cfg, string para, string assunto, string html, string texto)
     {
+        Enviar(cfg, para, assunto, html, texto, null);
+    }
+
+    // imagens: cid -> PNG (no html: <img src="cid:nome">)
+    public static void Enviar(Config cfg, string para, string assunto, string html, string texto, Dictionary<string, byte[]> imagens)
+    {
         string servidor = cfg.Get("SmtpServidor", "");
         if (servidor == "") throw new Exception("SmtpServidor em falta no PontePHC.ini.");
         string de = cfg.Get("EmailDe", "noreply@arpuro.pt");
@@ -1892,7 +1922,19 @@ static class Correio
             {
                 m.Body = texto;
                 m.IsBodyHtml = false;
-                if (html != null) m.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(html, Encoding.UTF8, "text/html"));
+                if (html != null)
+                {
+                    AlternateView av = AlternateView.CreateAlternateViewFromString(html, Encoding.UTF8, "text/html");
+                    if (imagens != null)
+                        foreach (KeyValuePair<string, byte[]> im in imagens)
+                        {
+                            LinkedResource lr = new LinkedResource(new MemoryStream(im.Value), "image/png");
+                            lr.ContentId = im.Key;
+                            lr.TransferEncoding = System.Net.Mime.TransferEncoding.Base64;
+                            av.LinkedResources.Add(lr);
+                        }
+                    m.AlternateViews.Add(av);
+                }
             }
             else { m.Body = html; m.IsBodyHtml = true; }
             using (SmtpClient c = new SmtpClient(servidor, cfg.GetInt("SmtpPorta", 25)))
@@ -2324,6 +2366,60 @@ class Motor
         return enviados;
     }
 
+    // ---- emails pedidos pela plataforma (ex.: relatorio ao cliente): emails/{id} com estado 'Pendente'
+    // EmailsTeste=endereco -> em vez do cliente, envia tudo para esse endereco (fase de testes).
+    public int CicloEmails()
+    {
+        if (!cfg.GetBool("EnviarEmails", false) || cfg.Simular) return 0;
+        int n = 0;
+        try
+        {
+            if (fs == null) fs = new Firestore(cfg);
+            foreach (KeyValuePair<string, Dictionary<string, object>> e in fs.Consultar("emails", "estado", "Pendente", 20))
+            {
+                Dictionary<string, object> c = e.Value;
+                string para = Firestore.Valor(c, "para"), assunto = Firestore.Valor(c, "assunto"), html = Firestore.Valor(c, "html"), texto = Firestore.Valor(c, "texto");
+                string folhaId = Firestore.Valor(c, "folhaId");
+                string teste = cfg.Get("EmailsTeste", "");
+                string destino = teste != "" ? teste : para;
+                if (teste != "") assunto = "[TESTE - seria para " + para + "] " + assunto;
+                Documento d = new Documento();
+                d.Id = e.Key;
+                string estado = "Enviado", erro = "";
+                try
+                {
+                    if (!Regex.IsMatch(para, @"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")) throw new Exception("endereco invalido: " + para);
+                    Dictionary<string, byte[]> imgs = new Dictionary<string, byte[]>();
+                    string ass = Firestore.Valor(c, "assinaturaPng");
+                    int k = ass.IndexOf("base64,");
+                    if (k > 0) imgs["assinatura"] = Convert.FromBase64String(ass.Substring(k + 7));
+                    Correio.Enviar(cfg, destino, assunto, html, texto == "" ? null : texto, imgs);
+                    Log.Info("Email enviado para " + destino + ": " + assunto);
+                    n++;
+                }
+                catch (Exception ex) { estado = "Erro"; erro = ex.Message; Log.Erro("Email " + e.Key + " nao enviado: " + ex.Message); }
+                d.Texto("estado", estado);
+                d.Texto("erro", erro);
+                d.Texto("enviadoPara", estado == "Enviado" ? destino : "");
+                d.Data("enviadoEm", DateTime.Now);
+                List<Documento> docs = new List<Documento> { d };
+                fs.Gravar("emails", docs);
+                if (folhaId != "")
+                {
+                    Documento f = new Documento();
+                    f.Id = folhaId;
+                    Documento m = new Documento();
+                    m.Texto("para", para); m.Texto("estado", estado); m.Texto("erro", erro); m.Texto("emailId", e.Key); m.Data("em", DateTime.Now);
+                    f.Mapa("relatorioEnviado", m);
+                    fs.Gravar("folhas", new List<Documento> { f });
+                }
+                ContarEscritas(folhaId != "" ? 2 : 1);
+            }
+        }
+        catch (Exception e) { Log.Erro("Falha nos emails: " + e.GetType().Name + ": " + e.Message); }
+        return n;
+    }
+
     void AcertarContador(int ano)
     {
         long maior = FonteFolhas.MaiorNumero(ano);
@@ -2528,6 +2624,7 @@ class Servico : ServiceBase
                     m.Ciclo();
                     m.CicloFolhas();
                     m.CicloArtigos();
+                    m.CicloEmails();
                     for (int i = 0; i < intervalo * 2 && !parar; i++) Thread.Sleep(500);
                 }
             }
@@ -2735,6 +2832,8 @@ static class Programa
                 int n = m.Ciclo();
                 int nf = m.CicloFolhas();
                 int na = m.CicloArtigos();
+                int ne = m.CicloEmails();
+                if (cfg.GetBool("EnviarEmails", false)) Console.WriteLine(ne + " emails enviados.");
                 if (cfg.GetBool("ImportarArtigos", false)) Console.WriteLine(((cfg.Simular || cfg.GetBool("SimularArtigos", false)) ? "SIMULACAO: " : "") + na + " artigos com alteracoes.");
                 bool simF = cfg.Simular || cfg.GetBool("SimularFolhas", false);
                 if (cfg.GetBool("ImportarFolhas", false)) Console.WriteLine((simF ? "SIMULACAO: " : "") + nf + " folhas de obra " + (simF ? "seriam enviadas." : "enviadas."));

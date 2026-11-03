@@ -238,6 +238,7 @@ function renderDetalhe() {
           <select id="selCorrigir"><option value="">—</option>${outros.map((e) => `<option>${esc(e)}</option>`).join('')}</select></label>` : ''}
       </div>
     </div>
+    ${htmlRelatorioCliente(f)}
     ${htmlTrabalho(f)}
     ${f.origem === 'phc' ? `<div class="cartao" id="cartaoPhc">
       <h3 style="margin-top:0">Registado no PHC</h3>
@@ -273,6 +274,7 @@ function renderDetalhe() {
   if (obsPorGravar !== null && $('#obs')) $('#obs').value = obsPorGravar;
   if (relPorGravar !== null && $('#relatorio')) $('#relatorio').value = relPorGravar;
   ligarTrabalho();
+  ligarRelatorioCliente();
   $$('[data-estado]').forEach((b) => b.onclick = () => mudarEstado(b.dataset.estado, b));
   if ($('#selCorrigir')) $('#selCorrigir').onchange = (ev) => { const e = ev.target.value; ev.target.value = ''; if (e) mudarEstado(e, null); };
   if ($('#btnObs')) $('#btnObs').onclick = () => comBotao($('#btnObs'), guardarObs);
@@ -330,6 +332,7 @@ function pedirTexto(titulo, rotulo) {
 async function mudarEstado(novo, btn) {
   const f = atual;
   const extra = {};
+  let enviarPara = '';
   if (novo === 'Agendada' && (!f.tecnicoUid || !f.dataPrevista)) {
     toast('Indique o técnico e a data para agendar.', 'erro');
     abrirForm(atual, null, { agendarDepois: true });
@@ -344,6 +347,8 @@ async function mudarEstado(novo, btn) {
     // fim do trabalho no local: relatório + assinatura do cliente
     const c = await pedirConclusao(f);
     if (!c) return;
+    enviarPara = c.enviarRelatorioPara;
+    delete c.enviarRelatorioPara;
     Object.assign(extra, c);
   } else if (novo === 'Concluída' && !(await confirmar('Marcar esta folha de obra como concluída?', { ok: 'Concluir' }))) return;
   if (novo === 'Faturada') {
@@ -374,6 +379,13 @@ async function mudarEstado(novo, btn) {
           estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
         };
         if (novo !== 'Pendente' && d.pendencia) alt.pendencia = null;
+        // relatório ao cliente: fica em fila (emails/) na mesma transação; a PontePHC envia pelo Exchange
+        if (enviarPara) {
+          const eRef = doc(collection(db, 'emails'));
+          const final = { id: f.id, ...d, ...alt, historico: alt.historico };
+          tx.set(eRef, dadosEmailRelatorio(final, enviarPara));
+          alt.relatorioCliente = { para: enviarPara, emailId: eRef.id, pedidoEm: Timestamp.now(), uid: sessao.uid };
+        }
         tx.update(ref, alt);
         if (aplicar) aplicar();
         return { ...d, ...alt, estadoAlteradoEm: Timestamp.now(), atualizadoEm: Timestamp.now() };
@@ -381,7 +393,7 @@ async function mudarEstado(novo, btn) {
       atual = { id: f.id, ...resultado };
       const i = lista.findIndex((x) => x.id === f.id);
       if (i >= 0) lista[i] = atual;
-      toast('Estado alterado para «' + novo + '».', 'ok');
+      toast('Estado alterado para «' + novo + '».' + (enviarPara ? ' Relatório a enviar para ' + enviarPara + '.' : ''), 'ok', enviarPara ? 6000 : 3000);
       renderDetalhe();
     } catch (e) {
       toast(e.code === 'alterada' ? e.message : erroFirebase(e), 'erro', 5000);
@@ -533,7 +545,7 @@ async function criarFolha(cliente, dados) {
     tx.set(fRef, {
       ...dados,
       numero: `FO-${ano}-${String(n).padStart(4, '0')}`,
-      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '',
+      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: cliente.email || '',
       estado: 'Por agendar',   // toda a folha nova nasce «Por agendar»; passa a «Agendada» no botão «Agendar»
       historico: [{ estado: 'Por agendar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
       observacoesTecnico: '',

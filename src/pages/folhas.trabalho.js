@@ -337,6 +337,8 @@ function pedirConclusao(f) {
         <canvas id="cAss" class="quadro-ass" width="600" height="240"></canvas>
         <button type="button" class="btn btn-peq" id="cLimpar" style="margin-top:6px">Limpar</button></div>
       <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cAusente" style="width:auto;min-height:0"><span style="margin:0">Cliente ausente (sem assinatura)</span></label>
+      <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cEnviar" style="width:auto;min-height:0" ${emailDoCliente(f) ? 'checked' : ''}><span style="margin:0">Enviar o relatório ao cliente por email</span></label>
+      <label class="campo" id="campoEmailRel" style="${emailDoCliente(f) ? '' : 'display:none'}"><span>Email do cliente</span><input id="cEmail" type="email" inputmode="email" autocomplete="off" value="${esc(emailDoCliente(f))}"></label>
       <div class="msg-erro" id="cErro"></div>
       <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="cOk">Concluir</button></div>`,
     { aoFechar: () => resolve(null) });
@@ -350,6 +352,7 @@ function pedirConclusao(f) {
     const parar = () => { ativo = false; };
     cv.addEventListener('pointerup', parar); cv.addEventListener('pointercancel', parar);
     $('#cLimpar', c).onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); desenhou = false; };
+    $('#cEnviar', c).onchange = () => { $('#campoEmailRel', c).style.display = $('#cEnviar', c).checked ? '' : 'none'; };
     $('#cAusente', c).onchange = () => { const a = $('#cAusente', c).checked; cv.classList.toggle('desativado', a); $('#cNome', c).disabled = a; };
     $('#cOk', c).onclick = () => {
       const erro = (m) => { $('#cErro', c).textContent = m; };
@@ -359,9 +362,11 @@ function pedirConclusao(f) {
       if (relatorio.length < 3) return erro('Escreva o relatório de intervenção.');
       if (!ausente && nome.length < 2) return erro('Indique o nome de quem assina.');
       if (!ausente && !desenhou) return erro('Peça ao cliente para assinar, ou marque «Cliente ausente».');
+      const enviarPara = $('#cEnviar', c).checked ? $('#cEmail', c).value.trim() : '';
+      if ($('#cEnviar', c).checked && !emailValido(enviarPara)) return erro('Indique um email válido do cliente, ou desmarque o envio do relatório.');
       const assinatura = { ausente, nome: ausente ? '' : nome, imagem: ausente ? '' : reduzirAssinatura(cv), em: Timestamp.now(), uid: sessao.uid, registadoPor: sessao.nome || sessao.email };
       fecharModal();
-      resolve({ relatorio, assinatura });
+      resolve({ relatorio, assinatura, enviarRelatorioPara: enviarPara });
     };
   });
 }
@@ -379,10 +384,16 @@ function reduzirAssinatura(cv) {
 // ---------- Valor da mão de obra (só Master) ----------
 // Tabela em config/precosHora: linhas { tipo: 'Manutenção' | 'AT/Instalação', composicao, tecnicos, ajudantes, aprendizes, preco },
 // acréscimos em %: primeiraHora, segundaHora, fimDeSemana.
-function chaveTipoPreco(tipo) { return tipo === 'Manutenção' ? 'Manutenção' : 'AT/Instalação'; }
+// Tipo da folha → tipos da tabela, por ordem de preferência (Instalação sem linha própria usa a de Assistência Técnica).
+function tiposPreco(tipo) {
+  if (tipo === 'Manutenção') return ['Manutenção'];
+  if (tipo === 'Instalação') return ['Instalação', 'AT/Instalação', 'Assistência Técnica'];
+  return ['Assistência Técnica', 'AT/Instalação'];
+}
 function valorTempo(t, tipoFolha, tabela) {
-  const linha = (tabela.linhas || []).find((l) => l.tipo === chaveTipoPreco(tipoFolha) && l.tecnicos === (t.tecnicos || 1)
-    && (l.ajudantes || 0) === (t.ajudantes || 0) && (l.aprendizes || 0) === (t.aprendizes || 0));
+  const mesmaEquipa = (l) => l.tecnicos === (t.tecnicos || 1) && (l.ajudantes || 0) === (t.ajudantes || 0) && (l.aprendizes || 0) === (t.aprendizes || 0);
+  let linha = null;
+  for (const tp of tiposPreco(tipoFolha)) { linha = (tabela.linhas || []).find((l) => l.tipo === tp && mesmaEquipa(l)); if (linha) break; }
   if (!linha) return null;
   const p = linha.preco, h = Number(t.horas) || 0;
   const a1 = 1 + (tabela.primeiraHora ?? 20) / 100, a2 = 1 + (tabela.segundaHora ?? 10) / 100;
@@ -411,4 +422,107 @@ async function mostrarValorMO() {
       <p style="text-align:right;margin:8px 0 0"><b id="totalMO">Total: ${esc(eur(total))}</b> <span class="muted">s/IVA</span></p>
       <p class="muted" style="margin:4px 0 0">1.ª hora +${esc(String(tab.primeiraHora ?? 20))}%, 2.ª hora +${esc(String(tab.segundaHora ?? 10))}%, fim de semana +${esc(String(tab.fimDeSemana ?? 100))}%.${falta ? ' Há equipas sem preço na tabela.' : ''}</p>`;
   } catch (e) { toast(erroFirebase(e), 'erro'); }
+}
+
+// ---------- Relatório para o cliente (email pela PontePHC e versão para imprimir/PDF) ----------
+function emailValido(e) { return /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(String(e || '').trim()); }
+function emailDoCliente(f) { return (f.emailContacto || f.clienteEmail || '').trim(); }
+
+// HTML do relatório (estilos em linha, para o Outlook). assinaturaSrc: 'cid:assinatura' no email, data URL ao imprimir.
+function relatorioHtml(f, assinaturaSrc) {
+  const e = esc;
+  const linha = (rot, val) => val ? `<tr><td style="padding:4px 8px 4px 0;color:#64748b;vertical-align:top;white-space:nowrap">${e(rot)}</td><td style="padding:4px 0">${val}</td></tr>` : '';
+  const concl = (f.historico || []).filter((h) => h.estado === 'Concluída').pop();
+  const tarefas = tarefasPadrao().filter((t) => (f.tarefas || {})[t]);
+  const tempos = f.tempos || [];
+  const mats = f.materiais || [];
+  const ass = f.assinatura;
+  const th = 'style="text-align:left;padding:6px 4px;border-bottom:1px solid #cbd5e1;font-size:13px;color:#475569"';
+  const td = 'style="padding:6px 4px;border-bottom:1px solid #e2e8f0;font-size:14px;vertical-align:top"';
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
+  <div style="background:#008080;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:18px;font-weight:bold">Arpuro Climatização</div>
+    <div style="font-size:14px">Relatório de intervenção · ${e(f.numero)}</div></div>
+  <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px">
+  <table style="border-collapse:collapse;font-size:14px;margin-bottom:12px">
+    ${linha('Cliente', e(f.clienteNome) + (f.clienteNif ? ` · NIF ${e(f.clienteNif)}` : ''))}
+    ${linha('Local', e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', ')))}
+    ${linha('Tipo', e(TIPO_NOME[f.tipo] || f.tipo))}
+    ${linha('Técnico', e(f.tecnicoNome || ''))}
+    ${linha('Concluída', concl ? e(fmtDataHora(concl.em)) : e(fmtDataHora(new Date())))}
+    ${f.encomendaCliente ? linha('V/ Encomenda', e(f.encomendaCliente)) : ''}
+  </table>
+  ${f.descricao ? `<h3 style="font-size:15px;margin:14px 0 4px">Trabalho solicitado</h3><p style="margin:0;white-space:pre-wrap;font-size:14px">${e(f.descricao)}</p>` : ''}
+  <h3 style="font-size:15px;margin:14px 0 4px">Trabalho realizado</h3><p style="margin:0;white-space:pre-wrap;font-size:14px">${e(f.relatorio || '—')}</p>
+  ${tarefas.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Verificações</h3><p style="margin:0;font-size:14px">${tarefas.map((t) => '✔ ' + e(t)).join('<br>')}</p>` : ''}
+  ${tempos.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Tempos</h3><table style="border-collapse:collapse;width:100%"><tr><th ${th}>Dia</th><th ${th}>Horário</th><th ${th}>Equipa</th><th ${th}>Horas</th></tr>
+    ${tempos.map((t) => `<tr><td ${td}>${e(fmtData(t.data))}</td><td ${td}>${t.inicio ? e(t.inicio + '–' + t.fim) : ''}</td><td ${td}>${e(equipaTexto(t))}</td><td ${td}>${e(fmtHoras(t.horas))}</td></tr>`).join('')}</table>` : ''}
+  ${mats.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Material aplicado</h3><table style="border-collapse:collapse;width:100%"><tr><th ${th}>Qtd.</th><th ${th}>Descrição</th><th ${th}>Ref.</th></tr>
+    ${mats.map((m) => `<tr><td ${td}>${e(fmtQtd(m.qtd))} ${e(m.unidade || '')}</td><td ${td}>${e(m.descricao)}</td><td ${td}>${e(m.ref || '')}</td></tr>`).join('')}</table>` : ''}
+  <h3 style="font-size:15px;margin:14px 0 4px">Cliente</h3>
+  ${ass && !ass.ausente ? `<img src="${e(assinaturaSrc || ass.imagem || '')}" alt="Assinatura" width="300" height="120" style="border:1px solid #e2e8f0;border-radius:6px"><p style="margin:4px 0 0;font-size:14px">${e(ass.nome || '')} · ${e(fmtDataHora(ass.em))}</p>`
+    : `<p style="margin:0;font-size:14px">${ass && ass.ausente ? 'Cliente ausente no fim da intervenção (sem assinatura).' : '—'}</p>`}
+  <p style="margin:18px 0 0;font-size:12px;color:#64748b">ARPURO &amp; REDEMÓVEL, LDA · NIF 503198749 · São João da Madeira<br>Para qualquer questão, responda a este email.</p>
+  </div></div>`;
+}
+function relatorioTexto(f) {
+  const l = [`Arpuro Climatização — Relatório de intervenção ${f.numero}`, '', `Cliente: ${f.clienteNome}`, `Técnico: ${f.tecnicoNome || ''}`, ''];
+  if (f.descricao) l.push('Trabalho solicitado:', f.descricao, '');
+  l.push('Trabalho realizado:', f.relatorio || '—', '');
+  for (const t of f.tempos || []) l.push(`Tempo: ${fmtData(t.data)} ${t.inicio || ''}–${t.fim || ''} · ${equipaTexto(t)} · ${fmtHoras(t.horas)}`);
+  for (const m of f.materiais || []) l.push(`Material: ${fmtQtd(m.qtd)} ${m.unidade || ''} ${m.descricao}${m.ref ? ' (' + m.ref + ')' : ''}`);
+  l.push('', 'ARPURO & REDEMÓVEL, LDA · NIF 503198749');
+  return l.join('\n');
+}
+// Documento do email (a PontePHC envia pelo Exchange, de noreply@arpuro.pt, e marca a folha como enviada).
+function dadosEmailRelatorio(f, para) {
+  return {
+    tipo: 'relatorio', estado: 'Pendente', para: para.trim(), folhaId: f.id, folhaNumero: f.numero,
+    assunto: `Relatório de intervenção ${f.numero} — Arpuro Climatização`,
+    html: relatorioHtml(f, 'cid:assinatura'), texto: relatorioTexto(f),
+    assinaturaPng: f.assinatura && !f.assinatura.ausente ? (f.assinatura.imagem || '') : '',
+    criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email, criadoEm: serverTimestamp(),
+  };
+}
+
+function htmlRelatorioCliente(f) {
+  if (!['Concluída', 'Revista', 'Aguarda NE', 'Faturada'].includes(f.estado)) return '';
+  const env = f.relatorioEnviado, ped = f.relatorioCliente;
+  const estado = env ? (env.estado === 'Enviado' ? `Enviado para ${esc(env.para)} em ${esc(fmtDataHora(env.em))}` : `<span style="color:#b91c1c">Não foi enviado (${esc(env.erro || 'erro')})</span>`)
+    : ped ? `A enviar para ${esc(ped.para)}…` : 'Ainda não foi enviado.';
+  return `<div class="cartao" id="cartaoRelCliente">
+    <h3 style="margin-top:0">Relatório para o cliente</h3>
+    <p class="muted" style="margin:0 0 10px" id="estadoRelatorio">${estado}</p>
+    <div class="acoes-mat"><button class="btn btn-peq" id="btnVerRelatorio">Ver / imprimir</button>
+      ${staff ? '<button class="btn btn-peq btn-primario" id="btnEnviarRelatorio">Enviar por email</button>' : ''}</div>
+  </div>`;
+}
+function ligarRelatorioCliente() {
+  if ($('#btnVerRelatorio')) $('#btnVerRelatorio').onclick = () => {
+    const w = window.open('', '_blank');
+    if (!w) { toast('O browser bloqueou a janela. Permita janelas para este site.', 'erro'); return; }
+    w.document.write(`<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(atual.numero)} — Relatório</title></head><body style="margin:12px">${relatorioHtml(atual)}<p style="text-align:center;font-family:Arial"><button onclick="print()">Imprimir / guardar PDF</button></p></body></html>`);
+    w.document.close();
+  };
+  if ($('#btnEnviarRelatorio')) $('#btnEnviarRelatorio').onclick = async () => {
+    const c = abrirModal('Enviar relatório ao cliente', `
+      <label class="campo"><span>Email do cliente *</span><input id="eRel" type="email" inputmode="email" value="${esc(emailDoCliente(atual))}" autocomplete="off"></label>
+      <p class="muted" style="margin-top:0">Enviado de noreply@arpuro.pt; as respostas vão para rbastos@arpuro.pt.</p>
+      <div class="msg-erro" id="eErro"></div>
+      <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="eOk">Enviar</button></div>`);
+    if (!emailDoCliente(atual) && atual.clienteId) {
+      try { const s = await getDoc(doc(db, 'clientes', atual.clienteId)); if (s.exists() && s.data().email && !$('#eRel', c).value) $('#eRel', c).value = s.data().email; } catch (e) { /* sem acesso */ }
+    }
+    $('#eOk', c).onclick = () => {
+      const para = $('#eRel', c).value.trim();
+      if (!emailValido(para)) { $('#eErro', c).textContent = 'Email inválido.'; return; }
+      comBotao($('#eOk', c), async () => {
+        try {
+          await setDoc(doc(collection(db, 'emails')), dadosEmailRelatorio(atual, para));
+          fecharModal();
+          toast('Relatório em fila de envio (a PontePHC envia em poucos minutos).', 'ok', 6000);
+          $('#estadoRelatorio').textContent = `A enviar para ${para}…`;
+        } catch (e) { $('#eErro', c).textContent = erroFirebase(e); }
+      });
+    };
+  };
 }

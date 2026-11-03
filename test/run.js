@@ -417,6 +417,8 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + 30 + i * 25, box.y + 60 + (i % 2 ? 30 : -20));
   await page.mouse.up();
+  assert(await page.locator('#cEnviar').isChecked(), 'envio do relatório pré-marcado (email do cliente conhecido)');
+  igual(await page.inputValue('#cEmail'), 'geral@cliente-teste.pt', 'email do cliente');
   await semOverflow(page, 'modal concluir');
   await captura(page, 'folha-concluir-375');
   await page.click('#cOk');
@@ -440,6 +442,11 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   igual(f.assinatura.nome, 'Sr. Manuel', 'assinatura');
   assert(f.assinatura.imagem.startsWith('data:image/png') && f.assinatura.imagem.length < 200000, 'imagem da assinatura pequena: ' + f.assinatura.imagem.length);
   igual(f.relatorio, 'Limpeza de filtros e verificação de pressões.', 'relatório');
+  const em = await fake(page, () => Object.values(window.__fake.db()).filter((v) => v.tipo === 'relatorio'));
+  igual(em.length + ' ' + em[0].para + ' ' + em[0].estado + ' ' + em[0].folhaId, '1 geral@cliente-teste.pt Pendente fo001', 'email do relatório em fila');
+  assert(em[0].html.includes('cid:assinatura') && em[0].html.includes('Tubo de cobre') && !em[0].html.includes('€') && em[0].assinaturaPng.startsWith('data:image/png'), 'relatório com material, assinatura e sem preços');
+  igual(f.relatorioCliente.para, 'geral@cliente-teste.pt', 'folha regista o pedido de envio');
+  assert((await page.textContent('#estadoRelatorio')).includes('A enviar para geral@cliente-teste.pt'), 'mostra estado do envio');
   // concluída: técnico já não tem ações (Faturada é só backoffice/master)
   igual(await contar(page, '[data-estado]'), 0, 'sem ações após concluída');
   semErros(page); await ctx.close();
@@ -664,6 +671,29 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   igual(await contar(page, '[data-estado]'), 0, 'backoffice sem ações numa concluída');
   const optsC = await page.$$eval('#selCorrigir option', (o) => o.map((x) => x.value).filter(Boolean));
   assert(!optsC.some((o) => ['Revista', 'Aguarda NE', 'Faturada'].includes(o)), 'backoffice não corrige para estados do Master: ' + optsC);
+  semErros(page); await ctx.close();
+});
+
+teste('relatório ao cliente: ver/imprimir e reenviar por email (staff)', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html?id=fo010');
+  await page.waitForSelector('#cartaoRelCliente');
+  const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('#btnVerRelatorio')]);
+  await popup.waitForLoadState();
+  assert((await popup.textContent('body')).includes('Relatório de intervenção'), 'abre o relatório');
+  await popup.setViewportSize(MOVEIS[0]);
+  await captura(popup, 'relatorio-cliente-375');
+  await popup.close();
+  await page.click('#btnEnviarRelatorio');
+  await page.fill('#eRel', 'x');
+  await page.click('#eOk');
+  igual(await page.textContent('#eErro'), 'Email inválido.', 'valida email');
+  await page.fill('#eRel', 'cliente@exemplo.pt');
+  await page.click('#eOk');
+  await page.waitForSelector('.toast-ok >> text=Relatório em fila');
+  const em = await fake(page, () => Object.values(window.__fake.db()).filter((v) => v.tipo === 'relatorio'));
+  igual(em.length + ' ' + em[0].para + ' ' + em[0].folhaId, '1 cliente@exemplo.pt fo010', 'email em fila');
   semErros(page); await ctx.close();
 });
 

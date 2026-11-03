@@ -135,6 +135,7 @@ function gerar() {
     ['col4', 'Equipa externa — ajudante', 'Ajudante', ''], ['col5', 'Aprendiz', 'Aprendiz', '']]
     .forEach(([id, nome, funcao, uid]) => { db['colaboradores/' + id] = { nome, funcao, uid, externo: id === 'col4', ativo: true }; });
   db['colaboradores/col9'] = { nome: 'Antigo Colaborador', funcao: 'Técnico', uid: '', externo: false, ativo: false };
+  db['folhas/fo001'].clienteEmail = 'geral@cliente-teste.pt';
   // artigos do armazém 99 (vindos do PHC pela PontePHC) — disponível = stock − reservadoPHC − emGuiasPHC − resFolhas − resGuias
   db['artigos/TC14'] = { ref: 'TC14', design: 'Tubo cobre 1/4"', unidade: 'm', familia: 'Ar Condicionado', ativo: true, stock: 120, reservadoPHC: 10, emGuiasPHC: 0,
     resFolhas: 0, resGuias: 50, origem: 'phc', pesquisa: ['tc', 'tc1', 'tc14', 'tu', 'tub', 'tubo', 'co', 'cob', 'cobr', 'cobre', '14'] };

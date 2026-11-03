@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-03 22:57 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-03 23:27 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -274,7 +274,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-03 22:57 UTC';
+const BUILD = '2026-11-03 23:27 UTC';
 const PAGINA = 'utilizadores';
 
 const FIREBASE_CONFIG = {
@@ -732,7 +732,10 @@ function lerTabelaPrecos(txt) {
     const ajudantes = partes.filter((x) => x.startsWith('ajudante')).length;
     const aprendizes = partes.filter((x) => x.startsWith('aprendiz')).length;
     if (p.length < 3 || !(preco > 0) || !tecnicos || tecnicos + ajudantes + aprendizes !== partes.length) { ignoradas.push(l); continue; }
-    const tipo = /manuten/i.test(p[0]) ? 'Manutenção' : 'AT/Instalação';
+    const t0 = p[0].toLowerCase();
+    const tipo = /manuten/.test(t0) ? 'Manutenção'
+      : /at\s*\/\s*instal/.test(t0) ? 'AT/Instalação'
+      : /instal/.test(t0) ? 'Instalação' : 'Assistência Técnica';
     const i = linhas.findIndex((x) => x.tipo === tipo && x.tecnicos === tecnicos && x.ajudantes === ajudantes && x.aprendizes === aprendizes);
     const nova = { tipo, composicao: p[1], tecnicos, ajudantes, aprendizes, preco: Math.round(preco * 100) / 100 };
     if (i >= 0) linhas[i] = nova; else linhas.push(nova);
@@ -746,7 +749,7 @@ async function abrirPrecos() {
   const txt = (atualP.linhas || []).map((l) => `${l.tipo};${l.composicao};${String(l.preco).replace('.', ',')}`).join('\n');
   const c = abrirModal('Preço/hora da mão de obra', `
     <p class="muted" style="margin-top:0">Só o Master vê esta tabela. Uma linha por equipa: <b>Tipo;Composição;Preço</b><br>
-      Ex.: <code>Manutenção;Técnico-Técnico-Ajudante;51,00</code> · <code>AT/Instalação;Técnico;22,80</code></p>
+      Tipos: Manutenção, Assistência Técnica, Instalação (ou AT/Instalação para as duas).<br>Ex.: <code>Manutenção;Técnico-Técnico-Ajudante;55,20</code> · <code>Assistência Técnica;Técnico;22,80</code></p>
     <label class="campo"><span>Tabela</span><textarea id="pTab" rows="10" style="font-family:monospace">${esc(txt)}</textarea></label>
     <div class="grelha-2">
       <label class="campo"><span>1.ª hora (+%)</span><input id="p1" type="number" min="0" value="${esc(String(atualP.primeiraHora ?? 20))}"></label>
