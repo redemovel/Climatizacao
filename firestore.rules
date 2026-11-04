@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-03 (3) — relatório ao cliente por email (fila emails/ enviada pela PontePHC)
+// Atualizado: 2026-11-04 — botão «Sincronizar com o PHC agora» (controlo/sincronizar)
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -239,6 +239,16 @@ service cloud.firestore {
       allow create: if emailValido(request.resource.data)
         && (eStaff() || (eTecnico() && get(/databases/$(database)/documents/folhas/$(request.resource.data.folhaId)).data.tecnicoUid == request.auth.uid));
       allow update, delete: if false;
+    }
+
+    // ---------- Pedido de sincronização imediata com o PHC (a PontePHC responde) ----------
+    match /controlo/{id} {
+      allow read: if eStaff();
+      allow write: if eStaff() && id == 'sincronizar'
+        && request.resource.data.keys().hasOnly(['estado', 'pedidoEm', 'pedidoPor', 'pedidoPorNome'])
+        && request.resource.data.estado == 'Pedido'
+        && request.resource.data.pedidoPor == request.auth.uid
+        && request.resource.data.pedidoEm == request.time;
     }
 
     // ---------- Listas simples (ex.: viaturas): todos leem, só o Master altera ----------

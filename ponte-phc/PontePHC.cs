@@ -2420,6 +2420,49 @@ class Motor
         return n;
     }
 
+    public void CicloCompleto()
+    {
+        Ciclo();
+        CicloFolhas();
+        CicloArtigos();
+        CicloEmails();
+    }
+
+    // ---- pedido de sincronizacao feito na plataforma (controlo/sincronizar: estado 'Pedido')
+    public bool HaPedidoSincronizar()
+    {
+        if (cfg.Simular) return false;
+        try
+        {
+            if (fs == null) fs = new Firestore(cfg);
+            Dictionary<string, Dictionary<string, object>> r = fs.LerVarios("controlo", new List<string> { "sincronizar" });
+            Dictionary<string, object> c;
+            if (!r.TryGetValue("sincronizar", out c) || Firestore.Valor(c, "estado") != "Pedido") return false;
+            Log.Info("Sincronizacao pedida na plataforma por " + Firestore.Valor(c, "pedidoPorNome") + ".");
+            Documento d = new Documento();
+            d.Id = "sincronizar";
+            d.Texto("estado", "Em curso");
+            d.Data("iniciadoEm", DateTime.Now);
+            fs.Gravar("controlo", new List<Documento> { d });
+            return true;
+        }
+        catch (Exception e) { Log.Erro("Falha ao ver pedidos de sincronizacao: " + e.Message); return false; }
+    }
+    public void ConcluirPedido()
+    {
+        try
+        {
+            Documento d = new Documento();
+            d.Id = "sincronizar";
+            d.Texto("estado", "Concluído");
+            d.Texto("resultado", ultimoErro == "" || ultimoErro == "quota" ? "OK" + (ultimoErro == "quota" ? " (limite diário de escritas atingido)" : "") : "Erro: " + ultimoErro);
+            d.Data("concluidoEm", DateTime.Now);
+            fs.Gravar("controlo", new List<Documento> { d });
+            ContarEscritas(2);
+        }
+        catch (Exception e) { Log.Erro("Falha ao concluir o pedido de sincronizacao: " + e.Message); }
+    }
+
     void AcertarContador(int ano)
     {
         long maior = FonteFolhas.MaiorNumero(ano);
@@ -2619,13 +2662,19 @@ class Servico : ServiceBase
                 m = new Motor(cfg);
                 m.Preparar();
                 int intervalo = Math.Max(1, cfg.GetInt("IntervaloMinutos", 10)) * 60;
+                int verificar = Math.Max(15, cfg.GetInt("VerificarPedidosSegundos", 30));
                 while (!parar)
                 {
-                    m.Ciclo();
-                    m.CicloFolhas();
-                    m.CicloArtigos();
-                    m.CicloEmails();
-                    for (int i = 0; i < intervalo * 2 && !parar; i++) Thread.Sleep(500);
+                    m.CicloCompleto();
+                    // ate ao proximo ciclo: de 30 em 30 s ve se ha pedido de sincronizacao (botao na plataforma) e emails por enviar
+                    DateTime fim = DateTime.Now.AddSeconds(intervalo);
+                    while (!parar && DateTime.Now < fim)
+                    {
+                        for (int i = 0; i < verificar * 2 && !parar && DateTime.Now < fim; i++) Thread.Sleep(500);
+                        if (parar) break;
+                        if (m.HaPedidoSincronizar()) { m.CicloCompleto(); m.ConcluirPedido(); }
+                        else m.CicloEmails();
+                    }
                 }
             }
             catch (Exception e)
@@ -2839,6 +2888,13 @@ static class Programa
                 if (cfg.GetBool("ImportarFolhas", false)) Console.WriteLine((simF ? "SIMULACAO: " : "") + nf + " folhas de obra " + (simF ? "seriam enviadas." : "enviadas."));
                 Console.WriteLine((cfg.Simular ? "SIMULACAO: " : "") + n + " clientes " + (cfg.Simular ? "seriam enviados (nada enviado; veja Simular no .ini)." : "enviados."));
                 return m.UltimoErro == "" || m.UltimoErro == "quota" ? 0 : 2;
+            }
+            if (cmd == "/verificar-pedido")
+            {
+                m.Preparar();
+                if (m.HaPedidoSincronizar()) { m.CicloCompleto(); m.ConcluirPedido(); Console.WriteLine("Pedido de sincronizacao atendido."); }
+                else Console.WriteLine("Sem pedido de sincronizacao.");
+                return 0;
             }
             if (cmd == "/recomecar")
             {

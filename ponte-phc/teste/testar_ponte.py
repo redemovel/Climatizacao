@@ -302,6 +302,13 @@ try:
 except ImportError:
     print('  (aiosmtpd não instalado: teste de emails ignorado)')
 
+# 5d) botão «Sincronizar agora» na plataforma: controlo/sincronizar estado «Pedido»
+cod, out = ponte('/verificar-pedido')
+verifica('Sem pedido' in out, 'sem pedido não faz nada')
+BD['controlo/sincronizar'] = {'estado': sv('Pedido'), 'pedidoPorNome': sv('Ricardo')}
+cod, out = ponte('/verificar-pedido')
+verifica('atendido' in out and BD['controlo/sincronizar']['estado'] == sv('Concluído') and BD['controlo/sincronizar']['resultado'] == sv('OK'), 'pedido atendido e marcado como concluído ' + out[-200:])
+
 # 6) limite diário de escritas
 open(os.path.join(d, 'estado_escritas.txt'), 'w').write(datetime.date.today().isoformat() + '|100')
 os.remove(os.path.join(d, 'estado_clientes.txt'))

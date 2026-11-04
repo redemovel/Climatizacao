@@ -674,6 +674,25 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   semErros(page); await ctx.close();
 });
 
+teste('sincronizar PHC agora: staff faz o pedido; técnico não vê o botão', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html');
+  await page.waitForSelector('#btnSincPHC:not(.oculto)');
+  await semOverflow(page, 'folhas com botão PHC');
+  await page.click('#btnSincPHC');
+  await page.waitForSelector('.toast-ok >> text=Pedido enviado');
+  const c = await fake(page, () => window.__fake.doc('controlo/sincronizar'));
+  igual(c.estado + ' ' + c.pedidoPor, 'Pedido u-bo', 'pedido gravado');
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/folhas.html');
+  await page.waitForSelector('#lista .lista-item');
+  assert(await page.locator('#btnSincPHC').isHidden(), 'técnico sem botão');
+  semErros(page); await ctx.close();
+});
+
 teste('relatório ao cliente: ver/imprimir e reenviar por email (staff)', async () => {
   const { ctx, page } = await contexto();
   await entrar(page, 'backoffice');

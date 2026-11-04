@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-03 23:27 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-04 10:24 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -278,7 +278,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-03 23:27 UTC';
+const BUILD = '2026-11-04 10:24 UTC';
 const PAGINA = 'guias';
 
 const FIREBASE_CONFIG = {
@@ -593,6 +593,28 @@ function movLibertarFolha(f) {
   const mov = {};
   for (const m of f.materiais || []) if (m.artigoId) (mov[m.artigoId] = mov[m.artigoId] || { resFolhas: 0 }).resFolhas -= Number(m.qtd) || 0;
   return mov;
+}
+
+// ---------- «Sincronizar com o PHC agora» (staff): a PontePHC vê o pedido em ~30 s e corre um ciclo completo ----------
+async function pedirSincronizacao(btn, aoConcluir) {
+  await comBotao(btn, async () => {
+    const ref = doc(db, 'controlo', 'sincronizar');
+    try {
+      await setDoc(ref, { estado: 'Pedido', pedidoEm: serverTimestamp(), pedidoPor: SESSAO.uid, pedidoPorNome: SESSAO.nome || SESSAO.email });
+    } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+    toast('Pedido enviado ao servidor. A sincronização demora 1 a 2 minutos…', 'ok', 6000);
+    for (let i = 0; i < 24; i++) {   // até 4 minutos, uma leitura a cada 10 s
+      await new Promise((r) => setTimeout(r, 10000));
+      let d;
+      try { d = (await getDoc(ref)).data() || {}; } catch (e) { continue; }
+      if (d.estado === 'Concluído') {
+        toast('Sincronização com o PHC concluída' + (d.resultado && d.resultado !== 'OK' ? ': ' + d.resultado : '.'), d.resultado === 'OK' ? 'ok' : 'erro', 6000);
+        if (aoConcluir) aoConcluir();
+        return;
+      }
+    }
+    toast('O servidor ainda não respondeu. Confirme que o serviço PontePHC está a correr.', 'erro', 8000);
+  });
 }
 
 // Lista de técnicos ativos (coleção pequena; lida uma vez por página).

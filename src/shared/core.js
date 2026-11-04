@@ -328,6 +328,28 @@ function movLibertarFolha(f) {
   return mov;
 }
 
+// ---------- «Sincronizar com o PHC agora» (staff): a PontePHC vê o pedido em ~30 s e corre um ciclo completo ----------
+async function pedirSincronizacao(btn, aoConcluir) {
+  await comBotao(btn, async () => {
+    const ref = doc(db, 'controlo', 'sincronizar');
+    try {
+      await setDoc(ref, { estado: 'Pedido', pedidoEm: serverTimestamp(), pedidoPor: SESSAO.uid, pedidoPorNome: SESSAO.nome || SESSAO.email });
+    } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+    toast('Pedido enviado ao servidor. A sincronização demora 1 a 2 minutos…', 'ok', 6000);
+    for (let i = 0; i < 24; i++) {   // até 4 minutos, uma leitura a cada 10 s
+      await new Promise((r) => setTimeout(r, 10000));
+      let d;
+      try { d = (await getDoc(ref)).data() || {}; } catch (e) { continue; }
+      if (d.estado === 'Concluído') {
+        toast('Sincronização com o PHC concluída' + (d.resultado && d.resultado !== 'OK' ? ': ' + d.resultado : '.'), d.resultado === 'OK' ? 'ok' : 'erro', 6000);
+        if (aoConcluir) aoConcluir();
+        return;
+      }
+    }
+    toast('O servidor ainda não respondeu. Confirme que o serviço PontePHC está a correr.', 'erro', 8000);
+  });
+}
+
 // Lista de técnicos ativos (coleção pequena; lida uma vez por página).
 let _tecnicos = null;
 async function carregarTecnicos() {

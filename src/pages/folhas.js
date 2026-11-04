@@ -15,6 +15,8 @@ const selecionadas = new Set();
 if (tecnico) $('#tituloLista').textContent = 'As minhas folhas';
 if (staff) {
   $('#btnNova').classList.remove('oculto');
+  $('#btnSincPHC').classList.remove('oculto');
+  $('#btnSincPHC').onclick = () => pedirSincronizacao($('#btnSincPHC'), () => carregarLista());
   $('#fTec').classList.remove('oculto');
   carregarTecnicos().then((tecs) => {
     $('#fTec').insertAdjacentHTML('beforeend', tecs.map((t) => `<option value="${esc(t.uid)}">${esc(t.nome)}</option>`).join(''));
