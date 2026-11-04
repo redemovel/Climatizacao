@@ -231,6 +231,8 @@ pv = BD.get('folhas/phc-2026-1785/privado/phc', {})
 verifica(pv.get('totalVenda') == {'doubleValue': 958.8} and pv['valorHora']['arrayValue']['values'][0]['mapValue']['fields']['tipoTecnico']['stringValue'] == 'Técnico-Técnico', 'valores e total só no documento privado')
 verifica('preco' not in json.dumps(F('phc-2026-1785')) and 'total' not in json.dumps(F('phc-2026-1785')).lower().replace('totalhoras', ''), 'a folha (visível ao técnico) não tem preços')
 verifica(c('phc-2026-1785', 'relatorioPHC') == 'Substituído ligador do compressor.' and c('phc-2026-1785', 'encomendaCliente') == '2146895' and c('phc-2026-1785', 'observacoesInternasPHC') == 'Cliente paga a 60 dias' and c('phc-2026-1785', 'situacaoPHC') == 'Em garantia', 'relatório, V/Encomenda, observações internas e situação')
+pq = [v['stringValue'] for v in F('phc-2026-1785')['pesquisa']['arrayValue']['values']]
+verifica('1785' in pq and 'simoldes'[:2] in pq, 'folha com pesquisa por n.º/cliente/NIF/avaria')
 verifica(c('phc-2026-1785', 'tipo') == 'Manutenção' and c('phc-2026-1785', 'codigoPostal') == '3721-902' and c('phc-2026-1785', 'contacto') == 'Telmo Pinho', 'tipo, código postal e contacto no local')
 verifica(c('phc-2026-1785', 'morada') == 'R Comend Antonio Silva Rodrigues,165, Ap113' and c('phc-2026-1785', 'clienteId') == 'phc-3', 'morada e cliente')
 lin = F('phc-2026-1785')['linhasPHC']['arrayValue']['values']
@@ -258,12 +260,14 @@ verifica(BD['contadores/folhas-2026']['valor'] == {'integerValue': '1800'}, 'con
 # 5b) artigos do armazém da climatização (stock, reservado em FO abertas, em guias abertas; custo só no privado)
 arts = ['ref;design;unidade;familia;inactivo;stock;reservado;guias;custo;usrdata',
         'TC14;Tubo cobre 1/4";m;Ar Condicionado;0;120;10;50;2.77;2026-11-01',
+        'FTXP35;Ar Condicionado Daikin FTXP35;un;Ar Condicionado;0;3;0;0;400;2026-11-01;1',
         'AB/12;Abraçadeira 12 mm;un;Ar Condicionado;0;30;0;0;0.1;2026-11-01']
 open(os.path.join(d, 'artigos.csv'), 'w', encoding='utf-8').write('\n'.join(arts) + '\n')
 open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nImportarArtigos=1\nFonteTesteArtigos=artigos.csv\n')
 cod, out = ponte('/sincronizar')
 A = BD.get('artigos/TC14', {})
-verifica('2 artigos com alteracoes' in out and A.get('stock') == {'doubleValue': 120} and A.get('reservadoPHC') == {'doubleValue': 10} and A.get('emGuiasPHC') == {'doubleValue': 50}, 'artigos: stock, reservado e em guias ' + out[-200:])
+verifica(BD.get('artigos/FTXP35', {}).get('comSerie') == {'booleanValue': True} and BD['artigos/TC14'].get('comSerie') == {'booleanValue': False}, 'equipamentos com n.º de série marcados')
+verifica('3 artigos com alteracoes' in out and A.get('stock') == {'doubleValue': 120} and A.get('reservadoPHC') == {'doubleValue': 10} and A.get('emGuiasPHC') == {'doubleValue': 50}, 'artigos: stock, reservado e em guias ' + out[-200:])
 verifica('custo' not in json.dumps(A) and BD.get('artigos/TC14/privado/custo', {}).get('custo') == {'doubleValue': 2.77}, 'custo só no documento privado')
 verifica('artigos/AB~2F12' in BD and BD['artigos/AB~2F12']['ref'] == {'stringValue': 'AB/12'}, 'referência com «/» fica com id válido')
 verifica('tu' in json.dumps(A.get('pesquisa')) and 'cobre' in json.dumps(A.get('pesquisa')), 'pesquisa por referência e designação')

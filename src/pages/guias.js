@@ -103,7 +103,7 @@ function renderDetalhe() {
     <div class="cartao">
       <h3 style="margin-top:0">Material</h3>
       <table class="tabela-guia" id="linhasGuia"><thead><tr><th>Artigo</th><th class="n">Levou</th><th class="n">Gasto</th><th class="n">${g.estado === 'Fechada' ? 'Devolvido' : 'Por gastar'}</th></tr></thead><tbody>
-        ${(g.linhas || []).map((l) => `<tr><td><b>${esc(l.ref)}</b><br>${esc(l.design)}${(l.consumos || []).length ? `<br><span class="muted">${l.consumos.map((c) => `${esc(c.numero)}: ${esc(fmtQtd(c.qtd))}`).join(' · ')}</span>` : ''}</td>
+        ${(g.linhas || []).map((l) => `<tr><td><b>${esc(l.ref)}</b><br>${esc(l.design)}${(l.series || []).length ? `<br>${l.series.map((x) => `<span class="serie-tag" style="${(l.seriesUsadas || []).includes(x) ? 'text-decoration:line-through' : ''}">${esc(x)}</span>`).join('')}` : ''}${(l.consumos || []).length ? `<br><span class="muted">${l.consumos.map((c) => `${esc(c.numero)}: ${esc(fmtQtd(c.qtd))}`).join(' · ')}</span>` : ''}</td>
           <td class="n">${esc(fmtQtd(l.qtd))} ${esc(l.unidade || '')}</td><td class="n">${esc(fmtQtd(l.consumido || 0))}</td>
           <td class="n">${esc(fmtQtd(g.estado === 'Fechada' ? (l.devolvido || 0) : saldo(l)))}</td></tr>`).join('')}
       </tbody></table>
@@ -157,6 +157,8 @@ async function mudarGuia(btn, novo, fn, nota) {
         if (g.estado !== atual.estado) throw Object.assign(new Error('A guia foi alterada por outra pessoa. Atualize a página.'), { code: 'guia' });
         const { alt, mov } = fn(g);
         const aplicar = Object.keys(mov).length ? await aplicarReservas(tx, mov) : null;
+        // n.º de série que não foram aplicados deixam de estar na guia
+        for (const l of g.linhas) for (const sr of (l.series || []).filter((x) => !(l.seriesUsadas || []).includes(x))) tx.delete(doc(db, 'series', idSerie(sr)));
         const h = { estado: novo, de: g.estado, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
         if (nota) h.nota = nota;
         const tudo = { ...alt, estado: novo, historico: [...(g.historico || []), h], atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid };
@@ -168,7 +170,7 @@ async function mudarGuia(btn, novo, fn, nota) {
       lista = [];
       toast('Guia ' + (novo === 'Fechada' ? 'fechada.' : 'anulada.'), 'ok');
       renderDetalhe();
-    } catch (e) { toast(['stock', 'artigo', 'guia'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); }
+    } catch (e) { toast(['stock', 'artigo', 'guia', 'serie'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); }
   });
 }
 
@@ -233,11 +235,17 @@ async function formNova(folhaId) {
   desenharCliente();
   const desenharLinhas = () => {
     $('#gLinhas').innerHTML = linhas.length ? `<table class="tabela-guia"><thead><tr><th>Artigo</th><th class="n">Qtd.</th><th></th></tr></thead><tbody>
-      ${linhas.map((l, i) => `<tr><td><b>${esc(l.a.ref)}</b><br>${esc(l.a.design)}<br><span class="muted">disponível ${esc(fmtQtd(disponivel(l.a)))} ${esc(l.a.unidade || '')}</span></td>
-        <td class="n"><input type="number" inputmode="decimal" min="0" step="any" value="${l.qtd || ''}" data-q="${i}" style="width:86px"></td>
+      ${linhas.map((l, i) => `<tr><td><b>${esc(l.a.ref)}</b><br>${esc(l.a.design)}<br><span class="muted">disponível ${esc(fmtQtd(disponivel(l.a)))} ${esc(l.a.unidade || '')}</span>
+          ${l.a.comSerie ? `<div class="series-campos" style="margin-top:6px">${Array.from({ length: Math.max(0, Math.min(50, Math.floor(l.qtd || 0))) }, (_, k) =>
+            `<input data-sl="${i}" data-sk="${k}" autocomplete="off" placeholder="N.º de série ${k + 1} *" value="${esc((l.series || [])[k] || '')}">`).join('') || '<span class="muted">Com n.º de série: indique a quantidade.</span>'}</div>` : ''}</td>
+        <td class="n"><input type="number" inputmode="decimal" min="0" step="${l.a.comSerie ? '1' : 'any'}" value="${l.qtd || ''}" data-q="${i}" style="width:86px"></td>
         <td><button type="button" class="lixo" data-x="${i}" aria-label="Tirar">✕</button></td></tr>`).join('')}</tbody></table>`
       : '<p class="muted">Ainda sem material.</p>';
-    $$('[data-q]').forEach((inp) => inp.oninput = () => { linhas[+inp.dataset.q].qtd = r3(String(inp.value).replace(',', '.')); });
+    $$('[data-q]').forEach((inp) => {
+      inp.oninput = () => { linhas[+inp.dataset.q].qtd = r3(String(inp.value).replace(',', '.')); };
+      inp.onchange = () => { if (linhas[+inp.dataset.q].a.comSerie) { desenharLinhas(); } };
+    });
+    $$('[data-sl]').forEach((inp) => inp.oninput = () => { const l = linhas[+inp.dataset.sl]; (l.series = l.series || [])[+inp.dataset.sk] = inp.value; });
     $$('[data-x]').forEach((b) => b.onclick = () => { linhas.splice(+b.dataset.x, 1); desenharLinhas(); });
   };
   desenharLinhas();
@@ -275,6 +283,15 @@ async function formNova(folhaId) {
     if (sem) return erro(`Indique a quantidade de ${sem.a.ref}.`);
     const excede = linhas.find((l) => l.qtd > disponivel(l.a) + 0.0005);
     if (excede) return erro(`${excede.a.ref}: só há ${fmtQtd(disponivel(excede.a))} ${excede.a.unidade || ''} disponíveis.`);
+    const todasSeries = [];
+    for (const l of linhas) {
+      if (!l.a.comSerie) { l.series = []; continue; }
+      if (!Number.isInteger(l.qtd)) return erro(`${l.a.ref}: equipamento com n.º de série, a quantidade tem de ser em unidades.`);
+      l.series = (l.series || []).slice(0, l.qtd).map(limparSerie);
+      if (l.series.length !== l.qtd || l.series.some((x) => x.length < 3)) return erro(`${l.a.ref}: indique o n.º de série de cada unidade.`);
+      todasSeries.push(...l.series);
+    }
+    if (new Set(todasSeries.map(idSerie)).size !== todasSeries.length) return erro('Há números de série repetidos.');
     comBotao($('#gGuardar'), async () => {
       try {
         const ref = doc(collection(db, 'guias'));
@@ -282,12 +299,21 @@ async function formNova(folhaId) {
           const mov = {};
           for (const l of linhas) (mov[l.a.id] = mov[l.a.id] || { resGuias: 0 }).resGuias += l.qtd;
           const aplicar = await aplicarReservas(tx, mov, new Set(Object.keys(mov)));
+          for (const sr of todasSeries) {
+            const x = await tx.get(doc(db, 'series', idSerie(sr)));
+            if (x.exists()) {
+              const i = x.data();
+              throw Object.assign(new Error(i.estado === 'folha' ? `O n.º de série ${sr} já foi aplicado na ${i.folhaNumero}.` : `O n.º de série ${sr} já está noutra guia aberta.`), { code: 'stock' });
+            }
+          }
+          for (const l of linhas) for (const sr of l.series) tx.set(doc(db, 'series', idSerie(sr)), { serie: sr, artigoId: l.a.id, ref: l.a.ref, estado: 'guia', guiaId: ref.id, guiaNumero: '', folhaId: '', folhaNumero: '', atualizadoEm: serverTimestamp(), uid: sessao.uid });
           tx.set(ref, {
             numero: '', codigoAT: '', estado: 'Por comunicar', armazem: 99,
             clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif, morada: cliente.morada, codigoPostal: cliente.cp, localidade: cliente.loc,
             folhaId: folha ? folha.id : '', folhaNumero: folha ? folha.numero : '',
             tecnicoUid: tecUid, tecnicoNome: tecNome, viatura, dataSaida: Timestamp.fromDate(saida),
-            linhas: linhas.map((l) => ({ id: novoId(), artigoId: l.a.id, ref: l.a.ref, design: l.a.design, unidade: l.a.unidade || '', qtd: l.qtd, consumido: 0, devolvido: 0, consumos: [] })),
+            linhas: linhas.map((l) => ({ id: novoId(), artigoId: l.a.id, ref: l.a.ref, design: l.a.design, unidade: l.a.unidade || '', qtd: l.qtd, consumido: 0, devolvido: 0, consumos: [],
+              ...(l.series.length ? { series: l.series, seriesUsadas: [] } : {}) })),
             historico: [{ estado: 'Por comunicar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
             criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email,
           });

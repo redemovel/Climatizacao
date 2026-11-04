@@ -176,6 +176,7 @@ function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   if (colecao === 'artigos' || colecao === 'listas') { if (s.perfil) return; negar(colecao); }
   if (colecao === 'emails') { if (STAFF.includes(s.perfil)) return; negar('emails'); }
   if (colecao === 'controlo') { if (STAFF.includes(s.perfil)) return; negar('controlo'); }
+  if (colecao === 'series') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('series'); }
   if (colecao === 'guias' && s.perfil === 'tecnico') {
     if (consulta) { if (consulta.some((c) => c.k === 'where' && c.campo === 'tecnicoUid' && c.op === '==' && c.valor === s.uid)) return; negar('técnico tem de filtrar guias por tecnicoUid'); }
     if (docRaw && docRaw.tecnicoUid === s.uid) return;
@@ -218,16 +219,21 @@ function regraEscrever(dbRaw, path, antes, depois) {
   if (colecao === 'contadores') { if (!staff) negar('contadores'); return; }
   if (colecao === 'config') { if (s.perfil !== 'master') negar('config só master'); return; }
   if (colecao === 'listas') { if (s.perfil !== 'master') negar('listas só master'); return; }
+  if (colecao === 'series') {
+    if (!['master', 'backoffice', 'tecnico'].includes(s.perfil)) negar('series');
+    if (depois && (!['guia', 'folha'].includes(depois.estado) || !depois.serie || depois.uid !== s.uid)) negar('série inválida');
+    return;
+  }
   if (colecao === 'controlo') {
     if (!staff || id !== 'sincronizar' || !depois || depois.estado !== 'Pedido' || depois.pedidoPor !== s.uid) negar('controlo');
     return;
   }
   if (colecao === 'emails') {
     if (antes || !depois) negar('emails só se criam');
-    if (depois.tipo !== 'relatorio' || depois.estado !== 'Pendente' || !/^[^@ ,;]+@[^@ ,;]+[.][^@ ,;]+$/.test(depois.para || '') || depois.criadoPor !== s.uid) negar('email inválido');
+    if (!['relatorio', 'agendamento'].includes(depois.tipo) || depois.estado !== 'Pendente' || !/^[^@ ,;]+@[^@ ,;]+[.][^@ ,;]+$/.test(depois.para || '') || depois.criadoPor !== s.uid) negar('email inválido');
     if (staff) return;
     const fo = dbRaw['folhas/' + depois.folhaId];
-    if (s.perfil === 'tecnico' && fo && fo.tecnicoUid === s.uid) return;
+    if (s.perfil === 'tecnico' && depois.tipo === 'relatorio' && fo && fo.tecnicoUid === s.uid) return;
     negar('email de folha de outro técnico');
   }
   if (colecao === 'artigos') {

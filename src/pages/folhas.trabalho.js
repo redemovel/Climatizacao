@@ -26,7 +26,8 @@ function novoIdItem() { return Date.now().toString(36) + Math.random().toString(
 
 // Altera a folha numa transação (vários técnicos/backoffice podem estar a escrever ao mesmo tempo).
 // fn(d, guia) devolve as alterações da folha, ou { alt, mov, exige, guiaId, guiaAlt } quando mexe em stock/guias.
-async function alterarTrabalho(fn, msgOk, { guiaId = null } = {}) {
+// series: n.º de série a ler na mesma transação (fn recebe { idSerie: dados|null }); r.seriesSet / r.seriesDel gravam/apagam.
+async function alterarTrabalho(fn, msgOk, { guiaId = null, series = [] } = {}) {
   const ref = doc(db, 'folhas', atual.id);
   try {
     const res = await runTransaction(db, async (tx) => {
@@ -34,7 +35,9 @@ async function alterarTrabalho(fn, msgOk, { guiaId = null } = {}) {
       const d = s.data();
       let guia = null;
       if (guiaId) { const g = await tx.get(doc(db, 'guias', guiaId)); guia = g.exists() ? { id: g.id, ...g.data() } : null; }
-      let r = fn(d, guia);
+      const sers = {};
+      for (const sr of series) { const x = await tx.get(doc(db, 'series', idSerie(sr))); sers[idSerie(sr)] = x.exists() ? x.data() : null; }
+      let r = fn(d, guia, sers);
       if (!r) return null;
       if (!r.alt) r = { alt: r };
       const aplicar = r.mov && Object.keys(r.mov).length ? await aplicarReservas(tx, r.mov, r.exige || new Set()) : null;
@@ -43,6 +46,8 @@ async function alterarTrabalho(fn, msgOk, { guiaId = null } = {}) {
       alt.atualizadoPor = sessao.uid;
       tx.update(ref, alt);
       if (r.guiaAlt && guia) tx.update(doc(db, 'guias', guia.id), { ...r.guiaAlt, atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid });
+      for (const [k, v] of Object.entries(r.seriesSet || {})) tx.set(doc(db, 'series', k), { ...v, atualizadoEm: serverTimestamp(), uid: sessao.uid });
+      for (const k of r.seriesDel || []) tx.delete(doc(db, 'series', k));
       if (aplicar) aplicar();
       return { ...d, ...alt, atualizadoEm: Timestamp.now() };
     });
@@ -53,7 +58,14 @@ async function alterarTrabalho(fn, msgOk, { guiaId = null } = {}) {
     if (msgOk) toast(msgOk, 'ok');
     renderDetalhe();
     return true;
-  } catch (e) { toast(['stock', 'artigo', 'guia'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); return false; }
+  } catch (e) { toast(['stock', 'artigo', 'guia', 'serie'].includes(e.code) ? e.message : erroFirebase(e), 'erro', 6000); return false; }
+}
+const erroSerie = (m) => Object.assign(new Error(m), { code: 'serie' });
+// Um n.º de série só pode estar numa guia aberta ou aplicado numa folha.
+function verificarSerieLivre(sr, info, permitirGuiaId = null) {
+  if (!info) return;
+  if (info.estado === 'folha') throw erroSerie(`O n.º de série ${sr} já foi aplicado na ${info.folhaNumero || 'outra folha'}.`);
+  if (info.estado === 'guia' && info.guiaId !== permitirGuiaId) throw erroSerie(`O n.º de série ${sr} está na guia ${info.guiaNumero || '(por comunicar)'}: use «Importar da guia».`);
 }
 
 // ---------- HTML dos cartões (chamado por renderDetalhe) ----------
@@ -68,11 +80,12 @@ function htmlTrabalho(f) {
   return `
     <div class="cartao" id="cartaoTempos">
       <div class="cab-cartao"><h3>Registo de tempos</h3>${pode ? '<button class="btn btn-peq btn-primario" id="btnTempo">+ Tempo</button>' : ''}</div>
-      ${tempos.length ? `<ul class="hist">${tempos.map((t) => `
-        <li data-tempo="${esc(t.id)}"><b>${esc(fmtHoras(t.horas))}</b>
-          <span><b class="equipa">${esc(equipaTexto(t))}</b><br>${esc(fmtData(t.data))}${t.inicio ? ` · das ${esc(t.inicio)} às ${esc(t.fim)}` : ''}${t.nota ? `<br><span class="muted">${esc(t.nota)}</span>` : ''}</span>
-          <span class="muted">${esc(t.nome || '')}${podeApagar(t) ? ` <button class="lixo" data-apagar-tempo="${esc(t.id)}" aria-label="Apagar">✕</button>` : ''}</span></li>`).join('')}</ul>
-        <p class="muted" style="margin:6px 0 0" id="totalHoras">Total: ${esc(fmtHoras(total))} de mão de obra (horas × pessoas)</p>`
+      ${tempos.length ? `<ul class="tempos">${tempos.map((t) => `
+        <li data-tempo="${esc(t.id)}"><div class="t-cab"><b>${esc(fmtData(t.data, { day: '2-digit', month: '2-digit' }))}</b>
+            <span>${t.inicio ? esc(t.inicio + '–' + t.fim) : ''}</span><b class="t-h">${esc(fmtHoras(t.horas))}</b>
+            ${podeApagar(t) ? `<button class="lixo" data-apagar-tempo="${esc(t.id)}" aria-label="Apagar">✕</button>` : ''}</div>
+          <div class="t-eq">${esc(equipaTexto(t))}${t.nota ? ` · <span class="muted">${esc(t.nota)}</span>` : ''}</div></li>`).join('')}</ul>
+        <p class="muted" style="margin:6px 0 0" id="totalHoras">Total: ${esc(fmtHoras(total))} (soma das horas de cada pessoa)</p>`
         : '<p class="muted" style="margin:0">Sem tempos registados.</p>'}
       ${sessao.perfil === 'master' && tempos.length ? '<div id="valorMO" class="valor-mo"><p class="muted" style="margin:0">A calcular o valor…</p></div>' : ''}
     </div>
@@ -81,7 +94,7 @@ function htmlTrabalho(f) {
       ${pode ? `<div class="acoes-mat"><button class="btn btn-peq" id="btnImportarGuia">Importar da guia</button>
         <a class="btn btn-peq" id="btnNovaGuia" href="${pagina('guias', { nova: 1, folha: f.id })}">Nova guia de transporte</a></div>` : ''}
       ${mats.length ? `<ul class="hist">${mats.map((m) => `
-        <li><b>${esc(fmtQtd(m.qtd))} ${esc(m.unidade || '')}</b><span>${esc(m.descricao)}${m.ref ? `<br><span class="muted">${esc(m.ref)}${m.guiaNumero ? ' · guia ' + esc(m.guiaNumero) : m.artigoId ? ' · do stock' : ' · fora do stock'}</span>` : ''}</span>
+        <li><b>${esc(fmtQtd(m.qtd))} ${esc(m.unidade || '')}</b><span>${esc(m.descricao)}${m.ref ? `<br><span class="muted">${esc(m.ref)}${m.guiaNumero ? ' · guia ' + esc(m.guiaNumero) : m.artigoId ? ' · do stock' : ' · fora do stock'}</span>` : ''}${(m.series || []).length ? `<br>${m.series.map((x) => `<span class="serie-tag">${esc(x)}</span>`).join('')}` : ''}</span>
           <span class="muted">${esc(m.nome || '')}${podeApagar(m) ? ` <button class="lixo" data-apagar-mat="${esc(m.id)}" aria-label="Apagar">✕</button>` : ''}</span></li>`).join('')}</ul>`
         : '<p class="muted" style="margin:0">Sem material registado.</p>'}
     </div>
@@ -119,12 +132,17 @@ function ligarTrabalho() {
     alterarTrabalho((d, guia) => {
       const m = (d.materiais || []).find((x) => x.id === m0.id);
       if (!m) return null;
-      const r = { alt: { materiais: (d.materiais || []).filter((x) => x.id !== m.id) }, mov: {} };
+      const r = { alt: { materiais: (d.materiais || []).filter((x) => x.id !== m.id) }, mov: {}, seriesSet: {}, seriesDel: [] };
+      const volta = !!(m.guiaId && guia && guia.estado === 'Comunicada');   // guia ainda aberta: o material volta para a guia
       if (m.artigoId) {
-        const volta = guia && guia.estado === 'Comunicada';   // guia ainda aberta: o material volta para a guia
         r.mov[m.artigoId] = { resFolhas: -m.qtd, resGuias: volta ? m.qtd : 0 };
         if (volta) r.guiaAlt = { linhas: guia.linhas.map((l) => l.id !== m.guiaLinha ? l
-          : { ...l, consumido: r3((l.consumido || 0) - m.qtd), consumos: (l.consumos || []).filter((c) => c.materialId !== m.id) }) };
+          : { ...l, consumido: r3((l.consumido || 0) - m.qtd), consumos: (l.consumos || []).filter((c) => c.materialId !== m.id),
+            seriesUsadas: (l.seriesUsadas || []).filter((x) => !(m.series || []).includes(x)) }) };
+      }
+      for (const sr of m.series || []) {
+        if (volta) r.seriesSet[idSerie(sr)] = { serie: sr, artigoId: m.artigoId || '', ref: m.ref || '', estado: 'guia', guiaId: guia.id, guiaNumero: guia.numero || '', folhaId: '', folhaNumero: '' };
+        else r.seriesDel.push(idSerie(sr));
       }
       return r;
     }, 'Material apagado.', { guiaId: m0.guiaId || null });
@@ -208,8 +226,9 @@ async function formTempo() {
 
 function formMaterial() {
   let artigo = null;
+  let seriesIniciais = [];
   const c = abrirModal('Registar material', `
-    <label class="campo"><span>Procurar no stock (referência ou nome)</span>
+    <label class="campo"><span>Procurar no stock (referência, nome ou n.º de série)</span>
       <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Ex.: tubo cobre 1/4"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
     <div id="mRes"></div>
     <div id="mEscolhido"></div>
@@ -219,30 +238,56 @@ function formMaterial() {
       <label class="campo"><span>Quantidade *</span><input id="mQtd" type="number" inputmode="decimal" min="0" step="any"></label>
       <label class="campo"><span>Unidade</span><select id="mUn">${unidadesMaterial().map((u) => `<option>${u}</option>`).join('')}</select></label>
     </div>
+    <div id="mSeries" class="series-campos"></div>
     <div class="msg-erro" id="mErro"></div>
     <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="mGuardar">Guardar</button></div>`);
+  // equipamentos: um n.º de série por unidade
+  const desenharSeries = () => {
+    const box = $('#mSeries', c);
+    if (!artigo || !artigo.comSerie) { box.innerHTML = ''; return; }
+    const n = Math.max(0, Math.min(50, Math.floor(Number(String($('#mQtd', c).value).replace(',', '.')) || 0)));
+    const atuais = $$('input[data-serie]', c).map((i) => i.value);
+    box.innerHTML = n ? Array.from({ length: n }, (_, i) => `<input data-serie="${i}" autocomplete="off" placeholder="N.º de série ${i + 1} *" value="${esc(atuais[i] || seriesIniciais[i] || '')}">`).join('')
+      : '<p class="muted" style="margin:0">Equipamento com n.º de série: indique a quantidade (em unidades).</p>';
+  };
+  $('#mQtd', c).oninput = desenharSeries;
+  const escolher = (a, serie) => {
+    artigo = a;
+    seriesIniciais = serie ? [serie] : [];
+    $('#mRes', c).innerHTML = '';
+    $('#mDesc', c).value = a.design; $('#mRef', c).value = a.ref;
+    $('#mDesc', c).disabled = true; $('#mRef', c).disabled = true;
+    const un = $('#mUn', c);
+    if (a.unidade && ![...un.options].some((o) => o.value === a.unidade)) un.insertAdjacentHTML('beforeend', `<option>${esc(a.unidade)}</option>`);
+    if (a.unidade) un.value = a.unidade;
+    un.disabled = true;
+    $('#mEscolhido', c).innerHTML = `<p class="stock-info" id="mDisp">Stock ${esc(fmtQtd(a.stock))} · disponível <b>${esc(fmtQtd(disponivel(a)))} ${esc(a.unidade || '')}</b>${a.comSerie ? ' · <b>com n.º de série</b>' : ''}
+      <button type="button" class="btn btn-peq" id="mOutro">Outro</button></p>`;
+    $('#mOutro', c).onclick = () => { artigo = null; $('#mEscolhido', c).innerHTML = ''; ['#mDesc', '#mRef', '#mUn'].forEach((k) => { $(k, c).disabled = false; }); $('#mDesc', c).value = ''; $('#mRef', c).value = ''; desenharSeries(); };
+    if (serie) $('#mQtd', c).value = 1;
+    desenharSeries();
+    $('#mQtd', c).focus();
+  };
   const procurar = () => comBotao($('#mProcBtn', c), async () => {
     const t = $('#mProc', c).value.trim();
     if (t.length < 2) return;
     try {
+      // 1.º: é um n.º de série já conhecido (numa guia ou noutra folha)?
+      if (t.length >= 4 && !/\s/.test(t)) {
+        const sd = await getDoc(doc(db, 'series', idSerie(t)));
+        if (sd.exists()) {
+          const x = sd.data();
+          $('#mRes', c).innerHTML = x.estado === 'guia'
+            ? `<p class="aviso-concl">O n.º de série ${esc(x.serie)} está na guia ${esc(x.guiaNumero || '(por comunicar)')}. Use «Importar da guia».</p>`
+            : `<p class="aviso-concl">O n.º de série ${esc(x.serie)} já foi aplicado na ${esc(x.folhaNumero || 'outra folha')}.</p>`;
+          return;
+        }
+      }
       const l = await pesquisarArtigos(t);
       $('#mRes', c).innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
-        <button type="button" class="artigo-op" data-i="${i}"><b>${esc(x.ref)}</b> ${esc(x.design)}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`
-        : '<p class="muted">Nenhum artigo encontrado.</p>';
-      $$('.artigo-op', c).forEach((bt) => bt.onclick = () => {
-        artigo = l[+bt.dataset.i];
-        $('#mRes', c).innerHTML = '';
-        $('#mDesc', c).value = artigo.design; $('#mRef', c).value = artigo.ref;
-        $('#mDesc', c).disabled = true; $('#mRef', c).disabled = true;
-        const un = $('#mUn', c);
-        if (artigo.unidade && ![...un.options].some((o) => o.value === artigo.unidade)) un.insertAdjacentHTML('beforeend', `<option>${esc(artigo.unidade)}</option>`);
-        if (artigo.unidade) un.value = artigo.unidade;
-        un.disabled = true;
-        $('#mEscolhido', c).innerHTML = `<p class="stock-info" id="mDisp">Stock ${esc(fmtQtd(artigo.stock))} · disponível <b>${esc(fmtQtd(disponivel(artigo)))} ${esc(artigo.unidade || '')}</b>
-          <button type="button" class="btn btn-peq" id="mOutro">Outro</button></p>`;
-        $('#mOutro', c).onclick = () => { artigo = null; $('#mEscolhido', c).innerHTML = ''; ['#mDesc', '#mRef', '#mUn'].forEach((k) => { $(k, c).disabled = false; }); $('#mDesc', c).value = ''; $('#mRef', c).value = ''; };
-        $('#mQtd', c).focus();
-      });
+        <button type="button" class="artigo-op" data-i="${i}"><b>${esc(x.ref)}</b> ${esc(x.design)}${x.comSerie ? ' <span class="serie-tag">N.º série</span>' : ''}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`
+        : '<p class="muted">Nenhum artigo encontrado. Se é um n.º de série de um equipamento novo, procure o equipamento pelo nome ou referência.</p>';
+      $$('.artigo-op', c).forEach((bt) => bt.onclick = () => escolher(l[+bt.dataset.i]));
     } catch (e) { toast(erroFirebase(e), 'erro'); }
   });
   $('#mProcBtn', c).onclick = procurar;
@@ -254,19 +299,30 @@ function formMaterial() {
     if (descricao.length < 2) return erro('Indique a descrição do material.');
     if (!(qtd > 0)) return erro('Indique a quantidade.');
     if (artigo && qtd > disponivel(artigo) + 0.0005) return erro(`Só há ${fmtQtd(disponivel(artigo))} ${artigo.unidade || ''} disponíveis.`);
+    let series = [];
+    if (artigo && artigo.comSerie) {
+      if (!Number.isInteger(qtd)) return erro('Equipamentos com n.º de série: a quantidade tem de ser em unidades.');
+      series = $$('input[data-serie]', c).map((i) => limparSerie(i.value));
+      if (series.length !== qtd || series.some((x) => x.length < 3)) return erro('Indique o n.º de série de cada unidade.');
+      if (new Set(series.map(idSerie)).size !== series.length) return erro('Há números de série repetidos.');
+    }
     const m = { id: novoIdItem(), descricao, ref: $('#mRef', c).value.trim(), qtd, unidade: $('#mUn', c).value, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
     if (artigo) m.artigoId = artigo.id;
+    if (series.length) m.series = series;
     comBotao($('#mGuardar', c), async () => {
-      if (await alterarTrabalho((d) => {
+      if (await alterarTrabalho((d, g, sers) => {
         if ((d.materiais || []).length >= 300) { erro('Limite de linhas atingido.'); return null; }
+        const seriesSet = {};
+        for (const sr of series) { verificarSerieLivre(sr, sers[idSerie(sr)]); seriesSet[idSerie(sr)] = { serie: sr, artigoId: artigo.id, ref: artigo.ref, estado: 'folha', folhaId: atual.id, folhaNumero: d.numero, guiaId: '', guiaNumero: '' }; }
         const alt = { materiais: [...(d.materiais || []), m] };
-        return artigo ? { alt, mov: { [artigo.id]: { resFolhas: qtd } }, exige: new Set([artigo.id]) } : alt;
-      }, 'Material registado.')) fecharModal();
+        return artigo ? { alt, mov: { [artigo.id]: { resFolhas: qtd } }, exige: new Set([artigo.id]), seriesSet } : alt;
+      }, 'Material registado.', { series })) fecharModal();
     });
   };
 }
 
 // ---------- Importar da guia de transporte: só o que foi gasto passa para a folha ----------
+function seriesPorUsar(l) { return (l.series || []).filter((x) => !(l.seriesUsadas || []).includes(x)); }
 async function importarDaGuia() {
   const f = atual;
   const c0 = [where('clienteId', '==', f.clienteId), where('estado', '==', 'Comunicada')];
@@ -282,7 +338,9 @@ async function importarDaGuia() {
     <p class="muted" style="margin-top:0">Indique só o que foi gasto nesta obra. O resto fica na guia.</p>
     ${guias.map((g) => `<div class="guia-imp">
       <h3 style="margin:8px 0 4px">${esc(g.numero || 'Guia')} · ${esc(g.viatura || '')} · ${esc(fmtData(g.dataSaida))}</h3>
-      ${(g.linhas || []).filter((l) => saldoLinha(l) > 0.0005).map((l) => `
+      ${(g.linhas || []).filter((l) => saldoLinha(l) > 0.0005).map((l) => (l.series || []).length ? `
+        <div class="linha-imp" style="grid-template-columns:1fr"><span><b>${esc(l.ref)}</b> ${esc(l.design)}<br><span class="muted">marque os n.º de série aplicados</span></span>
+          ${seriesPorUsar(l).map((sr) => `<label class="tarefa"><input type="checkbox" data-g="${esc(g.id)}" data-l="${esc(l.id)}" data-s="${esc(sr)}"><span class="serie-tag">${esc(sr)}</span></label>`).join('')}</div>` : `
         <label class="linha-imp"><span><b>${esc(l.ref)}</b> ${esc(l.design)}<br><span class="muted">levou ${esc(fmtQtd(l.qtd))} · por gastar ${esc(fmtQtd(saldoLinha(l)))} ${esc(l.unidade || '')}</span></span>
           <input type="number" inputmode="decimal" min="0" step="any" max="${saldoLinha(l)}" data-g="${esc(g.id)}" data-l="${esc(l.id)}" placeholder="0"></label>`).join('')}
     </div>`).join('')}
@@ -290,28 +348,41 @@ async function importarDaGuia() {
     <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="iOk">Importar</button></div>`);
   $('#iOk', c).onclick = () => {
     const erro = (m) => { $('#iErro', c).textContent = m; };
-    const pedidos = $$('input[data-g]', c).map((i) => ({ g: i.dataset.g, l: i.dataset.l, q: r3(String(i.value).replace(',', '.')) })).filter((x) => x.q > 0);
+    const pedidos = $$('input[type=number][data-g]', c).map((i) => ({ g: i.dataset.g, l: i.dataset.l, q: r3(String(i.value).replace(',', '.')), s: [] })).filter((x) => x.q > 0);
+    for (const cb of $$('input[type=checkbox][data-g]:checked', c)) {
+      let p = pedidos.find((x) => x.g === cb.dataset.g && x.l === cb.dataset.l);
+      if (!p) pedidos.push(p = { g: cb.dataset.g, l: cb.dataset.l, q: 0, s: [] });
+      p.s.push(cb.dataset.s); p.q = p.s.length;
+    }
     if (!pedidos.length) return erro('Indique a quantidade gasta em pelo menos uma linha.');
     const porGuia = [...new Set(pedidos.map((p) => p.g))];
     comBotao($('#iOk', c), async () => {
       let ok = true;
       for (const gid of porGuia) {   // uma transação por guia
-        ok = ok && await alterarTrabalho((d, guia) => {
+        const seriesDaGuia = pedidos.filter((p) => p.g === gid).flatMap((p) => p.s);
+        ok = ok && await alterarTrabalho((d, guia, sers) => {
           if (!guia || guia.estado !== 'Comunicada') throw Object.assign(new Error('A guia já não está aberta.'), { code: 'guia' });
-          const novos = [], mov = {};
+          const novos = [], mov = {}, seriesSet = {};
           const linhas = guia.linhas.map((l) => {
             const p = pedidos.find((x) => x.g === gid && x.l === l.id);
             if (!p) return l;
             if (p.q > saldoLinha(l) + 0.0005) throw Object.assign(new Error(`${l.ref}: só há ${fmtQtd(saldoLinha(l))} ${l.unidade || ''} por gastar na guia.`), { code: 'guia' });
+            for (const sr of p.s) {
+              if (!seriesPorUsar(l).includes(sr)) throw erroSerie(`O n.º de série ${sr} já não está disponível na guia.`);
+              verificarSerieLivre(sr, sers[idSerie(sr)], guia.id);
+              seriesSet[idSerie(sr)] = { serie: sr, artigoId: l.artigoId, ref: l.ref, estado: 'folha', folhaId: atual.id, folhaNumero: d.numero, guiaId: guia.id, guiaNumero: guia.numero || '' };
+            }
             const m = { id: novoIdItem(), descricao: l.design, ref: l.ref, qtd: p.q, unidade: l.unidade || '', artigoId: l.artigoId,
               guiaId: guia.id, guiaNumero: guia.numero || '', guiaLinha: l.id, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() };
+            if (p.s.length) m.series = p.s;
             novos.push(m);
             const mv = (mov[l.artigoId] = mov[l.artigoId] || { resFolhas: 0, resGuias: 0 });
             mv.resFolhas += p.q; mv.resGuias -= p.q;   // passa de «na guia» para «na folha»: o disponível não muda
-            return { ...l, consumido: r3((l.consumido || 0) + p.q), consumos: [...(l.consumos || []), { folhaId: atual.id, numero: d.numero, materialId: m.id, qtd: p.q }] };
+            return { ...l, consumido: r3((l.consumido || 0) + p.q), seriesUsadas: [...(l.seriesUsadas || []), ...p.s],
+              consumos: [...(l.consumos || []), { folhaId: atual.id, numero: d.numero, materialId: m.id, qtd: p.q }] };
           });
-          return { alt: { materiais: [...(d.materiais || []), ...novos] }, mov, guiaAlt: { linhas } };
-        }, null, { guiaId: gid });
+          return { alt: { materiais: [...(d.materiais || []), ...novos] }, mov, guiaAlt: { linhas }, seriesSet };
+        }, null, { guiaId: gid, series: seriesDaGuia });
       }
       if (ok) { fecharModal(); toast('Material importado da guia.', 'ok'); }
     });
@@ -337,8 +408,8 @@ function pedirConclusao(f) {
         <canvas id="cAss" class="quadro-ass" width="600" height="240"></canvas>
         <button type="button" class="btn btn-peq" id="cLimpar" style="margin-top:6px">Limpar</button></div>
       <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cAusente" style="width:auto;min-height:0"><span style="margin:0">Cliente ausente (sem assinatura)</span></label>
-      <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cEnviar" style="width:auto;min-height:0" ${emailDoCliente(f) ? 'checked' : ''}><span style="margin:0">Enviar o relatório ao cliente por email</span></label>
-      <label class="campo" id="campoEmailRel" style="${emailDoCliente(f) ? '' : 'display:none'}"><span>Email do cliente</span><input id="cEmail" type="email" inputmode="email" autocomplete="off" value="${esc(emailDoCliente(f))}"></label>
+      <label class="campo"><span>Email do cliente (recebe o relatório) *</span><input id="cEmail" type="email" inputmode="email" autocomplete="off" value="${esc(emailDoCliente(f))}" placeholder="email@cliente.pt"></label>
+      <p class="muted" style="margin:-6px 0 10px">O relatório é sempre enviado, com cópia para a Arpuro.</p>
       <div class="msg-erro" id="cErro"></div>
       <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="cOk">Concluir</button></div>`,
     { aoFechar: () => resolve(null) });
@@ -352,7 +423,6 @@ function pedirConclusao(f) {
     const parar = () => { ativo = false; };
     cv.addEventListener('pointerup', parar); cv.addEventListener('pointercancel', parar);
     $('#cLimpar', c).onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); desenhou = false; };
-    $('#cEnviar', c).onchange = () => { $('#campoEmailRel', c).style.display = $('#cEnviar', c).checked ? '' : 'none'; };
     $('#cAusente', c).onchange = () => { const a = $('#cAusente', c).checked; cv.classList.toggle('desativado', a); $('#cNome', c).disabled = a; };
     $('#cOk', c).onclick = () => {
       const erro = (m) => { $('#cErro', c).textContent = m; };
@@ -362,8 +432,8 @@ function pedirConclusao(f) {
       if (relatorio.length < 3) return erro('Escreva o relatório de intervenção.');
       if (!ausente && nome.length < 2) return erro('Indique o nome de quem assina.');
       if (!ausente && !desenhou) return erro('Peça ao cliente para assinar, ou marque «Cliente ausente».');
-      const enviarPara = $('#cEnviar', c).checked ? $('#cEmail', c).value.trim() : '';
-      if ($('#cEnviar', c).checked && !emailValido(enviarPara)) return erro('Indique um email válido do cliente, ou desmarque o envio do relatório.');
+      const enviarPara = $('#cEmail', c).value.trim();
+      if (!emailValido(enviarPara)) return erro('Indique o email do cliente: o relatório é sempre enviado.');
       const assinatura = { ausente, nome: ausente ? '' : nome, imagem: ausente ? '' : reduzirAssinatura(cv), em: Timestamp.now(), uid: sessao.uid, registadoPor: sessao.nome || sessao.email };
       fecharModal();
       resolve({ relatorio, assinatura, enviarRelatorioPara: enviarPara });
@@ -443,6 +513,8 @@ function relatorioHtml(f, assinaturaSrc) {
   <div style="background:#008080;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:18px;font-weight:bold">Arpuro Climatização</div>
     <div style="font-size:14px">Relatório de intervenção · ${e(f.numero)}</div></div>
   <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px">
+  <p style="margin:0 0 12px;padding:8px 10px;background:#fef9c3;border-radius:6px;font-size:13px;color:#713f12"><b>Documento informativo, para conferência.</b>
+    Os tempos e os materiais aqui indicados são provisórios e podem ser ajustados na conferência final, antes da faturação. Este documento não substitui a fatura.</p>
   <table style="border-collapse:collapse;font-size:14px;margin-bottom:12px">
     ${linha('Cliente', e(f.clienteNome) + (f.clienteNif ? ` · NIF ${e(f.clienteNif)}` : ''))}
     ${linha('Local', e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', ')))}
@@ -457,7 +529,7 @@ function relatorioHtml(f, assinaturaSrc) {
   ${tempos.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Tempos</h3><table style="border-collapse:collapse;width:100%"><tr><th ${th}>Dia</th><th ${th}>Horário</th><th ${th}>Equipa</th><th ${th}>Horas</th></tr>
     ${tempos.map((t) => `<tr><td ${td}>${e(fmtData(t.data))}</td><td ${td}>${t.inicio ? e(t.inicio + '–' + t.fim) : ''}</td><td ${td}>${e(equipaTexto(t))}</td><td ${td}>${e(fmtHoras(t.horas))}</td></tr>`).join('')}</table>` : ''}
   ${mats.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Material aplicado</h3><table style="border-collapse:collapse;width:100%"><tr><th ${th}>Qtd.</th><th ${th}>Descrição</th><th ${th}>Ref.</th></tr>
-    ${mats.map((m) => `<tr><td ${td}>${e(fmtQtd(m.qtd))} ${e(m.unidade || '')}</td><td ${td}>${e(m.descricao)}</td><td ${td}>${e(m.ref || '')}</td></tr>`).join('')}</table>` : ''}
+    ${mats.map((m) => `<tr><td ${td}>${e(fmtQtd(m.qtd))} ${e(m.unidade || '')}</td><td ${td}>${e(m.descricao)}${(m.series || []).length ? `<br><span style="font-size:12px;color:#475569">N.º série: ${m.series.map(e).join(', ')}</span>` : ''}</td><td ${td}>${e(m.ref || '')}</td></tr>`).join('')}</table>` : ''}
   <h3 style="font-size:15px;margin:14px 0 4px">Cliente</h3>
   ${ass && !ass.ausente ? `<img src="${e(assinaturaSrc || ass.imagem || '')}" alt="Assinatura" width="300" height="120" style="border:1px solid #e2e8f0;border-radius:6px"><p style="margin:4px 0 0;font-size:14px">${e(ass.nome || '')} · ${e(fmtDataHora(ass.em))}</p>`
     : `<p style="margin:0;font-size:14px">${ass && ass.ausente ? 'Cliente ausente no fim da intervenção (sem assinatura).' : '—'}</p>`}
@@ -469,7 +541,8 @@ function relatorioTexto(f) {
   if (f.descricao) l.push('Trabalho solicitado:', f.descricao, '');
   l.push('Trabalho realizado:', f.relatorio || '—', '');
   for (const t of f.tempos || []) l.push(`Tempo: ${fmtData(t.data)} ${t.inicio || ''}–${t.fim || ''} · ${equipaTexto(t)} · ${fmtHoras(t.horas)}`);
-  for (const m of f.materiais || []) l.push(`Material: ${fmtQtd(m.qtd)} ${m.unidade || ''} ${m.descricao}${m.ref ? ' (' + m.ref + ')' : ''}`);
+  for (const m of f.materiais || []) l.push(`Material: ${fmtQtd(m.qtd)} ${m.unidade || ''} ${m.descricao}${m.ref ? ' (' + m.ref + ')' : ''}${(m.series || []).length ? ' — n.º série ' + m.series.join(', ') : ''}`);
+  l.push('', 'Documento informativo, para conferência: tempos e materiais provisórios, podem ser ajustados antes da faturação.');
   l.push('', 'ARPURO & REDEMÓVEL, LDA · NIF 503198749');
   return l.join('\n');
 }
@@ -497,12 +570,7 @@ function htmlRelatorioCliente(f) {
   </div>`;
 }
 function ligarRelatorioCliente() {
-  if ($('#btnVerRelatorio')) $('#btnVerRelatorio').onclick = () => {
-    const w = window.open('', '_blank');
-    if (!w) { toast('O browser bloqueou a janela. Permita janelas para este site.', 'erro'); return; }
-    w.document.write(`<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(atual.numero)} — Relatório</title></head><body style="margin:12px">${relatorioHtml(atual)}<p style="text-align:center;font-family:Arial"><button onclick="print()">Imprimir / guardar PDF</button></p></body></html>`);
-    w.document.close();
-  };
+  if ($('#btnVerRelatorio')) $('#btnVerRelatorio').onclick = () => mostrarRelatorio(atual);
   if ($('#btnEnviarRelatorio')) $('#btnEnviarRelatorio').onclick = async () => {
     const c = abrirModal('Enviar relatório ao cliente', `
       <label class="campo"><span>Email do cliente *</span><input id="eRel" type="email" inputmode="email" value="${esc(emailDoCliente(atual))}" autocomplete="off"></label>
@@ -524,5 +592,79 @@ function ligarRelatorioCliente() {
         } catch (e) { $('#eErro', c).textContent = erroFirebase(e); }
       });
     };
+  };
+}
+
+
+// Vista do relatório em ecrã inteiro (lê-se bem no telemóvel); «Imprimir / PDF» imprime só o relatório.
+function mostrarRelatorio(f) {
+  fecharRelatorio();
+  const v = document.createElement('div');
+  v.id = 'vRelatorio';
+  v.innerHTML = `<div class="rel-barra"><button class="btn" id="relFechar">‹ Voltar</button><button class="btn btn-primario" id="relImprimir" style="margin-left:auto">Imprimir / PDF</button></div>
+    <div class="rel-corpo">${relatorioHtml(f)}</div>`;
+  document.body.appendChild(v);
+  document.body.style.overflow = 'hidden';
+  $('#relFechar').onclick = fecharRelatorio;
+  $('#relImprimir').onclick = () => {
+    document.body.classList.add('a-imprimir');
+    window.print();
+    setTimeout(() => document.body.classList.remove('a-imprimir'), 500);
+  };
+}
+function fecharRelatorio() {
+  const v = $('#vRelatorio');
+  if (v) v.remove();
+  document.body.style.overflow = '';
+}
+
+// ---------- Aviso de agendamento ao cliente (ao agendar e ao reagendar) ----------
+// Devolve o email (enviar), '' (não enviar) ou null (cancelar a ação).
+function pedirAvisoAgendamento(f, reagendar = false) {
+  return new Promise((resolve) => {
+    const em = emailDoCliente(f);
+    const c = abrirModal(reagendar ? 'Reagendar' : 'Agendar', `
+      <p style="margin-top:0">${esc(TIPO_NOME[f.tipo] || f.tipo)} · ${f.dataPrevista ? `<b>${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}</b>` : ''} · ${esc(f.tecnicoNome || '')}</p>
+      <label class="campo"><span>Enviar aviso ao cliente para</span><input id="aEmail" type="email" inputmode="email" autocomplete="off" value="${esc(em)}" placeholder="email@cliente.pt"></label>
+      <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="aSem" style="width:auto;min-height:0"><span style="margin:0">Não enviar aviso desta vez</span></label>
+      <div class="msg-erro" id="aErro"></div>
+      <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="aOk">${reagendar ? 'Reagendar' : 'Agendar'}</button></div>`,
+    { aoFechar: () => resolve(null) });
+    $('#aOk', c).onclick = () => {
+      if ($('#aSem', c).checked) { fecharModal(); resolve(''); return; }
+      const para = $('#aEmail', c).value.trim();
+      if (!emailValido(para)) { $('#aErro', c).textContent = 'Indique o email do cliente, ou marque «Não enviar aviso desta vez».'; return; }
+      fecharModal();
+      resolve(para);
+    };
+  });
+}
+function avisoAgendamentoHtml(f, reagendar) {
+  const e = esc;
+  const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
+  <div style="background:#008080;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:18px;font-weight:bold">Arpuro Climatização</div>
+    <div style="font-size:14px">${reagendar ? 'Intervenção reagendada' : 'Intervenção agendada'} · ${e(f.numero)}</div></div>
+  <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px;font-size:14px">
+  <p style="margin:0 0 12px">Informamos que a intervenção ${reagendar ? 'foi reagendada' : 'está agendada'} para <b>${e(quando)}</b> (hora prevista de chegada).</p>
+  <table style="border-collapse:collapse;font-size:14px">
+    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Cliente</td><td>${e(f.clienteNome)}</td></tr>
+    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Local</td><td>${e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</td></tr>
+    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Tipo</td><td>${e(TIPO_NOME[f.tipo] || f.tipo)}</td></tr>
+    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Técnico</td><td>${e(f.tecnicoNome || '')}</td></tr>
+    ${f.descricao ? `<tr><td style="padding:3px 8px 3px 0;color:#64748b;vertical-align:top">Trabalho</td><td style="white-space:pre-wrap">${e(f.descricao)}</td></tr>` : ''}
+  </table>
+  <p style="margin:14px 0 0">Se esta data não for conveniente, responda a este email para combinarmos outra.</p>
+  <p style="margin:18px 0 0;font-size:12px;color:#64748b">ARPURO &amp; REDEMÓVEL, LDA · NIF 503198749 · São João da Madeira</p>
+  </div></div>`;
+}
+function dadosEmailAgendamento(f, para, reagendar = false) {
+  const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
+  return {
+    tipo: 'agendamento', estado: 'Pendente', para: para.trim(), folhaId: f.id, folhaNumero: f.numero,
+    assunto: `${reagendar ? 'Intervenção reagendada' : 'Intervenção agendada'} ${f.numero} — ${quando} — Arpuro Climatização`,
+    html: avisoAgendamentoHtml(f, reagendar),
+    texto: `Arpuro Climatização — ${reagendar ? 'intervenção reagendada' : 'intervenção agendada'} ${f.numero}\n\nData prevista: ${quando}\nCliente: ${f.clienteNome}\nTécnico: ${f.tecnicoNome || ''}\n${f.descricao ? 'Trabalho: ' + f.descricao + '\n' : ''}\nSe esta data não for conveniente, responda a este email.`,
+    assinaturaPng: '', criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email, criadoEm: serverTimestamp(),
   };
 }

@@ -43,6 +43,7 @@ const CLIENTES = [
 for (let i = 1; i <= 15; i++) CLIENTES.push([`Condomínio Edifício ${String(i).padStart(2, '0')}`, i % 2 ? 'Gaia' : 'Matosinhos', `Rua Exemplo ${i}`, '4400-000', '22' + String(1000000 + i), 'Administração']);
 
 function gerar() {
+  const tokens = (...t) => { const set = new Set(); for (const x of t) for (const p of String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/)) for (let k = 2; k <= Math.min(p.length, 15); k++) set.add(p.slice(0, k)); return [...set]; };
   const db = {};
   const users = [];
   for (const u of Object.values(USERS)) {
@@ -101,7 +102,9 @@ function gerar() {
     const seq = ['Agendada', 'Em curso', 'Concluída', 'Faturada'];
     if (estado === 'Pendente') hist.push({ estado: 'Em curso', de: 'Agendada', uid: tec.uid, nome: tec.nome, em: ts(criado) }, { estado: 'Pendente', de: 'Em curso', uid: tec.uid, nome: tec.nome, em: ts(criado), motivo: 'Peças' });
     else for (let k = 1; k <= seq.indexOf(estado); k++) hist.push({ estado: seq[k], de: seq[k - 1], uid: seq[k] === 'Faturada' ? 'u-bo' : tec.uid, nome: seq[k] === 'Faturada' ? 'Ana Ferreira' : tec.nome, em: ts(criado) });
-    db['folhas/' + id] = {
+    const numero = `FO-${ano}-${String(i + 1).padStart(4, '0')}`;
+    const descricao = tipo === 'Manutenção' ? 'Manutenção preventiva: limpeza de filtros e verificação de pressões.' : tipo === 'AT' ? 'Equipamento não arranca, erro E5 na unidade exterior.' : 'Instalação de split 12000 BTU na sala.';
+    db['folhas/' + id] = { pesquisa: tokens(numero, String(i + 1), c.nome, c.nif, descricao),
       numero: `FO-${ano}-${String(i + 1).padStart(4, '0')}`,
       clienteId: c.id, clienteNome: c.nome, clienteNif: c.nif,
       morada: c.morada, codigoPostal: c.cp, localidade: c.loc, telefone: c.tel, contacto: c.contacto,
@@ -145,13 +148,17 @@ function gerar() {
   db['artigos/SOLDESINFECTANTE'] = { ref: 'SOLDESINFECTANTE', design: 'Desinfectante Liquido', unidade: 'l', familia: 'Ar Condicionado', ativo: true, stock: 5, reservadoPHC: 4.5, emGuiasPHC: 0,
     origem: 'phc', pesquisa: ['so', 'sol', 'sold', 'solde', 'soldes', 'soldesi', 'soldesin', 'soldesinf', 'de', 'des', 'desi', 'desin', 'desinf', 'desinfe', 'desinfec', 'desinfect', 'li', 'liq', 'liqu', 'liqui', 'liquid', 'liquido'] };
   db['artigos/ANTIGO1'] = { ref: 'ANTIGO1', design: 'Tubo cobre antigo', unidade: 'm', ativo: false, stock: 0, origem: 'phc', pesquisa: ['tu', 'tub', 'tubo', 'co', 'cob', 'cobr', 'cobre'] };
+  db['artigos/FTXP35'] = { ref: 'FTXP35', design: 'Ar Condicionado Daikin FTXP35 (uni. int.)', unidade: 'un', familia: 'Ar Condicionado', ativo: true, comSerie: true,
+    stock: 3, reservadoPHC: 0, emGuiasPHC: 0, resGuias: 1, origem: 'phc', pesquisa: ['ft', 'ftx', 'ftxp', 'ftxp3', 'ftxp35', 'ar', 'co', 'con', 'cond', 'da', 'dai', 'daik', 'daiki', 'daikin'] };
+  db['series/K123456'] = { serie: 'K123456', artigoId: 'FTXP35', ref: 'FTXP35', estado: 'guia', guiaId: 'g1', guiaNumero: '353/' + ano, folhaId: '', folhaNumero: '', uid: 'u-bo' };
   db['listas/viaturas'] = { itens: ['AV-78-ER', 'BB-86-IN'] };
   // guia comunicada (com código AT) do João para o cliente da fo003, com 50 m de tubo
   const c3 = clientes[2];
   db['guias/g1'] = { numero: '353/' + ano, codigoAT: '19948614006', estado: 'Comunicada', armazem: 99,
     clienteId: c3.id, clienteNome: c3.nome, clienteNif: c3.nif, morada: c3.morada, codigoPostal: c3.cp, localidade: c3.loc,
     folhaId: 'fo003', folhaNumero: `FO-${ano}-0003`, tecnicoUid: 'u-tec1', tecnicoNome: 'João Silva', viatura: 'BB-86-IN', dataSaida: ts(dia(0, 8)),
-    linhas: [{ id: 'l1', artigoId: 'TC14', ref: 'TC14', design: 'Tubo cobre 1/4"', unidade: 'm', qtd: 50, consumido: 0, devolvido: 0, consumos: [] }],
+    linhas: [{ id: 'l1', artigoId: 'TC14', ref: 'TC14', design: 'Tubo cobre 1/4"', unidade: 'm', qtd: 50, consumido: 0, devolvido: 0, consumos: [] },
+      { id: 'l2', artigoId: 'FTXP35', ref: 'FTXP35', design: 'Ar Condicionado Daikin FTXP35 (uni. int.)', unidade: 'un', qtd: 1, consumido: 0, devolvido: 0, consumos: [], series: ['K123456'], seriesUsadas: [] }],
     historico: [{ estado: 'Por comunicar', de: null, uid: 'u-bo', nome: 'Ana Ferreira', em: ts(dia(0, 7)) }, { estado: 'Comunicada', de: 'Por comunicar', uid: 'phc', nome: 'PHC (código AT)', em: ts(dia(0, 7)) }],
     criadoEm: ts(dia(0, 7)), criadoPor: 'u-bo', criadoPorNome: 'Ana Ferreira' };
   db['contadores/folhas-' + ano] = { valor: F.length };

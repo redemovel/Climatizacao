@@ -321,6 +321,12 @@ async function aplicarReservas(tx, mov, exigeDisponivel = new Set()) {
     }
   };
 }
+// N.º de série → id do documento em series/ (maiúsculas, sem espaços; «/» e outros trocados por ~XX)
+function idSerie(sr) {
+  return String(sr || '').toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9._-]/g, (c) => '~' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+}
+function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
+
 // Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
 function movLibertarFolha(f) {
   const mov = {};

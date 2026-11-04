@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-04 — botão «Sincronizar com o PHC agora» (controlo/sincronizar)
+// Atualizado: 2026-11-04 (2) — n.º de série (series/), pesquisa nas folhas, aviso de agendamento por email
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -88,6 +88,8 @@ service cloud.firestore {
         && d.historico is list && d.historico.size() <= 500
         && (!('observacoesTecnico' in d) || (d.observacoesTecnico is string && d.observacoesTecnico.size() <= 5000))
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 5000))
+        && (!('pesquisa' in d) || (d.pesquisa is list && d.pesquisa.size() <= 400))
+        && (!('clienteEmail' in d) || (d.clienteEmail is string && d.clienteEmail.size() <= 200))
         // Fase 2: trabalho no local (sem preços)
         && (!('tempos' in d) || (d.tempos is list && d.tempos.size() <= 200))
         && (!('materiais' in d) || (d.materiais is list && d.materiais.size() <= 300))
@@ -225,7 +227,7 @@ service cloud.firestore {
 
     // ---------- Emails a enviar (relatório ao cliente): a PontePHC envia pelo Exchange e marca o estado ----------
     function emailValido(d) {
-      return d.tipo == 'relatorio' && d.estado == 'Pendente'
+      return d.tipo in ['relatorio', 'agendamento'] && d.estado == 'Pendente'
         && d.para is string && d.para.matches('^[^@ ,;]+@[^@ ,;]+[.][^@ ,;]+$')
         && d.assunto is string && d.assunto.size() <= 200
         && d.html is string && d.html.size() <= 300000
@@ -237,8 +239,20 @@ service cloud.firestore {
       allow read: if eStaff();
       // técnico: só para folhas suas
       allow create: if emailValido(request.resource.data)
-        && (eStaff() || (eTecnico() && get(/databases/$(database)/documents/folhas/$(request.resource.data.folhaId)).data.tecnicoUid == request.auth.uid));
+        && (eStaff() || (eTecnico() && request.resource.data.tipo == 'relatorio'
+            && get(/databases/$(database)/documents/folhas/$(request.resource.data.folhaId)).data.tecnicoUid == request.auth.uid));
       allow update, delete: if false;
+    }
+
+    // ---------- N.º de série dos equipamentos: onde está cada um (numa guia aberta ou aplicado numa folha) ----------
+    // Evita usar o mesmo n.º de série duas vezes. Escrito na mesma transação que a guia ou a folha.
+    match /series/{id} {
+      allow read: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
+      allow create, update: if ativo() && perfil() in ['master', 'backoffice', 'tecnico']
+        && request.resource.data.serie is string && request.resource.data.serie.size() >= 3 && request.resource.data.serie.size() <= 60
+        && request.resource.data.estado in ['guia', 'folha']
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
     }
 
     // ---------- Pedido de sincronização imediata com o PHC (a PontePHC responde) ----------

@@ -1193,7 +1193,7 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                     for (int k = 0; k < parte.Count; k++) { if (k > 0) ps.Append(','); ps.Append("@r" + k); c.Parameters.AddWithValue("@r" + k, parte[k]); }
                     c.Parameters.AddWithValue("@a", ArmazemAC);
                     c.Parameters.AddWithValue("@dg", DateTime.Today.AddDays(-cfg.GetInt("GuiasDiasAbertas", 30)));
-                    c.CommandText = "SELECT st.ref, st.design, st.unidade, st.faminome, st.inactivo, st.epcusto, ISNULL(sa.stock, 0) AS stock, " +
+                    c.CommandText = "SELECT st.ref, st.design, st.unidade, st.faminome, st.inactivo, st.epcusto, " + (StTemNoserie(cn) ? "st.noserie" : "0") + " AS noserie, ISNULL(sa.stock, 0) AS stock, " +
                         "ISNULL((SELECT SUM(bi.qtt) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
                         "  WHERE bi.ref = st.ref AND bo.ndos = 114 AND bo.fechada = 0 AND bi.armazem = @a), 0) AS reservado, " +
                         // em guias abertas: o que levou (qtt) menos o que ja passou para FO (qtt2), so das guias dos ultimos GuiasDiasAbertas dias
@@ -1207,11 +1207,21 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                             a.Ref = Valor(r["ref"]); a.Design = Valor(r["design"]); a.Unidade = Valor(r["unidade"]); a.Familia = Valor(r["faminome"]);
                             a.Inativo = Valor(r["inactivo"]) == "1" || Valor(r["inactivo"]).ToLower() == "true";
                             a.Stock = Dec(r["stock"]); a.Reservado = Dec(r["reservado"]); a.EmGuias = Dec(r["emguias"]); a.Custo = Dec(r["epcusto"]);
+                            a.ComSerie = Valor(r["noserie"]) == "1" || Valor(r["noserie"]).ToLower() == "true";
                             l.Add(a);
                         }
                 }
             }
         return l;
+    }
+    // st.noserie = artigo gerido por numero de serie (equipamentos)
+    int stNoserie = -1;
+    bool StTemNoserie(SqlConnection cn)
+    {
+        if (stNoserie < 0)
+            using (SqlCommand c = new SqlCommand("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'st' AND COLUMN_NAME = 'noserie'", cn))
+                stNoserie = Convert.ToInt32(c.ExecuteScalar()) > 0 ? 1 : 0;
+        return stNoserie == 1;
     }
     static decimal Dec(object o) { return o == null || o == DBNull.Value ? 0m : Math.Round(Convert.ToDecimal(o), 3); }
 
@@ -1344,6 +1354,53 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                       " | " + Valor(r["ref"]) + " " + Valor(r["design"]) + " | qtt " + Valor(r["qtt"]) + " qtt2 " + Valor(r["qtt2"]) + " " + Valor(r["unidade"]) +
                       " | " + (Valor(r["fno"]) == "" || Valor(r["fno"]) == "0" ? "sem FO" : Valor(r["nmdoc"]) + " " + Valor(r["fno"])));
         if (l.Count == 0) l.Add("(nenhuma guia aberta com linhas)");
+        return l;
+    }
+
+    // Fase 5 (so leitura): estrutura das tabelas dos dossiers (colunas, tipos, valores por omissao), gatilhos e
+    // campos preenchidos nos ultimos documentos da serie - para saber o que o PHC/NetWorker escreve ao criar um documento.
+    public List<string> Estrutura(int ndos)
+    {
+        List<string> l = new List<string>();
+        using (SqlConnection cn = Abrir())
+        {
+            foreach (string t in new string[] { "bo", "bo2", "bo3", "bi", "bi2" })
+            {
+                l.Add(""); l.Add("--- tabela " + t + ": colunas (tipo, nulo, por omissao)");
+                using (SqlCommand c = new SqlCommand("SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t ORDER BY ORDINAL_POSITION", cn))
+                {
+                    c.Parameters.AddWithValue("@t", t);
+                    using (SqlDataReader r = c.ExecuteReader())
+                        while (r.Read()) l.Add("  " + r[0] + " " + r[1] + (r[2] == DBNull.Value ? "" : "(" + r[2] + ")") + (Valor(r[3]) == "NO" ? " NOT NULL" : "") + (r[4] == DBNull.Value ? "" : " = " + r[4]));
+                }
+            }
+            l.Add(""); l.Add("--- gatilhos (triggers) nas tabelas dos dossiers e do stock");
+            using (SqlCommand c = new SqlCommand("SELECT OBJECT_NAME(parent_id) AS tabela, name, is_disabled FROM sys.triggers WHERE OBJECT_NAME(parent_id) IN ('bo','bo2','bo3','bi','bi2','sa','st','sl') ORDER BY 1, 2", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+            {
+                int n = 0;
+                while (r.Read()) { n++; l.Add("  " + r[0] + " | " + r[1] + (Valor(r[2]) == "1" || Valor(r[2]).ToLower() == "true" ? " (desativado)" : "")); }
+                if (n == 0) l.Add("  (nenhum)");
+            }
+            l.Add(""); l.Add("--- ultimos 5 documentos da serie " + ndos + " (quem criou e como)");
+            using (SqlCommand c = new SqlCommand("SELECT TOP 5 obrano, boano, dataobra, ousrinis, ousrdata, ousrhora, bostamp, fechada FROM bo WITH (NOLOCK) WHERE ndos = @n ORDER BY ousrdata DESC, ousrhora DESC", cn))
+            {
+                c.Parameters.AddWithValue("@n", ndos);
+                using (SqlDataReader r = c.ExecuteReader())
+                    while (r.Read()) l.Add("  " + r[0] + "/" + r[1] + " " + Convert.ToDateTime(r[2]).ToString("yyyy-MM-dd") + " por " + Valor(r[3]) + " em " + Valor(r[4]) + " " + Valor(r[5]) + " | " + Valor(r[6]) + (Valor(r[7]) == "1" || Valor(r[7]).ToLower() == "true" ? " | fechado" : ""));
+            }
+            l.Add(""); l.Add("--- tabela de numeracao da serie (ts)");
+            using (SqlCommand c = new SqlCommand("SELECT * FROM ts WITH (NOLOCK) WHERE ndos = @n", cn))
+            {
+                c.Parameters.AddWithValue("@n", ndos);
+                try
+                {
+                    using (SqlDataReader r = c.ExecuteReader())
+                        if (r.Read()) for (int i = 0; i < r.FieldCount; i++) { string v = Valor(r[i]); if (v != "" && v != "0") l.Add("  " + r.GetName(i) + " = " + v); }
+                }
+                catch (Exception e) { l.Add("  (" + e.Message + ")"); }
+            }
+        }
         return l;
     }
 
@@ -1688,12 +1745,12 @@ interface IFonteFolhas
 class ArtigoPHC
 {
     public string Ref = "", Design = "", Unidade = "", Familia = "";
-    public bool Inativo;
+    public bool Inativo, ComSerie;
     public decimal Stock, Reservado, EmGuias, Custo;
     // Identifica o estado enviado (para so reenviar quando muda).
     public string Assinatura()
     {
-        return string.Join("|", new string[] { Design, Unidade, Familia, Inativo ? "1" : "0",
+        return string.Join("|", new string[] { Design, Unidade, Familia, Inativo ? "1" : "0", ComSerie ? "S" : "",
             Stock.ToString(CultureInfo.InvariantCulture), Reservado.ToString(CultureInfo.InvariantCulture),
             EmGuias.ToString(CultureInfo.InvariantCulture), Custo.ToString(CultureInfo.InvariantCulture) });
     }
@@ -1722,6 +1779,7 @@ class FonteCsvArtigos : IFonteArtigos
             a.Ref = v[0]; a.Design = v[1]; a.Unidade = v[2]; a.Familia = v[3]; a.Inativo = v[4] == "1";
             a.Stock = decimal.Parse(v[5], CultureInfo.InvariantCulture); a.Reservado = decimal.Parse(v[6], CultureInfo.InvariantCulture);
             a.EmGuias = decimal.Parse(v[7], CultureInfo.InvariantCulture); a.Custo = decimal.Parse(v[8], CultureInfo.InvariantCulture);
+            if (v.Length > 10) a.ComSerie = v[10] == "1";
             todos.Add(a);
             alt[a.Ref] = DateTime.ParseExact(v[9], "yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
@@ -2157,6 +2215,10 @@ class Motor
         d.Texto("encomendaCliente", f.Encomenda);
         d.Texto("situacaoPHC", f.Situacao);
         d.Texto("emailContacto", f.EmailContacto);
+        // pesquisa na plataforma: n.º, cliente, NIF, descricao da avaria (prefixos de 2 a 15 letras, maximo 400)
+        List<string> tk = Regras.Tokens("FO-" + f.Ano + "-" + f.Numero.ToString("0000"), f.Numero.ToString(), f.Nome, Regex.Replace(f.Ncont ?? "", @"\D", ""), f.Descricao);
+        if (tk.Count > 400) tk = tk.GetRange(0, 400);
+        d.Lista("pesquisa", tk);
         d.Texto("origem", "phc");
         d.Texto("phcStamp", f.Stamp);
         d.Inteiro("phcNumero", f.Numero);
@@ -2332,6 +2394,7 @@ class Motor
                     d.Id = IdArtigo(a.Ref);
                     d.Texto("ref", a.Ref); d.Texto("design", a.Design); d.Texto("unidade", a.Unidade); d.Texto("familia", a.Familia);
                     d.Bool("ativo", !a.Inativo);
+                    d.Bool("comSerie", a.ComSerie);
                     d.Decimal("stock", a.Stock); d.Decimal("reservadoPHC", a.Reservado); d.Decimal("emGuiasPHC", a.EmGuias);
                     d.Lista("pesquisa", Regras.Tokens(a.Ref, a.Design));
                     d.Texto("origem", "phc");
@@ -2410,7 +2473,7 @@ class Motor
                     f.Id = folhaId;
                     Documento m = new Documento();
                     m.Texto("para", para); m.Texto("estado", estado); m.Texto("erro", erro); m.Texto("emailId", e.Key); m.Data("em", DateTime.Now);
-                    f.Mapa("relatorioEnviado", m);
+                    f.Mapa(Firestore.Valor(c, "tipo") == "agendamento" ? "avisoEnviado" : "relatorioEnviado", m);
                     fs.Gravar("folhas", new List<Documento> { f });
                 }
                 ContarEscritas(folhaId != "" ? 2 : 1);
@@ -2418,6 +2481,12 @@ class Motor
         }
         catch (Exception e) { Log.Erro("Falha nos emails: " + e.GetType().Name + ": " + e.Message); }
         return n;
+    }
+
+    public List<KeyValuePair<string, Dictionary<string, object>>> Emails(string estado)
+    {
+        if (fs == null) fs = new Firestore(cfg);
+        return fs.Consultar("emails", "estado", estado, 20);
     }
 
     public void CicloCompleto()
@@ -2889,6 +2958,28 @@ static class Programa
                 Console.WriteLine((cfg.Simular ? "SIMULACAO: " : "") + n + " clientes " + (cfg.Simular ? "seriam enviados (nada enviado; veja Simular no .ini)." : "enviados."));
                 return m.UltimoErro == "" || m.UltimoErro == "quota" ? 0 : 2;
             }
+            if (cmd == "/emails")
+            {
+                Console.WriteLine("EnviarEmails=" + cfg.Get("EnviarEmails", "0") + "  EmailsTeste=" + cfg.Get("EmailsTeste", "") + "  SmtpServidor=" + cfg.Get("SmtpServidor", "") + "  EmailCopiaOculta=" + cfg.Get("EmailCopiaOculta", ""));
+                foreach (string est in new string[] { "Pendente", "Erro", "Enviado" })
+                {
+                    List<KeyValuePair<string, Dictionary<string, object>>> l = m.Emails(est);
+                    Console.WriteLine(est + ": " + l.Count + (l.Count == 20 ? "+" : ""));
+                    foreach (KeyValuePair<string, Dictionary<string, object>> e in l)
+                        Console.WriteLine("  " + e.Key + " | " + Firestore.Valor(e.Value, "folhaNumero") + " | para " + Firestore.Valor(e.Value, "para") + " | " + Firestore.Valor(e.Value, "erro"));
+                }
+                if (cfg.GetBool("EnviarEmails", false)) Console.WriteLine("A enviar os pendentes... " + m.CicloEmails() + " enviados.");
+                else Console.WriteLine("EnviarEmails nao esta a 1 no PontePHC.ini: nada e enviado.");
+                return 0;
+            }
+            if (cmd == "/estrutura" && args.Length >= 2)
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.Estrutura(int.Parse(args[1]))) Console.WriteLine(v);
+                Console.WriteLine("Nada foi alterado.");
+                return 0;
+            }
             if (cmd == "/verificar-pedido")
             {
                 m.Preparar();
@@ -2915,6 +3006,8 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /procurar TEXTO    artigos com TEXTO na referencia ou designacao, e stock por armazem");
                 Console.WriteLine("  PontePHC.exe /guias             como sao usadas as Guias 111 (estado, origem, armazens, viaturas)");
                 Console.WriteLine("  PontePHC.exe /guias-abertas     linhas das Guias 111 abertas (levado e ja passado para FO)");
+                Console.WriteLine("  PontePHC.exe /emails            emails da plataforma (pendentes, com erro, enviados) e envia os pendentes");
+                Console.WriteLine("  PontePHC.exe /estrutura SERIE   colunas, gatilhos e ultimos documentos de uma serie (preparacao da Fase 5)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");

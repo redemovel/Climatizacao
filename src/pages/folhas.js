@@ -27,22 +27,39 @@ $('#fTec').onchange = () => carregarLista();
 $('#btnNova').onclick = () => abrirForm(null);
 $('#btnMais').onclick = () => comBotao($('#btnMais'), () => carregarLista(true));
 
+// Pesquisa: n.º da folha (exato) ou cliente, NIF e descrição da avaria (palavras, pelos prefixos guardados em «pesquisa»).
 $('#fPesq').onsubmit = async (ev) => {
   ev.preventDefault();
-  let v = $('#pNum').value.trim().toUpperCase();
-  if (!v) { carregarLista(); return; }
-  if (/^\d+$/.test(v)) v = `FO-${new Date().getFullYear()}-${v.padStart(4, '0')}`;
-  else if (/^\d{4}-\d+$/.test(v)) { const [a, n] = v.split('-'); v = `FO-${a}-${n.padStart(4, '0')}`; }
-  const c = [where('numero', '==', v)];
-  if (tecnico) c.unshift(where('tecnicoUid', '==', sessao.uid));
+  const texto = $('#pNum').value.trim();
+  if (!texto) { carregarLista(); return; }
+  let v = texto.toUpperCase();
+  const base = tecnico ? [where('tecnicoUid', '==', sessao.uid)] : [];
   try {
-    const snap = await getDocs(query(collection(db, 'folhas'), ...c, limit(5)));
-    lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let docs = [];
+    if (/^\d{1,5}$/.test(v) || /^\d{4}-\d+$/.test(v) || /^FO-\d{4}-\d+$/.test(v)) {
+      if (/^\d{1,5}$/.test(v)) v = `FO-${new Date().getFullYear()}-${v.padStart(4, '0')}`;
+      else if (/^\d{4}-\d+$/.test(v)) { const [an, n] = v.split('-'); v = `FO-${an}-${n.padStart(4, '0')}`; }
+      else { const [, an, n] = v.split('-'); v = `FO-${an}-${n.padStart(4, '0')}`; }
+      docs = (await getDocs(query(collection(db, 'folhas'), ...base, where('numero', '==', v), limit(5)))).docs;
+    }
+    if (!docs.length) {
+      const palavras = normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+      if (!palavras.length) { toast('Escreva pelo menos 2 letras ou números.', 'erro'); return; }
+      const chave = palavras.reduce((x, y) => (y.length > x.length ? y : x));
+      const snap = await getDocs(query(collection(db, 'folhas'), ...base, where('pesquisa', 'array-contains', chave), orderBy('criadoEm', 'desc'), limit(PAGINA_TAM)));
+      docs = snap.docs.filter((d) => palavras.every((p) => (d.data().pesquisa || []).includes(p)));
+    }
+    lista = docs.map((d) => ({ id: d.id, ...d.data() }));
     cursor = null;
     $('#maisWrap').classList.add('oculto');
-    renderLista(`Nenhuma folha com o número ${v}.`);
+    renderLista(`Nenhuma folha encontrada para «${texto}».`);
   } catch (e) { toast(erroFirebase(e), 'erro'); }
 };
+// Prefixos para a pesquisa (n.º, cliente, NIF, avaria) — iguais aos que a PontePHC grava nas folhas do PHC.
+function tokensFolha(numero, clienteNome, nif, descricao) {
+  const n = String(numero || '');
+  return tokensPesquisa(n, n.split('-').pop().replace(/^0+/, ''), clienteNome, String(nif || '').replace(/\D/g, ''), descricao).slice(0, 400);
+}
 
 // ---------- Lista ----------
 function consultaLista() {
@@ -222,7 +239,7 @@ function renderDetalhe() {
         <div><dt>Morada da obra</dt><dd>${esc([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
         <div><dt>Contacto no local</dt><dd>${esc([f.contacto, f.telefone].filter(Boolean).join(' · ') || '—')}</dd></div>
         <div><dt>Técnico responsável</dt><dd>${esc(f.tecnicoNome || 'Por atribuir')}</dd></div>
-        <div><dt>Descrição do trabalho</dt><dd>${esc(f.descricao || '—')}</dd></div>
+        <div class="desc-destaque"><dt>Descrição do trabalho</dt><dd id="detDescricao">${esc(f.descricao || '—')}</dd></div>
       </dl>
       ${(tel || mapa) ? `<div class="acoes-rapidas">
         ${tel ? `<a class="btn btn-sec" href="${esc(tel)}">Ligar</a>` : '<span></span>'}
@@ -233,6 +250,9 @@ function renderDetalhe() {
       ${pend ? `<div class="pendencia" id="pendencia"><b>Pendente — ${esc(pend.motivo)}</b>${pend.nota ? `<div>${esc(pend.nota)}</div>` : ''}
         <div class="muted">${esc(pend.nome || '')}, ${esc(fmtDataHora(pend.em))}${pend.reverEm ? ` · rever em ${esc(fmtData(pend.reverEm))}` : ''}</div></div>` : ''}
       ${f.estado === 'Faturada' && f.numeroFatura ? `<p class="muted" style="margin-top:0">Fatura ${esc(f.numeroFatura)}</p>` : ''}
+      ${['Agendada', 'Em curso', 'Pendente'].includes(f.estado) && (f.avisoEnviado || f.avisoAgendamento) ? `<p class="muted" style="margin-top:0" id="estadoAviso">${f.avisoEnviado
+        ? (f.avisoEnviado.estado === 'Enviado' ? `Aviso de agendamento enviado para ${esc(f.avisoEnviado.para)} em ${esc(fmtDataHora(f.avisoEnviado.em))}` : `Aviso de agendamento não enviado (${esc(f.avisoEnviado.erro || 'erro')})`)
+        : `Aviso de agendamento a enviar para ${esc(f.avisoAgendamento.para)}…`}</p>` : ''}
       <div class="estados-acoes">
         ${proximos.map((e) => `<button class="btn ${secundario(e) ? '' : 'btn-primario'}" data-estado="${esc(e)}">${esc(rotulo[e] || e)}</button>`).join('')
           || '<div class="muted">Sem ações disponíveis neste estado.</div>'}
@@ -340,6 +360,12 @@ async function mudarEstado(novo, btn) {
     abrirForm(atual, null, { agendarDepois: true });
     return;
   }
+  let avisoPara = '';
+  if (novo === 'Agendada') {
+    const para = await pedirAvisoAgendamento(f, f.estado !== 'Por agendar');
+    if (para === null) return;
+    avisoPara = para;
+  }
   if (novo === 'Pendente') {
     const p = await pedirPendencia();
     if (!p) return;
@@ -381,6 +407,11 @@ async function mudarEstado(novo, btn) {
           estadoAlteradoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
         };
         if (novo !== 'Pendente' && d.pendencia) alt.pendencia = null;
+        if (avisoPara) {
+          const eRef = doc(collection(db, 'emails'));
+          tx.set(eRef, dadosEmailAgendamento({ id: f.id, ...d, ...alt }, avisoPara, f.estado !== 'Por agendar'));
+          alt.avisoAgendamento = { para: avisoPara, emailId: eRef.id, pedidoEm: Timestamp.now(), uid: sessao.uid };
+        }
         // relatório ao cliente: fica em fila (emails/) na mesma transação; a PontePHC envia pelo Exchange
         if (enviarPara) {
           const eRef = doc(collection(db, 'emails'));
@@ -395,7 +426,7 @@ async function mudarEstado(novo, btn) {
       atual = { id: f.id, ...resultado };
       const i = lista.findIndex((x) => x.id === f.id);
       if (i >= 0) lista[i] = atual;
-      toast('Estado alterado para «' + novo + '».' + (enviarPara ? ' Relatório a enviar para ' + enviarPara + '.' : ''), 'ok', enviarPara ? 6000 : 3000);
+      toast('Estado alterado para «' + novo + '».' + (enviarPara ? ' Relatório a enviar para ' + enviarPara + '.' : '') + (avisoPara ? ' Aviso de agendamento a enviar para ' + avisoPara + '.' : ''), 'ok', enviarPara || avisoPara ? 6000 : 3000);
       renderDetalhe();
     } catch (e) {
       toast(e.code === 'alterada' ? e.message : erroFirebase(e), 'erro', 5000);
@@ -438,6 +469,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
         <label class="campo"><span>Contacto no local</span><input id="ffContacto" value="${esc(folha?.contacto || '')}"></label>
         <label class="campo"><span>Telefone</span><input id="ffTel" type="tel" value="${esc(folha?.telefone || '')}"></label>
       </div>
+      <label class="campo"><span>Email do cliente (avisos e relatório)</span><input id="ffEmail" type="email" inputmode="email" autocomplete="off" value="${esc(folha ? emailDoCliente(folha) : '')}"></label>
       <label class="campo"><span>Descrição do trabalho</span><textarea id="ffDesc">${esc(folha?.descricao || '')}</textarea></label>
       <div class="msg-erro" id="ffErro"></div>
       <div class="acoes"><button type="button" class="btn" data-fechar>Cancelar</button>
@@ -463,6 +495,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
     $('#ffLoc', corpo).value = c.localidade || '';
     $('#ffContacto', corpo).value = c.contacto || '';
     $('#ffTel', corpo).value = c.telefone || '';
+    if (!$('#ffEmail', corpo).value) $('#ffEmail', corpo).value = c.email || '';
   }
   function renderCliente() {
     const box = $('#cliBox', corpo);
@@ -509,20 +542,32 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
       morada: $('#ffMorada', corpo).value.trim(), codigoPostal: $('#ffCP', corpo).value.trim(), localidade: $('#ffLoc', corpo).value.trim(),
       contacto: $('#ffContacto', corpo).value.trim(), telefone: $('#ffTel', corpo).value.trim(),
       descricao: $('#ffDesc', corpo).value.trim(),
+      clienteEmail: $('#ffEmail', corpo).value.trim(),
       atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
     };
+    if (dados.clienteEmail && !emailValido(dados.clienteEmail)) return erro('Email do cliente inválido.');
+    if (ed) dados.pesquisa = tokensFolha(folha.numero, folha.clienteNome, folha.clienteNif, dados.descricao);
     comBotao($('#ffGuardar', corpo), async () => {
       try {
         if (ed) {
           // «Por agendar» continua «Por agendar» até carregar em «Agendar» (decisão 2026-11-03).
+          const antes = { tec: folha.tecnicoUid, data: folha.dataPrevista ? paraData(folha.dataPrevista).getTime() : 0 };
           await updateDoc(doc(db, 'folhas', folha.id), dados);
           atual = { ...atual, ...dados, atualizadoEm: Timestamp.now() };
+          const reagendada = atual.estado === 'Agendada' && (antes.tec !== atual.tecnicoUid || antes.data !== (atual.dataPrevista ? paraData(atual.dataPrevista).getTime() : 0));
           const i = lista.findIndex((x) => x.id === folha.id);
           if (i >= 0) lista[i] = atual;
           fecharModal();
           toast('Folha atualizada.', 'ok');
           renderDetalhe();
           if (agendarDepois && atual.estado === 'Por agendar' && atual.tecnicoUid && atual.dataPrevista) await mudarEstado('Agendada', null);
+          else if (reagendada) {
+            const para = await pedirAvisoAgendamento(atual, true);
+            if (para) {
+              try { await setDoc(doc(collection(db, 'emails')), dadosEmailAgendamento(atual, para, true)); toast('Aviso de reagendamento a enviar para ' + para + '.', 'ok', 5000); }
+              catch (e) { toast(erroFirebase(e), 'erro'); }
+            }
+          }
         } else {
           const id = await criarFolha(cliente, dados);
           fecharModal();
@@ -547,7 +592,8 @@ async function criarFolha(cliente, dados) {
     tx.set(fRef, {
       ...dados,
       numero: `FO-${ano}-${String(n).padStart(4, '0')}`,
-      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: cliente.email || '',
+      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: dados.clienteEmail || cliente.email || '',
+      pesquisa: tokensFolha(`FO-${ano}-${String(n).padStart(4, '0')}`, cliente.nome, cliente.nif, dados.descricao),
       estado: 'Por agendar',   // toda a folha nova nasce «Por agendar»; passa a «Agendada» no botão «Agendar»
       historico: [{ estado: 'Por agendar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
       observacoesTecnico: '',

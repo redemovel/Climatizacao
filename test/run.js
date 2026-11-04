@@ -387,7 +387,7 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   await page.click('#tGuardar');
   await page.waitForSelector('.toast-ok >> text=Tempo registado.');
   assert((await page.textContent('#cartaoTempos')).includes('João Silva, Pedro Costa, Equipa externa — ajudante'), 'nomes da equipa');
-  assert((await page.textContent('#cartaoTempos')).includes('das 09:00 às 11:30'), 'horas');
+  assert((await page.textContent('#cartaoTempos')).includes('09:00–11:30'), 'horas');
   assert((await page.textContent('#totalHoras')).includes('7,5 h'), 'total 2,5 h × 3 pessoas');
   await page.click('#btnMaterial');
   await page.click('#mGuardar');
@@ -417,8 +417,11 @@ teste('folhas técnico: só vê as suas; muda estados pelo fluxo e fica registad
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + 30 + i * 25, box.y + 60 + (i % 2 ? 30 : -20));
   await page.mouse.up();
-  assert(await page.locator('#cEnviar').isChecked(), 'envio do relatório pré-marcado (email do cliente conhecido)');
   igual(await page.inputValue('#cEmail'), 'geral@cliente-teste.pt', 'email do cliente');
+  await page.fill('#cEmail', '');
+  await page.click('#cOk');
+  igual(await page.textContent('#cErro'), 'Indique o email do cliente: o relatório é sempre enviado.', 'relatório obrigatório');
+  await page.fill('#cEmail', 'geral@cliente-teste.pt');
   await semOverflow(page, 'modal concluir');
   await captura(page, 'folha-concluir-375');
   await page.click('#cOk');
@@ -664,7 +667,17 @@ teste('folhas backoffice: cria folha (cliente, tipo, técnico, data) com número
   igual(f.historico.length, 1, 'histórico inicial');
   igual(new Date(f.dataPrevista.seconds * 1000).getHours(), 16, 'hora prevista');
   await page.click('[data-estado="Agendada"]');
+  await page.waitForSelector('#aEmail');
+  await page.click('#aOk');
+  igual(await page.textContent('#aErro'), 'Indique o email do cliente, ou marque «Não enviar aviso desta vez».', 'email do aviso obrigatório');
+  await page.fill('#aEmail', 'obra@cliente.pt');
+  await captura(page, 'aviso-agendamento-375');
+  await page.click('#aOk');
   await page.waitForSelector('.det-cab .estado-agendada');
+  const av = await fake(page, () => Object.values(window.__fake.db()).filter((v) => v.tipo === 'agendamento'));
+  igual(av.length + ' ' + av[0].para + ' ' + av[0].folhaId, '1 obra@cliente.pt ' + id, 'aviso de agendamento em fila');
+  assert(av[0].html.includes('agendada para') && av[0].assunto.includes('Intervenção agendada'), 'conteúdo do aviso');
+  assert((await page.textContent('#estadoAviso')).includes('a enviar para obra@cliente.pt'), 'mostra o aviso na folha');
   // backoffice não faz revisão nem faturação (só o Master)
   await page.goto(BASE + '/folhas.html?id=fo010');
   await page.waitForSelector('#detNumero');
@@ -698,12 +711,14 @@ teste('relatório ao cliente: ver/imprimir e reenviar por email (staff)', async 
   await entrar(page, 'backoffice');
   await page.goto(BASE + '/folhas.html?id=fo010');
   await page.waitForSelector('#cartaoRelCliente');
-  const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('#btnVerRelatorio')]);
-  await popup.waitForLoadState();
-  assert((await popup.textContent('body')).includes('Relatório de intervenção'), 'abre o relatório');
-  await popup.setViewportSize(MOVEIS[0]);
-  await captura(popup, 'relatorio-cliente-375');
-  await popup.close();
+  await page.click('#btnVerRelatorio');
+  await page.waitForSelector('#vRelatorio');
+  const txt = await page.textContent('#vRelatorio');
+  assert(txt.includes('Relatório de intervenção') && txt.includes('Documento informativo, para conferência'), 'abre o relatório com o aviso de conferência');
+  await semOverflow(page, 'relatório no telemóvel');
+  await captura(page, 'relatorio-cliente-375');
+  await page.click('#relFechar');
+  await page.waitForSelector('#vRelatorio', { state: 'detached' });
   await page.click('#btnEnviarRelatorio');
   await page.fill('#eRel', 'x');
   await page.click('#eOk');
@@ -750,6 +765,9 @@ teste('folhas: «Por agendar» sem técnico/data; agendar ao atribuir técnico e
   await page.selectOption('#ffTec', 'u-tec2');
   await page.fill('#ffData', '2030-02-01');
   await page.click('#ffGuardar');
+  await page.waitForSelector('#aSem');
+  await page.check('#aSem');
+  await page.click('#aOk');
   await page.waitForSelector('.det-cab .estado-agendada');
   const f = await fake(page, () => window.__fake.doc('folhas/fo028'));
   igual(f.estado, 'Agendada', 'agendada');
@@ -937,13 +955,13 @@ teste('fase 3: importar da guia só o gasto (10 de 50); apagar devolve à guia',
   await entrar(page, 'tecnico1');
   await page.goto(BASE + '/folhas.html?id=fo003');
   await page.click('#btnImportarGuia');
-  await page.waitForSelector('input[data-g=g1]');
+  await page.waitForSelector('input[type=number][data-g=g1]');
   assert((await page.textContent('.modal')).includes('por gastar 50'), 'mostra 50 por gastar');
   for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'importar ' + vp.width); await captura(page, 'importar-guia-' + vp.width); }
-  await page.fill('input[data-g=g1]', '60');
+  await page.fill('input[type=number][data-g=g1]', '60');
   await page.click('#iOk');
   await page.waitForSelector('.toast-erro >> text=só há 50');
-  await page.fill('input[data-g=g1]', '10');
+  await page.fill('input[type=number][data-g=g1]', '10');
   await page.click('#iOk');
   await page.waitForSelector('.toast-ok >> text=Material importado da guia.');
   assert((await page.textContent('#cartaoMateriais')).includes('guia 353/'), 'material com referência à guia');
@@ -1028,6 +1046,78 @@ teste('fase 3: técnico cria guia a partir da folha (por comunicar, sem impress�
   const g = await fake(page, () => window.__fake.doc('guias/g1'));
   igual(g.linhas[0].devolvido + ' ' + (await fake(page, () => window.__fake.doc('artigos/TC14'))).resGuias, '50 0', 'sobra devolvida e reserva libertada');
   await captura(page, 'guia-fechada-375');
+  semErros(page); await ctx.close();
+});
+
+teste('pesquisa de folhas: por cliente, NIF e descrição da avaria (técnico só as suas)', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/folhas.html');
+  await page.waitForSelector('#lista .lista-item');
+  await page.fill('#pNum', 'erro e5');
+  await page.click('#fPesq button');
+  await page.waitForFunction(() => document.querySelector('#lista').textContent.includes('erro E5'));
+  const tipos = await page.$$eval('#lista .li-desc, #lista .lista-item', (x) => x.length);
+  assert(tipos > 0, 'encontrou por descrição');
+  const nif = await fake(page, () => window.__fake.doc('folhas/fo003').clienteNif);
+  await page.fill('#pNum', nif);
+  await page.click('#fPesq button');
+  const nome = await fake(page, () => window.__fake.doc('folhas/fo003').clienteNome);
+  await page.waitForFunction((n) => document.querySelector('#lista').textContent.includes(n) && !document.querySelector('#lista').textContent.includes('erro E5'), nome);
+  await page.fill('#pNum', nome.split(' ').slice(-1)[0]);
+  await page.click('#fPesq button');
+  await page.waitForFunction((n) => document.querySelector('#lista').textContent.includes(n), nome);
+  await page.click('#btnSair');
+  await page.waitForURL(/index\.html/);
+  await entrar(page, 'tecnico2');
+  await page.goto(BASE + '/folhas.html');
+  await page.waitForSelector('#lista .lista-item');
+  await page.fill('#pNum', 'manutencao');
+  await page.click('#fPesq button');
+  await page.waitForTimeout(400);
+  const ids = await page.$$eval('#lista [data-id]', (a) => a.map((x) => x.dataset.id));
+  const tecs = await fake(page, (ids) => ids.map((i) => window.__fake.doc('folhas/' + i).tecnicoUid), ids);
+  assert(ids.length > 0 && tecs.every((t) => t === 'u-tec2'), 'técnico só encontra as suas');
+  semErros(page); await ctx.close();
+});
+
+teste('n.º de série: importar equipamento da guia pelo n.º de série; não se repete', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/folhas.html?id=fo003');
+  await page.click('#btnImportarGuia');
+  await page.waitForSelector('input[data-s="K123456"]');
+  await page.check('input[data-s="K123456"]');
+  await page.click('#iOk');
+  await page.waitForSelector('.toast-ok >> text=Material importado da guia.');
+  assert((await page.textContent('#cartaoMateriais')).includes('K123456'), 'n.º de série na folha');
+  const sr = await fake(page, () => window.__fake.doc('series/K123456'));
+  igual(sr.estado + ' ' + sr.folhaId, 'folha fo003', 'série passa para a folha');
+  const g = await fake(page, () => window.__fake.doc('guias/g1'));
+  igual(g.linhas[1].consumido + ' ' + g.linhas[1].seriesUsadas.join(), '1 K123456', 'guia regista a série usada');
+  // procurar pelo n.º de série no «+ Material»
+  await page.click('#btnMaterial');
+  await page.fill('#mProc', 'k123456');
+  await page.click('#mProcBtn');
+  await page.waitForSelector('#mRes .aviso-concl');
+  assert((await page.textContent('#mRes')).includes('já foi aplicado'), 'avisa que já foi aplicado');
+  // equipamento do stock exige n.º de série
+  await page.fill('#mProc', 'daikin');
+  await page.click('#mProcBtn');
+  await page.click('.artigo-op >> text=FTXP35');
+  await page.fill('#mQtd', '1');
+  await page.dispatchEvent('#mQtd', 'input');
+  await page.click('#mGuardar');
+  igual(await page.textContent('#mErro'), 'Indique o n.º de série de cada unidade.', 'série obrigatória');
+  await page.fill('input[data-serie="0"]', 'k123456');
+  await page.click('#mGuardar');
+  await page.waitForSelector('.toast-erro >> text=já foi aplicado');
+  for (const vp of MOVEIS) { await page.setViewportSize(vp); await semOverflow(page, 'material com série ' + vp.width); }
+  await captura(page, 'material-serie-414');
+  await page.fill('input[data-serie="0"]', 'K999888');
+  await page.click('#mGuardar');
+  await page.waitForSelector('.toast-ok >> text=Material registado.');
+  igual((await fake(page, () => window.__fake.doc('series/K999888'))).estado, 'folha', 'nova série registada');
   semErros(page); await ctx.close();
 });
 

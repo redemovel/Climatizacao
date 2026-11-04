@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-04 10:38 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-04 12:50 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -235,6 +235,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .lista-item.b-comunicada { border-left-color: #16a34a; }
 .lista-item.b-fechada { border-left-color: #94a3b8; }
 @media print { #topo, #nav, .voltar, .acoes, .estados-acoes, .btn { display: none !important; } body { background: #fff; } .cartao { box-shadow: none; border: 0; } }
+.tempos { list-style: none; margin: 0; padding: 0; }
+.tempos li { padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.t-cab { display: flex; gap: 10px; align-items: center; }
+.t-cab .t-h { margin-left: auto; }
+.t-eq { font-size: .92rem; margin-top: 2px; }
+.desc-destaque dd { font-weight: 600; font-size: 1.05rem; background: #f0fdfa; border-left: 4px solid var(--azul); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; }
+.series-campos { display: grid; gap: 6px; margin: 0 0 10px; }
+.serie-tag { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 6px; padding: 1px 6px; margin: 2px 4px 0 0; font-size: .85rem; font-family: monospace; }
+#vRelatorio { position: fixed; inset: 0; z-index: 60; background: #fff; overflow-y: auto; padding: 0 0 24px; }
+#vRelatorio .rel-barra { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--linha); display: flex; gap: 8px; padding: 10px 12px; }
+#vRelatorio .rel-corpo { padding: 12px; }
+@media print { body.a-imprimir > *:not(#vRelatorio) { display: none !important; } body.a-imprimir #vRelatorio { position: static; } body.a-imprimir .rel-barra { display: none !important; } }
 
 </style>
 </head>
@@ -274,7 +286,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-04 10:38 UTC';
+const BUILD = '2026-11-04 12:50 UTC';
 const PAGINA = 'utilizadores';
 
 const FIREBASE_CONFIG = {
@@ -584,6 +596,12 @@ async function aplicarReservas(tx, mov, exigeDisponivel = new Set()) {
     }
   };
 }
+// N.º de série → id do documento em series/ (maiúsculas, sem espaços; «/» e outros trocados por ~XX)
+function idSerie(sr) {
+  return String(sr || '').toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9._-]/g, (c) => '~' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+}
+function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
+
 // Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
 function movLibertarFolha(f) {
   const mov = {};

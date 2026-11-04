@@ -137,6 +137,38 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "folhas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "pesquisa",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "folhas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tecnicoUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "pesquisa",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
