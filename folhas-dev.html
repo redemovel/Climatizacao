@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-04 12:50 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-05 09:54 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -292,7 +292,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-04 12:50 UTC';
+const BUILD = '2026-11-05 09:54 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -1765,21 +1765,21 @@ function emailDoCliente(f) { return (f.emailContacto || f.clienteEmail || '').tr
 // HTML do relatório (estilos em linha, para o Outlook). assinaturaSrc: 'cid:assinatura' no email, data URL ao imprimir.
 function relatorioHtml(f, assinaturaSrc) {
   const e = esc;
-  const linha = (rot, val) => val ? `<tr><td style="padding:4px 8px 4px 0;color:#64748b;vertical-align:top;white-space:nowrap">${e(rot)}</td><td style="padding:4px 0">${val}</td></tr>` : '';
+  const linha = (rot, val) => val ? `<tr><td style="${'"+F+"'}padding:4px 8px 4px 0;color:#64748b;vertical-align:top;white-space:nowrap">${e(rot)}</td><td style="${'"+F+"'}padding:4px 0">${val}</td></tr>` : '';
   const concl = (f.historico || []).filter((h) => h.estado === 'Concluída').pop();
   const tarefas = tarefasPadrao().filter((t) => (f.tarefas || {})[t]);
   const tempos = f.tempos || [];
   const mats = f.materiais || [];
   const ass = f.assinatura;
-  const th = 'style="text-align:left;padding:6px 4px;border-bottom:1px solid #cbd5e1;font-size:13px;color:#475569"';
-  const td = 'style="padding:6px 4px;border-bottom:1px solid #e2e8f0;font-size:14px;vertical-align:top"';
+  const th = 'style="font-family:Arial,Helvetica,sans-serif;text-align:left;padding:6px 4px;border-bottom:1px solid #cbd5e1;font-size:13px;color:#475569"';
+  const td = 'style="font-family:Arial,Helvetica,sans-serif;padding:6px 4px;border-bottom:1px solid #e2e8f0;font-size:14px;vertical-align:top"';
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
   <div style="background:#008080;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:18px;font-weight:bold">Arpuro Climatização</div>
     <div style="font-size:14px">Relatório de intervenção · ${e(f.numero)}</div></div>
   <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px">
   <p style="margin:0 0 12px;padding:8px 10px;background:#fef9c3;border-radius:6px;font-size:13px;color:#713f12"><b>Documento informativo, para conferência.</b>
     Os tempos e os materiais aqui indicados são provisórios e podem ser ajustados na conferência final, antes da faturação. Este documento não substitui a fatura.</p>
-  <table style="border-collapse:collapse;font-size:14px;margin-bottom:12px">
+  <table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;font-size:14px;margin-bottom:12px">
     ${linha('Cliente', e(f.clienteNome) + (f.clienteNif ? ` · NIF ${e(f.clienteNif)}` : ''))}
     ${linha('Local', e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', ')))}
     ${linha('Tipo', e(TIPO_NOME[f.tipo] || f.tipo))}
@@ -1790,9 +1790,9 @@ function relatorioHtml(f, assinaturaSrc) {
   ${f.descricao ? `<h3 style="font-size:15px;margin:14px 0 4px">Trabalho solicitado</h3><p style="margin:0;white-space:pre-wrap;font-size:14px">${e(f.descricao)}</p>` : ''}
   <h3 style="font-size:15px;margin:14px 0 4px">Trabalho realizado</h3><p style="margin:0;white-space:pre-wrap;font-size:14px">${e(f.relatorio || '—')}</p>
   ${tarefas.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Verificações</h3><p style="margin:0;font-size:14px">${tarefas.map((t) => '✔ ' + e(t)).join('<br>')}</p>` : ''}
-  ${tempos.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Tempos</h3><table style="border-collapse:collapse;width:100%"><tr><th ${th}>Dia</th><th ${th}>Horário</th><th ${th}>Equipa</th><th ${th}>Horas</th></tr>
+  ${tempos.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Tempos</h3><table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;width:100%"><tr><th ${th}>Dia</th><th ${th}>Horário</th><th ${th}>Equipa</th><th ${th}>Horas</th></tr>
     ${tempos.map((t) => `<tr><td ${td}>${e(fmtData(t.data))}</td><td ${td}>${t.inicio ? e(t.inicio + '–' + t.fim) : ''}</td><td ${td}>${e(equipaTexto(t))}</td><td ${td}>${e(fmtHoras(t.horas))}</td></tr>`).join('')}</table>` : ''}
-  ${mats.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Material aplicado</h3><table style="border-collapse:collapse;width:100%"><tr><th ${th}>Qtd.</th><th ${th}>Descrição</th><th ${th}>Ref.</th></tr>
+  ${mats.length ? `<h3 style="font-size:15px;margin:14px 0 4px">Material aplicado</h3><table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;width:100%"><tr><th ${th}>Qtd.</th><th ${th}>Descrição</th><th ${th}>Ref.</th></tr>
     ${mats.map((m) => `<tr><td ${td}>${e(fmtQtd(m.qtd))} ${e(m.unidade || '')}</td><td ${td}>${e(m.descricao)}${(m.series || []).length ? `<br><span style="font-size:12px;color:#475569">N.º série: ${m.series.map(e).join(', ')}</span>` : ''}</td><td ${td}>${e(m.ref || '')}</td></tr>`).join('')}</table>` : ''}
   <h3 style="font-size:15px;margin:14px 0 4px">Cliente</h3>
   ${ass && !ass.ausente ? `<img src="${e(assinaturaSrc || ass.imagem || '')}" alt="Assinatura" width="300" height="120" style="border:1px solid #e2e8f0;border-radius:6px"><p style="margin:4px 0 0;font-size:14px">${e(ass.nome || '')} · ${e(fmtDataHora(ass.em))}</p>`
@@ -1911,12 +1911,12 @@ function avisoAgendamentoHtml(f, reagendar) {
     <div style="font-size:14px">${reagendar ? 'Intervenção reagendada' : 'Intervenção agendada'} · ${e(f.numero)}</div></div>
   <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px;font-size:14px">
   <p style="margin:0 0 12px">Informamos que a intervenção ${reagendar ? 'foi reagendada' : 'está agendada'} para <b>${e(quando)}</b> (hora prevista de chegada).</p>
-  <table style="border-collapse:collapse;font-size:14px">
-    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Cliente</td><td>${e(f.clienteNome)}</td></tr>
-    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Local</td><td>${e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</td></tr>
-    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Tipo</td><td>${e(TIPO_NOME[f.tipo] || f.tipo)}</td></tr>
-    <tr><td style="padding:3px 8px 3px 0;color:#64748b">Técnico</td><td>${e(f.tecnicoNome || '')}</td></tr>
-    ${f.descricao ? `<tr><td style="padding:3px 8px 3px 0;color:#64748b;vertical-align:top">Trabalho</td><td style="white-space:pre-wrap">${e(f.descricao)}</td></tr>` : ''}
+  <table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;font-size:14px">
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Cliente</td><td>${e(f.clienteNome)}</td></tr>
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Local</td><td>${e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</td></tr>
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Tipo</td><td>${e(TIPO_NOME[f.tipo] || f.tipo)}</td></tr>
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Técnico</td><td>${e(f.tecnicoNome || '')}</td></tr>
+    ${f.descricao ? `<tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b;vertical-align:top">Trabalho</td><td style="white-space:pre-wrap">${e(f.descricao)}</td></tr>` : ''}
   </table>
   <p style="margin:14px 0 0">Se esta data não for conveniente, responda a este email para combinarmos outra.</p>
   <p style="margin:18px 0 0;font-size:12px;color:#64748b">ARPURO &amp; REDEMÓVEL, LDA · NIF 503198749 · São João da Madeira</p>
