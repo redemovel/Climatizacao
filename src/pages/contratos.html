@@ -1,0 +1,20 @@
+<!-- titulo: Contratos de manutenção -->
+<section id="vLista">
+  <div class="titulo-pag">
+    <h1>Contratos</h1>
+    <button class="btn btn-primario" id="btnNovo">+ Novo</button>
+  </div>
+  <div class="cartao oculto" id="cartaoGerar"></div>
+  <form class="barra" id="fPesq">
+    <select id="fEstado" aria-label="Estado">
+      <option value="Ativo">Ativos</option>
+      <option value="Suspenso">Suspensos</option>
+      <option value="Terminado">Terminados</option>
+    </select>
+    <input id="q" placeholder="Cliente, n.º ou equipamento" inputmode="search" aria-label="Pesquisar contrato" autocomplete="off">
+    <button class="btn" type="submit">Procurar</button>
+  </form>
+  <div id="lista"><div class="vazio">A carregar…</div></div>
+  <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>
+</section>
+<section id="vDetalhe" class="oculto"></section>

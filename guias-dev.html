@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-05 09:54 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-06 14:00 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -248,6 +248,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 #vRelatorio .rel-corpo { padding: 12px; }
 @media print { body.a-imprimir > *:not(#vRelatorio) { display: none !important; } body.a-imprimir #vRelatorio { position: static; } body.a-imprimir .rel-barra { display: none !important; } }
 
+/* Contratos */
+.equip-linha { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--linha); border-radius: 10px; margin-bottom: 6px; }
+.equip-linha .grelha-2 { gap: 6px; }
+
 </style>
 </head>
 <body class="env-dev pagina-guias">
@@ -290,7 +294,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-05 09:54 UTC';
+const BUILD = '2026-11-06 14:00 UTC';
 const PAGINA = 'guias';
 
 const FIREBASE_CONFIG = {
@@ -478,6 +482,7 @@ const ICONES = {
   agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
   folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
   clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  contratos: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1v5h5M9 12h8v1.5H9zm0 3h8v1.5H9zm0 3h5v1.5H9z"/></svg>',
   guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
   utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
 };
@@ -485,6 +490,7 @@ const MENU = [
   { id: 'agenda', label: 'Agenda', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'folhas', label: 'Folhas de obra', curto: 'Folhas', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'contratos', label: 'Contratos', perfis: ['master', 'backoffice'] },
   { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
   { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
 ];
@@ -633,6 +639,116 @@ async function pedirSincronizacao(btn, aoConcluir) {
     }
     toast('O servidor ainda não respondeu. Confirme que o serviço PontePHC está a correr.', 'erro', 8000);
   });
+}
+
+// ---------- Folhas de obra: criação (partilhada pela página Folhas e pela geração dos contratos) ----------
+// Prefixos para a pesquisa (n.º, cliente, NIF, avaria) — iguais aos que a PontePHC grava nas folhas do PHC.
+function tokensFolha(numero, clienteNome, nif, descricao) {
+  const n = String(numero || '');
+  return tokensPesquisa(n, n.split('-').pop().replace(/^0+/, ''), clienteNome, String(nif || '').replace(/\D/g, ''), descricao).slice(0, 400);
+}
+// Numeração FO-AAAA-NNNN no contador do ano; toda a folha nova nasce «Por agendar». extraTx(tx, fRef, numero) corre na mesma transação.
+async function criarFolhaNova(cliente, dados, extraTx = null) {
+  const ano = new Date().getFullYear();
+  const cRef = doc(db, 'contadores', 'folhas-' + ano);
+  const fRef = doc(collection(db, 'folhas'));
+  let numero = '';
+  await runTransaction(db, async (tx) => {
+    const c = await tx.get(cRef);
+    const pre = extraTx ? await extraTx(tx, null, null) : null;   // leituras extra (antes das escritas)
+    const n = (c.exists() ? c.data().valor : 0) + 1;
+    numero = `FO-${ano}-${String(n).padStart(4, '0')}`;
+    tx.set(cRef, { valor: n });
+    tx.set(fRef, {
+      ...dados,
+      numero,
+      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: dados.clienteEmail || cliente.email || '',
+      pesquisa: tokensFolha(numero, cliente.nome, cliente.nif, dados.descricao),
+      estado: 'Por agendar',
+      historico: [{ estado: 'Por agendar', de: null, uid: SESSAO.uid, nome: SESSAO.nome || SESSAO.email, em: Timestamp.now(), ...(dados.contratoId ? { nota: 'Gerada pelo contrato ' + dados.contratoNumero } : {}) }],
+      observacoesTecnico: '',
+      criadoEm: serverTimestamp(), criadoPor: SESSAO.uid, criadoPorNome: SESSAO.nome || SESSAO.email,
+      estadoAlteradoEm: serverTimestamp(),
+    });
+    if (pre) pre(fRef, numero);
+  });
+  return fRef.id;
+}
+
+// ---------- Contratos de manutenção ----------
+const PERIODICIDADES = { Mensal: 1, Bimestral: 2, Trimestral: 3, Semestral: 6, Anual: 12 };
+function addMeses(d, n) {
+  const x = new Date(d);
+  const dia = x.getDate();
+  x.setDate(1); x.setMonth(x.getMonth() + n);
+  const ult = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  x.setDate(Math.min(dia, ult));
+  return x;
+}
+// Quando gerar a folha da visita: «antecedência» dias antes da data da visita.
+function dataGeracao(proxima, antecedencia) { return addDias(inicioDia(proxima), -(Number(antecedencia) || 0)); }
+function descricaoVisita(ct) {
+  const eq = (ct.equipamentos || []).map((e) => [e.descricao, e.marca, e.serie ? 'n.º ' + e.serie : '', e.local].filter(Boolean).join(' · '));
+  return [`Manutenção ${String(ct.periodicidade || '').toLowerCase()} — contrato ${ct.numero}.`, ct.ambito || '', eq.length ? 'Equipamentos:\n- ' + eq.join('\n- ') : '']
+    .filter(Boolean).join('\n');
+}
+// Gera a folha da próxima visita de um contrato e avança a próxima data, numa só transação (nunca duplica).
+async function gerarVisitaContrato(ctId, { forcar = false } = {}) {
+  const ctRef = doc(db, 'contratos', ctId);
+  const ct0 = (await getDoc(ctRef)).data();
+  if (!ct0 || ct0.estado !== 'Ativo' || !ct0.proximaData) return null;
+  const prox = paraData(ct0.proximaData);
+  if (!forcar && dataGeracao(prox, ct0.antecedenciaDias) > new Date()) return null;
+  if (ct0.dataFim && prox > paraData(ct0.dataFim) && !ct0.renovacaoAutomatica) return null;
+  const [h, m] = String(ct0.horaPreferida || '09:00').split(':').map(Number);
+  const quando = new Date(prox); quando.setHours(h || 9, m || 0, 0, 0);
+  const cliente = { id: ct0.clienteId, nome: ct0.clienteNome, nif: ct0.clienteNif || '', email: ct0.clienteEmail || '' };
+  const dados = {
+    tipo: 'Manutenção', tecnicoUid: ct0.tecnicoUid || '', tecnicoNome: ct0.tecnicoNome || '',
+    dataPrevista: Timestamp.fromDate(quando), duracaoPrevista: Number(ct0.duracaoPrevista) || 0,
+    morada: ct0.morada || '', codigoPostal: ct0.codigoPostal || '', localidade: ct0.localidade || '', contacto: ct0.contacto || '', telefone: ct0.telefone || '',
+    descricao: descricaoVisita(ct0), tarefasExtra: (ct0.tarefas || []).slice(0, 30),
+    origem: 'contrato', contratoId: ctId, contratoNumero: ct0.numero, atualizadoEm: serverTimestamp(), atualizadoPor: SESSAO.uid,
+  };
+  let gerada = null;
+  const id = await criarFolhaNova(cliente, dados, async (tx) => {
+    const s = await tx.get(ctRef);
+    const ct = s.data();
+    // outro utilizador gerou entretanto?
+    if (!ct || ct.estado !== 'Ativo' || !ct.proximaData || paraData(ct.proximaData).getTime() !== prox.getTime()) throw Object.assign(new Error('já gerada'), { code: 'ja-gerada' });
+    return (fRef, numero) => {
+      let nova = addMeses(prox, PERIODICIDADES[ct.periodicidade] || 12);
+      const alt = { proximaData: Timestamp.fromDate(nova), geracaoEm: Timestamp.fromDate(dataGeracao(nova, ct.antecedenciaDias)),
+        ultimaVisita: Timestamp.fromDate(prox), atualizadoEm: serverTimestamp(), atualizadoPor: SESSAO.uid,
+        folhas: [{ folhaId: fRef.id, numero, data: Timestamp.fromDate(quando) }, ...(ct.folhas || [])].slice(0, 24) };
+      // fim do contrato: renova por mais um ano, ou deixa de gerar
+      if (ct.dataFim && nova > paraData(ct.dataFim)) {
+        if (ct.renovacaoAutomatica) alt.dataFim = Timestamp.fromDate(addMeses(paraData(ct.dataFim), 12));
+        else alt.geracaoEm = Timestamp.fromDate(new Date(2999, 0, 1));
+      }
+      tx.update(ctRef, alt);
+      gerada = numero;
+    };
+  }).catch((e) => { if (e.code === 'ja-gerada') return null; throw e; });
+  return id ? { id, numero: gerada } : null;
+}
+// Gera todas as visitas em falta (contratos ativos com data de geração já passada). Corre ao abrir as páginas (staff), no máx. 1 vez por hora neste aparelho.
+async function gerarManutencoesPendentes({ forcar = false } = {}) {
+  if (!ehStaff(SESSAO.perfil)) return [];
+  const chave = 'manut.ultima.' + SESSAO.uid;
+  try { if (!forcar && Date.now() - Number(localStorage.getItem(chave) || 0) < 3600e3) return []; } catch (e) { /* sem storage */ }
+  const feitas = [];
+  try {
+    for (let volta = 0; volta < 3; volta++) {   // até 3 visitas em atraso por contrato
+      const snap = await getDocs(query(collection(db, 'contratos'), where('estado', '==', 'Ativo'), where('geracaoEm', '<=', Timestamp.now()), orderBy('geracaoEm'), limit(20)));
+      if (snap.empty) break;
+      let nesta = 0;
+      for (const d of snap.docs) { const r = await gerarVisitaContrato(d.id); if (r) { feitas.push(r); nesta++; } }
+      if (!nesta) break;
+    }
+    try { localStorage.setItem(chave, String(Date.now())); } catch (e) { /* sem storage */ }
+  } catch (e) { console.warn('Contratos:', e); }
+  return feitas;
 }
 
 // Lista de técnicos ativos (coleção pequena; lida uma vez por página).

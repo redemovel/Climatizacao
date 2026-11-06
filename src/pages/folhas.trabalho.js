@@ -2,8 +2,11 @@
 // Tudo fica na própria folha (campos tempos, materiais, tarefas, relatorio, assinatura).
 // Sem preços: o valor da mão de obra é calculado só para o Master, com a tabela em config/precosHora.
 
-function tarefasPadrao() {
-  return ['Cliente no local', 'Limpeza do local', 'Cliente satisfeito', 'Ficha de fluorados', 'Relatório de visita'];
+function tarefasPadrao(f) {
+  const base = ['Cliente no local', 'Limpeza do local', 'Cliente satisfeito', 'Ficha de fluorados', 'Relatório de visita'];
+  // tarefas definidas no contrato de manutenção vêm primeiro
+  const extra = (f && f.tarefasExtra) || [];
+  return [...extra, ...base.filter((t) => !extra.includes(t))];
 }
 function unidadesMaterial() { return ['un', 'm', 'kg', 'l', 'cx', 'rolo']; }
 
@@ -100,7 +103,7 @@ function htmlTrabalho(f) {
     </div>
     <div class="cartao" id="cartaoTarefas">
       <h3 style="margin-top:0">Tarefas</h3>
-      <div class="tarefas">${tarefasPadrao().map((t) => `
+      <div class="tarefas">${tarefasPadrao(f).map((t) => `
         <label class="tarefa"><input type="checkbox" data-tarefa="${esc(t)}" ${tarefas[t] ? 'checked' : ''} ${pode ? '' : 'disabled'}><span>${esc(t)}</span></label>`).join('')}</div>
     </div>
     <div class="cartao" id="cartaoRelatorio">
@@ -503,7 +506,7 @@ function relatorioHtml(f, assinaturaSrc) {
   const e = esc;
   const linha = (rot, val) => val ? `<tr><td style="${'"+F+"'}padding:4px 8px 4px 0;color:#64748b;vertical-align:top;white-space:nowrap">${e(rot)}</td><td style="${'"+F+"'}padding:4px 0">${val}</td></tr>` : '';
   const concl = (f.historico || []).filter((h) => h.estado === 'Concluída').pop();
-  const tarefas = tarefasPadrao().filter((t) => (f.tarefas || {})[t]);
+  const tarefas = tarefasPadrao(f).filter((t) => (f.tarefas || {})[t]);
   const tempos = f.tempos || [];
   const mats = f.materiais || [];
   const ass = f.assinatura;

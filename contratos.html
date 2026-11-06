@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-06 14:00 UTC -->
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#008080">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Climatização">
+<link rel="icon" type="image/png" sizes="32x32" href="img/icone-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="img/icone-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="img/app-180.png?v=2">
+<link rel="manifest" href="manifest.webmanifest?v=2">
+<title>Contratos de manutenção · Arpuro Climatização</title>
+<style>
+/* ===== style.css — partilhado (mobile-first) ===== */
+:root {
+  --azul: #008080; --azul-esc: #005f5f; --azul-claro: #e0f2f1;
+  --texto: #1b2530; --texto-2: #5b6775; --linha: #dde3ea; --fundo: #f4f6f9; --branco: #fff;
+  --verde: #1f8a4c; --ambar: #b7791f; --laranja: #c2410c; --vermelho: #b42318; --cinza: #6b7280; --roxo: #6d28d9;
+  --raio: 12px; --sombra: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --nav-h: 64px; --topo-h: 52px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--texto); background: var(--fundo); }
+body.com-modal { overflow: hidden; }
+a { color: var(--azul); }
+h1 { font-size: 1.25rem; margin: 0 0 12px; }
+h2 { font-size: 1.1rem; margin: 0; }
+h3 { font-size: 1rem; margin: 16px 0 8px; }
+.oculto { display: none !important; }
+.muted { color: var(--texto-2); font-size: .9rem; }
+
+/* --- Topo --- */
+#topo { position: sticky; top: 0; z-index: 20; height: var(--topo-h); display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--azul); color: #fff; }
+#topo:empty { display: none; }
+.marca { color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05rem; flex: 1; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.marca img { width: 28px; height: 28px; }
+.tag-dev { background: #facc15; color: #000; border-radius: 4px; padding: 1px 6px; font-size: .7rem; vertical-align: middle; }
+.env-dev #topo { background: #7c3aed; }
+.utilizador { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.u-nome { font-weight: 600; font-size: .9rem; }
+.u-perfil { font-size: .72rem; opacity: .85; }
+.btn-sair { background: rgba(255,255,255,.15); color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; font-size: .85rem; cursor: pointer; }
+
+/* --- Menu inferior (telemóvel) / lateral superior (desktop) --- */
+#nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--branco); border-top: 1px solid var(--linha); padding-bottom: var(--safe-b); }
+#nav:empty { display: none; }
+#nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: var(--nav-h); text-decoration: none; color: var(--texto-2); font-size: .72rem; }
+#nav a svg { width: 24px; height: 24px; fill: currentColor; }
+#nav a.ativo { color: var(--azul); font-weight: 600; }
+main { padding: 14px 12px calc(var(--nav-h) + var(--safe-b) + 20px); max-width: 1100px; margin: 0 auto; }
+
+@media (min-width: 900px) {
+  #nav { top: var(--topo-h); bottom: auto; justify-content: center; border-top: 0; border-bottom: 1px solid var(--linha); padding: 0; }
+  #nav a { flex: 0 0 auto; flex-direction: row; gap: 8px; height: 46px; padding: 0 18px; font-size: .95rem; }
+  #nav a.ativo { box-shadow: inset 0 -3px 0 var(--azul); }
+  main { padding: 64px 20px 40px; }
+}
+
+/* --- Botões e formulários --- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--linha); background: var(--branco); color: var(--texto); font-size: .95rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primario { background: var(--azul); border-color: var(--azul); color: #fff; }
+.btn-perigo { background: var(--vermelho); border-color: var(--vermelho); color: #fff; }
+.btn-sec { background: var(--azul-claro); border-color: transparent; color: var(--azul-esc); }
+.btn-bloco { width: 100%; }
+.btn-peq { min-height: 36px; padding: 0 12px; font-size: .85rem; }
+.btn-icone { border: 0; background: transparent; font-size: 1.2rem; width: 40px; height: 40px; cursor: pointer; color: var(--texto-2); }
+.a-carregar { position: relative; color: transparent !important; }
+.a-carregar::after { content: ""; position: absolute; width: 18px; height: 18px; border: 2px solid currentColor; border-color: #999 transparent #999 transparent; border-radius: 50%; animation: rodar .8s linear infinite; }
+@keyframes rodar { to { transform: rotate(360deg); } }
+.acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 16px; }
+.acoes .btn { flex: 1 1 auto; }
+
+.campo { display: block; margin-bottom: 12px; }
+.campo > span { display: block; font-size: .85rem; font-weight: 600; color: var(--texto-2); margin-bottom: 4px; }
+input, select, textarea { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; background: var(--branco); color: var(--texto); min-height: 44px; }
+textarea { min-height: 90px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outline-offset: -1px; border-color: var(--azul); }
+.campo-erro input, .campo-erro select { border-color: var(--vermelho); }
+.msg-erro { color: var(--vermelho); font-size: .85rem; margin-top: 4px; }
+.linha2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips label { flex: 1 1 auto; }
+.chips input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.chips span { display: flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 12px; border: 1px solid var(--linha); border-radius: 999px; background: var(--branco); font-size: .9rem; cursor: pointer; }
+.chips input:checked + span { background: var(--azul); border-color: var(--azul); color: #fff; }
+
+/* --- Barra de ferramentas --- */
+.barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.barra > * { flex: 1 1 140px; }
+.barra .btn { flex: 0 0 auto; }
+.titulo-pag { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.titulo-pag > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.titulo-pag h1 { margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 10px; overflow: hidden; background: var(--branco); }
+.seg button { border: 0; background: transparent; min-height: 40px; padding: 0 14px; font: inherit; font-size: .9rem; cursor: pointer; color: var(--texto-2); }
+.seg button.ativo { background: var(--azul); color: #fff; font-weight: 600; }
+
+/* --- Cartões e listas --- */
+.cartao { background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 14px; margin-bottom: 10px; }
+.lista-item { display: block; background: var(--branco); border-radius: var(--raio); box-shadow: var(--sombra); padding: 12px 14px; margin-bottom: 8px; color: inherit; text-decoration: none; cursor: pointer; border-left: 4px solid transparent; }
+.lista-item:active { background: #f8fafc; }
+.li-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.li-titulo { font-weight: 700; }
+.li-sub { color: var(--texto-2); font-size: .9rem; margin-top: 2px; overflow-wrap: anywhere; }
+.li-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: .82rem; color: var(--texto-2); align-items: center; }
+.li-desc { margin-top: 6px; font-size: .9rem; color: var(--texto); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.vazio { text-align: center; color: var(--texto-2); padding: 28px 12px; }
+.mais { display: flex; justify-content: center; margin: 12px 0; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; background: #eef2f6; color: var(--texto-2); }
+.estado-agendada { background: #e0efff; color: #0b4f8a; }
+.estado-em-curso { background: #fff4d6; color: #8a5a00; }
+.estado-por-agendar { background: #f1f5f9; color: #475569; }
+.estado-pendente, .estado-pendente-material { background: #ffe8dc; color: var(--laranja); }
+.estado-revista { background: #e0f2f1; color: #00695c; }
+.estado-aguarda-ne { background: #fef3c7; color: #92400e; }
+.estado-anulada { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
+.estado-concluida { background: #dcf5e6; color: var(--verde); }
+.estado-faturada { background: #ede9fe; color: var(--roxo); }
+.lista-item.b-agendada { border-left-color: #3b82f6; }
+.lista-item.b-em-curso { border-left-color: #f59e0b; }
+.lista-item.b-por-agendar { border-left-color: #94a3b8; }
+.lista-item.b-pendente, .lista-item.b-pendente-material { border-left-color: #ea580c; }
+.lista-item.b-revista { border-left-color: #0d9488; }
+.lista-item.b-aguarda-ne { border-left-color: #d97706; }
+.lista-item.b-anulada { border-left-color: #cbd5e1; opacity: .75; }
+.sel-lote { display: flex; align-items: center; gap: 10px; }
+.sel-lote input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.barra-lote { position: sticky; top: var(--topo-h); z-index: 5; background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 10px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.interruptor { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--texto-2); }
+.interruptor input { width: 20px; height: 20px; min-height: 0; }
+.lista-item.b-concluida { border-left-color: #22c55e; }
+.lista-item.b-faturada { border-left-color: #8b5cf6; }
+.tipo { font-size: .75rem; font-weight: 600; color: var(--azul-esc); background: var(--azul-claro); border-radius: 6px; padding: 1px 6px; }
+
+/* --- Detalhe --- */
+.det-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.det-cab h1 { margin: 0; }
+.dl { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0 0; }
+.dl div { min-width: 0; }
+.dl dt { font-size: .78rem; color: var(--texto-2); font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+.dl dd { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (min-width: 600px) { .dl { grid-template-columns: 1fr 1fr; } }
+.acoes-rapidas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.estados-acoes { display: grid; gap: 8px; }
+.pendencia { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.pendencia b { color: var(--laranja); }
+.hist { list-style: none; padding: 0; margin: 0; }
+.hist li { padding: 8px 0; border-bottom: 1px solid var(--linha); font-size: .9rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hist li:last-child { border-bottom: 0; }
+.voltar { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 10px; text-decoration: none; font-weight: 600; background: none; border: 0; color: var(--azul); font-size: .95rem; padding: 6px 0; cursor: pointer; }
+
+/* --- Agenda --- */
+.agenda-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.agenda-nav .periodo { flex: 1; text-align: center; font-weight: 700; }
+.dia-cab { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 6px; font-weight: 700; }
+.dia-cab.hoje { color: var(--azul); }
+.hora { font-weight: 800; font-size: 1.05rem; min-width: 52px; }
+.ag-item { display: flex; gap: 10px; }
+.ag-corpo { flex: 1; min-width: 0; }
+.ag-acoes { display: flex; gap: 8px; margin-top: 8px; }
+.ag-acoes .btn { flex: 1; }
+.hora-data { display: block; font-size: .72rem; font-weight: 600; color: var(--laranja); }
+.atrasos { background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--raio); padding: 8px 8px 0; margin-bottom: 12px; }
+.atrasos summary { cursor: pointer; font-weight: 700; color: var(--laranja); padding: 4px 6px 8px; display: flex; gap: 8px; align-items: center; list-style: none; }
+.atrasos summary::-webkit-details-marker { display: none; }
+.atrasos summary::before { content: "▸"; transition: transform .15s; }
+.atrasos[open] summary::before { transform: rotate(90deg); }
+
+/* --- Modal (folha inferior no telemóvel) --- */
+.modal-fundo { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; justify-content: center; }
+.modal { background: var(--branco); width: 100%; max-width: 560px; max-height: 92vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; }
+.modal-topo { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 6px 16px; border-bottom: 1px solid var(--linha); }
+.modal-corpo { padding: 14px 16px calc(16px + var(--safe-b)); overflow-y: auto; }
+@media (min-width: 600px) { .modal-fundo { align-items: center; } .modal { border-radius: 16px; } }
+.resultados { max-height: 240px; overflow-y: auto; border: 1px solid var(--linha); border-radius: 10px; margin-top: 6px; }
+.resultados button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--linha); background: var(--branco); padding: 10px 12px; font: inherit; cursor: pointer; }
+.resultados button:last-child { border-bottom: 0; }
+.cliente-escolhido { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--azul-claro); border-radius: 10px; padding: 10px 12px; }
+
+/* --- Toast --- */
+#toasts { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + var(--safe-b) + 12px); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.toast { background: #1f2937; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .9rem; box-shadow: 0 4px 12px rgba(0,0,0,.2); max-width: 520px; }
+.toast-erro { background: var(--vermelho); }
+.toast-ok { background: var(--verde); }
+
+/* --- Login --- */
+.login { max-width: 380px; margin: 8vh auto 0; }
+.login .logo { text-align: center; margin-bottom: 20px; }
+.login .logo img { width: 220px; max-width: 70%; height: auto; display: block; margin: 0 auto 6px; }
+.login .logo b { display: block; font-size: 1.35rem; color: var(--azul); letter-spacing: .02em; }
+.login .logo small { color: var(--texto-2); }
+.uid { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f5f9; padding: 8px; border-radius: 8px; word-break: break-all; user-select: all; display: block; margin: 8px 0; }
+.rodape-versao { text-align: center; font-size: .72rem; color: #9aa4b2; margin-top: 24px; }
+
+/* Fase 2: trabalho no local */
+.cab-cartao { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cab-cartao h3 { margin: 0; }
+.lixo { background: none; border: 0; color: #b91c1c; font-size: 1rem; min-height: 0; padding: 4px 6px; cursor: pointer; }
+.tarefas { display: grid; gap: 6px; }
+.tarefa { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: var(--raio); }
+.tarefa input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; }
+.grelha-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quadro-ass { width: 100%; height: auto; aspect-ratio: 5 / 2; border: 1px dashed #94a3b8; border-radius: var(--raio); background: #fff; touch-action: none; display: block; }
+.quadro-ass.desativado { opacity: .35; pointer-events: none; }
+.assinatura { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.assinatura img { max-width: 300px; width: 100%; border: 1px solid var(--linha); border-radius: var(--raio); background: #fff; }
+.aviso-concl { background: #fef3c7; color: #92400e; padding: 8px 10px; border-radius: var(--raio); margin: 0 0 10px; }
+.valor-mo { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--linha); }
+.equipa { font-weight: 600; }
+.acoes-mat { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.lista-artigos { display: grid; gap: 6px; margin-bottom: 10px; max-height: 260px; overflow-y: auto; }
+.artigo-op { text-align: left; background: #fff; border: 1px solid var(--linha); border-radius: var(--raio); padding: 8px 10px; font: inherit; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; cursor: pointer; }
+.artigo-op .disp { margin-left: auto; color: #047857; font-weight: 600; white-space: nowrap; }
+.artigo-op .disp.zero { color: #b91c1c; }
+.stock-info { background: #ecfdf5; border-radius: var(--raio); padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.linha-imp { display: grid; grid-template-columns: 1fr 96px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.linha-imp input { min-width: 0; }
+.tabela-guia { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.tabela-guia th, .tabela-guia td { padding: 6px 4px; border-bottom: 1px solid var(--linha); text-align: left; vertical-align: top; }
+.tabela-guia td.n, .tabela-guia th.n { text-align: right; white-space: nowrap; }
+.aviso-at { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: var(--raio); padding: 10px; margin: 0 0 10px; }
+.ok-at { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; border-radius: var(--raio); padding: 10px; margin: 0 0 10px; }
+.estado-por-comunicar { background: #fee2e2; color: #991b1b; }
+.estado-comunicada { background: #dcfce7; color: #166534; }
+.estado-fechada { background: #e2e8f0; color: #334155; }
+.lista-item.b-por-comunicar { border-left-color: #dc2626; }
+.lista-item.b-comunicada { border-left-color: #16a34a; }
+.lista-item.b-fechada { border-left-color: #94a3b8; }
+@media print { #topo, #nav, .voltar, .acoes, .estados-acoes, .btn { display: none !important; } body { background: #fff; } .cartao { box-shadow: none; border: 0; } }
+.tempos { list-style: none; margin: 0; padding: 0; }
+.tempos li { padding: 8px 0; border-bottom: 1px solid var(--linha); }
+.t-cab { display: flex; gap: 10px; align-items: center; }
+.t-cab .t-h { margin-left: auto; }
+.t-eq { font-size: .92rem; margin-top: 2px; }
+.desc-destaque dd { font-weight: 600; font-size: 1.05rem; background: #f0fdfa; border-left: 4px solid var(--azul); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; }
+.series-campos { display: grid; gap: 6px; margin: 0 0 10px; }
+.serie-tag { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 6px; padding: 1px 6px; margin: 2px 4px 0 0; font-size: .85rem; font-family: monospace; }
+#vRelatorio { position: fixed; inset: 0; z-index: 60; background: #fff; overflow-y: auto; padding: 0 0 24px; }
+#vRelatorio .rel-barra { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--linha); display: flex; gap: 8px; padding: 10px 12px; }
+#vRelatorio .rel-corpo { padding: 12px; }
+@media print { body.a-imprimir > *:not(#vRelatorio) { display: none !important; } body.a-imprimir #vRelatorio { position: static; } body.a-imprimir .rel-barra { display: none !important; } }
+
+/* Contratos */
+.equip-linha { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--linha); border-radius: 10px; margin-bottom: 6px; }
+.equip-linha .grelha-2 { gap: 6px; }
+
+</style>
+</head>
+<body class="env-prod pagina-contratos">
+<header id="topo"></header>
+<main id="main">
+<!-- titulo: Contratos de manutenção -->
+<section id="vLista">
+  <div class="titulo-pag">
+    <h1>Contratos</h1>
+    <button class="btn btn-primario" id="btnNovo">+ Novo</button>
+  </div>
+  <div class="cartao oculto" id="cartaoGerar"></div>
+  <form class="barra" id="fPesq">
+    <select id="fEstado" aria-label="Estado">
+      <option value="Ativo">Ativos</option>
+      <option value="Suspenso">Suspensos</option>
+      <option value="Terminado">Terminados</option>
+    </select>
+    <input id="q" placeholder="Cliente, n.º ou equipamento" inputmode="search" aria-label="Pesquisar contrato" autocomplete="off">
+    <button class="btn" type="submit">Procurar</button>
+  </form>
+  <div id="lista"><div class="vazio">A carregar…</div></div>
+  <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>
+</section>
+<section id="vDetalhe" class="oculto"></section>
+
+</main>
+<nav id="nav" aria-label="Menu principal"></nav>
+<div id="toasts" aria-live="polite"></div>
+<script type="module">
+// ===== core.js — código partilhado por todas as páginas (inserido pelo build.js) =====
+import { initializeApp, deleteApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
+  sendPasswordResetEmail, createUserWithEmailAndPassword,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, orderBy,
+  limit, startAfter, serverTimestamp, Timestamp, runTransaction, writeBatch,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+
+const ENV = 'prod';          // 'prod' ou 'dev'
+const BUILD = '2026-11-06 14:00 UTC';
+const PAGINA = 'contratos';
+
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDFAu5HWTkNOMX79TGbk14HJ-37wywVUyA',
+  authDomain: 'climatizacao-c482a.firebaseapp.com',
+  projectId: 'climatizacao-c482a',
+  storageBucket: 'climatizacao-c482a.firebasestorage.app',
+  messagingSenderId: '31045556625',
+  appId: '1:31045556625:web:a03ccd9fe4d2b141542230',
+};
+
+const fbApp = initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(fbApp);
+auth.languageCode = 'pt';
+// Cache local persistente: a agenda continua visível sem rede e poupa leituras repetidas.
+const db = initializeFirestore(fbApp, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
+// ---------- Constantes de negócio ----------
+const PERFIS = { master: 'Master', backoffice: 'Backoffice', tecnico: 'Técnico', comercial: 'Comercial' };
+const ESTADOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente', 'Concluída', 'Revista', 'Aguarda NE', 'Faturada', 'Anulada'];
+const ESTADOS_ABERTOS = ['Por agendar', 'Agendada', 'Em curso', 'Pendente'];
+const ESTADOS_MASTER = ['Revista', 'Aguarda NE', 'Faturada', 'Anulada'];   // revisão, NE, faturação e anulação: só o Master
+const DIAS_ATRASO = 60;   // «Em atraso» na agenda: só os últimos 60 dias; mais antigas vão para a lista de folhas antigas
+const MOTIVOS_PENDENCIA = ['Peças', 'Orçamento', 'Cliente', 'Outro'];
+const TIPOS = ['Instalação', 'Manutenção', 'AT'];
+const TIPO_NOME = { 'Instalação': 'Instalação', 'Manutenção': 'Manutenção', AT: 'Assistência técnica' };
+// Transições "normais" (botões principais). Têm de bater com firestore.rules.
+const TRANSICOES = {
+  'Por agendar': ['Agendada'],
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso', 'Agendada'],
+  'Concluída': ['Revista'],
+  'Revista': ['Aguarda NE', 'Faturada'],
+  'Aguarda NE': ['Faturada'],
+  'Faturada': [],
+  'Anulada': [],
+};
+const TRANSICOES_TECNICO = {
+  'Agendada': ['Em curso'],
+  'Em curso': ['Pendente', 'Concluída'],
+  'Pendente': ['Em curso'],
+};
+const PAGINA_TAM = 20;
+
+const ehStaff = (p) => p === 'master' || p === 'backoffice';
+
+// Estados para onde o perfil pode mudar a folha (o servidor valida o mesmo nas regras).
+function transicoesPermitidas(perfil, estado) {
+  if (perfil === 'tecnico') return TRANSICOES_TECNICO[estado] || [];
+  if (perfil === 'master') return ESTADOS.filter((e) => e !== estado);
+  if (perfil === 'backoffice') return ESTADOS_MASTER.includes(estado) ? [] : ESTADOS.filter((e) => e !== estado && !ESTADOS_MASTER.includes(e));
+  return [];
+}
+
+// ---------- Utilitários ----------
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function pagina(nome, params) {
+  let u = nome + (ENV === 'dev' ? '-dev' : '') + '.html';
+  if (params) {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
+    if ([...q].length) u += '?' + q;
+  }
+  return u;
+}
+
+function paraData(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (typeof v.toDate === 'function') return v.toDate();
+  return new Date(v);
+}
+const fmtData = (v, o = { day: '2-digit', month: '2-digit', year: 'numeric' }) => { const d = paraData(v); return d ? d.toLocaleDateString('pt-PT', o) : '—'; };
+const fmtHora = (v) => { const d = paraData(v); return d ? d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : ''; };
+const fmtDataHora = (v) => { const d = paraData(v); return d ? fmtData(d) + ' ' + fmtHora(d) : '—'; };
+const fmtDiaSemana = (d) => { const t = d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+function inicioDia(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function addDias(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function inicioSemana(d) { const x = inicioDia(d); const dow = (x.getDay() + 6) % 7; return addDias(x, -dow); } // segunda-feira
+function isoLocal(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function deIsoLocal(s, hora = '00:00') { const [y, m, d] = s.split('-').map(Number); const [h, mi] = hora.split(':').map(Number); return new Date(y, m - 1, d, h || 0, mi || 0); }
+
+function linkMapa(f) {
+  const q = [f.morada, f.codigoPostal, f.localidade].filter(Boolean).join(', ');
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
+}
+const linkTel = (t) => (t ? 'tel:' + String(t).replace(/[^\d+]/g, '') : '');
+const classeEstado = (e) => 'estado-' + String(e || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-');
+const badgeEstado = (e) => `<span class="badge ${classeEstado(e)}">${esc(e)}</span>`;
+
+// NIF: português com dígito de controlo; estrangeiro com indicativo do país (ex.: ES B12345678).
+function validarNIF(entrada) {
+  const v = String(entrada || '').toUpperCase().replace(/[\s.\-/]/g, '');
+  if (!v) return { ok: false, erro: 'O NIF é obrigatório.' };
+  const pt = v.startsWith('PT') ? v.slice(2) : v;
+  if (/^\d+$/.test(pt)) {
+    if (pt.length !== 9) return { ok: false, erro: 'O NIF português tem 9 dígitos.' };
+    if (!/^([1235689]|45|7[0-9])/.test(pt)) return { ok: false, erro: 'NIF português com início inválido.' };
+    let soma = 0;
+    for (let i = 0; i < 8; i++) soma += Number(pt[i]) * (9 - i);
+    let ctrl = 11 - (soma % 11);
+    if (ctrl >= 10) ctrl = 0;
+    if (ctrl !== Number(pt[8])) return { ok: false, erro: 'NIF inválido (dígito de controlo errado).' };
+    return { ok: true, nif: pt, pais: 'PT' };
+  }
+  const m = v.match(/^([A-Z]{2})([A-Z0-9]{2,13})$/);
+  if (m && m[1] !== 'PT' && /\d/.test(m[2])) return { ok: true, nif: v, pais: m[1] };
+  return { ok: false, erro: 'NIF inválido. Estrangeiro: indicativo do país + número (ex.: ES B12345678).' };
+}
+
+function erroFirebase(e) {
+  const c = (e && e.code) || '';
+  const mapa = {
+    'auth/invalid-credential': 'Email ou palavra-passe incorretos.',
+    'auth/wrong-password': 'Email ou palavra-passe incorretos.',
+    'auth/user-not-found': 'Email ou palavra-passe incorretos.',
+    'auth/invalid-email': 'Email inválido.',
+    'auth/too-many-requests': 'Demasiadas tentativas. Aguarde uns minutos.',
+    'auth/network-request-failed': 'Sem ligação à internet.',
+    'auth/email-already-in-use': 'Já existe uma conta com este email.',
+    'auth/user-disabled': 'Esta conta está desativada.',
+    'permission-denied': 'Sem permissão para esta operação.',
+    'unavailable': 'Sem ligação ao servidor. Tente de novo.',
+    'failed-precondition': 'Falta um índice na base de dados (ver consola do browser).',
+  };
+  if (c === 'failed-precondition') console.error('[Firestore] índice em falta:', e.message);
+  return mapa[c] || (e && e.message) || 'Erro inesperado.';
+}
+
+function toast(msg, tipo = 'info', ms = 3500) {
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + tipo;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+
+// Modal genérico (folha inferior no telemóvel). Devolve o elemento do conteúdo.
+function abrirModal(titulo, html, { aoFechar } = {}) {
+  fecharModal();
+  const fundo = document.createElement('div');
+  fundo.className = 'modal-fundo';
+  fundo.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(titulo)}">
+    <div class="modal-topo"><h2>${esc(titulo)}</h2><button class="btn-icone" data-fechar aria-label="Fechar">✕</button></div>
+    <div class="modal-corpo">${html}</div></div>`;
+  fundo.addEventListener('click', (ev) => { if (ev.target === fundo || ev.target.closest('[data-fechar]')) { fecharModal(); aoFechar && aoFechar(); } });
+  document.body.appendChild(fundo);
+  document.body.classList.add('com-modal');
+  return $('.modal-corpo', fundo);
+}
+function fecharModal() { $$('.modal-fundo').forEach((m) => m.remove()); document.body.classList.remove('com-modal'); }
+
+function confirmar(msg, { ok = 'Confirmar', perigo = false } = {}) {
+  return new Promise((resolve) => {
+    const c = abrirModal('Confirmar', `<p>${esc(msg)}</p><div class="acoes">
+      <button class="btn" data-r="0">Cancelar</button>
+      <button class="btn ${perigo ? 'btn-perigo' : 'btn-primario'}" data-r="1">${esc(ok)}</button></div>`,
+    { aoFechar: () => resolve(false) });
+    c.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-r]');
+      if (!b) return;
+      fecharModal();
+      resolve(b.dataset.r === '1');
+    });
+  });
+}
+
+async function comBotao(btn, fn) {
+  if (btn.disabled) return;
+  const txt = btn.textContent;
+  btn.disabled = true; btn.classList.add('a-carregar');
+  try { return await fn(); }
+  finally { btn.disabled = false; btn.classList.remove('a-carregar'); btn.textContent = txt; }
+}
+
+// ---------- Sessão, cabeçalho e menu ----------
+let SESSAO = null;
+
+const ICONES = {
+  agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
+  folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
+  clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  contratos: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1v5h5M9 12h8v1.5H9zm0 3h8v1.5H9zm0 3h5v1.5H9z"/></svg>',
+  guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
+  utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
+};
+const MENU = [
+  { id: 'agenda', label: 'Agenda', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'folhas', label: 'Folhas de obra', curto: 'Folhas', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
+  { id: 'contratos', label: 'Contratos', perfis: ['master', 'backoffice'] },
+  { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
+  { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
+];
+
+function montarCabecalho() {
+  const nome = (SESSAO.nome || SESSAO.email || '').split(' ')[0];
+  $('#topo').innerHTML = `
+    <a class="marca" href="${pagina('agenda')}"><img src="img/arvore-branca.png" alt="">Climatização${ENV === 'dev' ? ' <span class="tag-dev">DEV</span>' : ''}</a>
+    <div class="utilizador"><span class="u-nome">${esc(nome)}</span><span class="u-perfil">${esc(PERFIS[SESSAO.perfil] || SESSAO.perfil)}</span></div>
+    <button class="btn-sair" id="btnSair" title="Terminar sessão">Sair</button>`;
+  $('#btnSair').onclick = async () => { await signOut(auth); location.replace(pagina('index')); };
+  $('#nav').innerHTML = MENU.filter((m) => m.perfis.includes(SESSAO.perfil)).map((m) =>
+    `<a href="${pagina(m.id)}" class="${m.id === PAGINA ? 'ativo' : ''}" data-menu="${m.id}">${ICONES[m.id]}<span>${esc(m.curto || m.label)}</span></a>`).join('');
+}
+
+// Garante sessão iniciada com perfil ativo. Sem sessão → login. Sem perfil → login (mostra o UID).
+function iniciarPagina({ perfis = null } = {}) {
+  return new Promise((resolve) => {
+    let feito = false;
+    onAuthStateChanged(auth, async (user) => {
+      if (feito) return;
+      feito = true;
+      if (!user) { location.replace(pagina('index')); return; }
+      try {
+        const snap = await getDoc(doc(db, 'utilizadores', user.uid));
+        if (!snap.exists() || snap.data().ativo !== true) { location.replace(pagina('index')); return; }
+        SESSAO = { uid: user.uid, email: user.email, ...snap.data() };
+      } catch (e) {
+        $('#main').innerHTML = `<div class="vazio">Não foi possível carregar o perfil: ${esc(erroFirebase(e))}</div>`;
+        return;
+      }
+      montarCabecalho();
+      if (perfis && !perfis.includes(SESSAO.perfil)) {
+        $('#main').innerHTML = '<div class="vazio">Não tem acesso a esta página.</div>';
+        return;
+      }
+      document.body.classList.add('perfil-' + SESSAO.perfil);
+      resolve(SESSAO);
+    });
+  });
+}
+
+// ---------- Pesquisa de clientes ----------
+// Cada cliente guarda `pesquisa`: prefixos (2+ letras) de cada palavra do nome e da localidade.
+// Assim "hot" encontra "Hotel Meliá" e "meli" também, com uma só consulta (array-contains).
+const normalizar = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function tokensPesquisa(...textos) {
+  const set = new Set();
+  for (const t of textos) {
+    for (const p of normalizar(t).split(/[^a-z0-9]+/)) {
+      for (let i = 2; i <= Math.min(p.length, 15); i++) set.add(p.slice(0, i));
+    }
+  }
+  return [...set];
+}
+
+async function pesquisarClientes(texto, { soAtivos = false } = {}) {
+  const t = String(texto || '').trim();
+  const n = validarNIF(t);
+  let snap;
+  if (n.ok) {
+    snap = await getDocs(query(collection(db, 'clientes'), where('nif', '==', n.nif), limit(10)));
+  } else {
+    const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+    if (!palavras.length) return [];
+    const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+    snap = await getDocs(query(collection(db, 'clientes'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  }
+  const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
+    .filter((c) => !soAtivos || c.ativo !== false)
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+}
+
+// ---------- Artigos (stock do armazém da climatização, vindo do PHC) ----------
+// disponível = stock − reservado em FO abertas no PHC − ainda em guias abertas no PHC
+//              − reservado em folhas da plataforma − em guias abertas da plataforma
+const r3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+function disponivel(a) {
+  return r3((a.stock || 0) - (a.reservadoPHC || 0) - (a.emGuiasPHC || 0) - (a.resFolhas || 0) - (a.resGuias || 0));
+}
+const fmtQtd = (n) => r3(n).toLocaleString('pt-PT', { maximumFractionDigits: 3 });
+async function pesquisarArtigos(texto) {
+  const palavras = normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+  if (!palavras.length) return [];
+  const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+  const snap = await getDocs(query(collection(db, 'artigos'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((a) => a.ativo !== false && palavras.every((p) => (a.pesquisa || []).includes(p)))
+    .sort((a, b) => disponivel(b) - disponivel(a) || (a.ref || '').localeCompare(b.ref || ''));
+}
+// Acumula movimentos de reserva por artigo e aplica-os dentro de uma transação (lê primeiro, escreve depois).
+// mov: { artigoId: { resFolhas: +x, resGuias: -y } }; exigeDisponivel: artigos que não podem ficar negativos.
+async function aplicarReservas(tx, mov, exigeDisponivel = new Set()) {
+  const ids = Object.keys(mov);
+  const docs = {};
+  for (const id of ids) {
+    const s = await tx.get(doc(db, 'artigos', id));
+    if (!s.exists()) throw Object.assign(new Error('Artigo não encontrado: ' + id), { code: 'artigo' });
+    docs[id] = s.data();
+  }
+  return () => {
+    for (const id of ids) {
+      const a = docs[id];
+      const novo = { resFolhas: r3((a.resFolhas || 0) + (mov[id].resFolhas || 0)), resGuias: r3((a.resGuias || 0) + (mov[id].resGuias || 0)) };
+      if (novo.resFolhas < 0) novo.resFolhas = 0;
+      if (novo.resGuias < 0) novo.resGuias = 0;
+      if (exigeDisponivel.has(id) && disponivel({ ...a, ...novo }) < -0.0005) {
+        throw Object.assign(new Error(`Sem stock disponível de ${a.ref} (disponível: ${fmtQtd(disponivel(a))} ${a.unidade || ''}).`), { code: 'stock' });
+      }
+      tx.update(doc(db, 'artigos', id), { ...novo, resAtualizadoEm: serverTimestamp() });
+    }
+  };
+}
+// N.º de série → id do documento em series/ (maiúsculas, sem espaços; «/» e outros trocados por ~XX)
+function idSerie(sr) {
+  return String(sr || '').toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9._-]/g, (c) => '~' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+}
+function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
+
+// Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
+function movLibertarFolha(f) {
+  const mov = {};
+  for (const m of f.materiais || []) if (m.artigoId) (mov[m.artigoId] = mov[m.artigoId] || { resFolhas: 0 }).resFolhas -= Number(m.qtd) || 0;
+  return mov;
+}
+
+// ---------- «Sincronizar com o PHC agora» (staff): a PontePHC vê o pedido em ~30 s e corre um ciclo completo ----------
+async function pedirSincronizacao(btn, aoConcluir) {
+  await comBotao(btn, async () => {
+    const ref = doc(db, 'controlo', 'sincronizar');
+    try {
+      await setDoc(ref, { estado: 'Pedido', pedidoEm: serverTimestamp(), pedidoPor: SESSAO.uid, pedidoPorNome: SESSAO.nome || SESSAO.email });
+    } catch (e) { toast(erroFirebase(e), 'erro'); return; }
+    toast('Pedido enviado ao servidor. A sincronização demora 1 a 2 minutos…', 'ok', 6000);
+    for (let i = 0; i < 24; i++) {   // até 4 minutos, uma leitura a cada 10 s
+      await new Promise((r) => setTimeout(r, 10000));
+      let d;
+      try { d = (await getDoc(ref)).data() || {}; } catch (e) { continue; }
+      if (d.estado === 'Concluído') {
+        toast('Sincronização com o PHC concluída' + (d.resultado && d.resultado !== 'OK' ? ': ' + d.resultado : '.'), d.resultado === 'OK' ? 'ok' : 'erro', 6000);
+        if (aoConcluir) aoConcluir();
+        return;
+      }
+    }
+    toast('O servidor ainda não respondeu. Confirme que o serviço PontePHC está a correr.', 'erro', 8000);
+  });
+}
+
+// ---------- Folhas de obra: criação (partilhada pela página Folhas e pela geração dos contratos) ----------
+// Prefixos para a pesquisa (n.º, cliente, NIF, avaria) — iguais aos que a PontePHC grava nas folhas do PHC.
+function tokensFolha(numero, clienteNome, nif, descricao) {
+  const n = String(numero || '');
+  return tokensPesquisa(n, n.split('-').pop().replace(/^0+/, ''), clienteNome, String(nif || '').replace(/\D/g, ''), descricao).slice(0, 400);
+}
+// Numeração FO-AAAA-NNNN no contador do ano; toda a folha nova nasce «Por agendar». extraTx(tx, fRef, numero) corre na mesma transação.
+async function criarFolhaNova(cliente, dados, extraTx = null) {
+  const ano = new Date().getFullYear();
+  const cRef = doc(db, 'contadores', 'folhas-' + ano);
+  const fRef = doc(collection(db, 'folhas'));
+  let numero = '';
+  await runTransaction(db, async (tx) => {
+    const c = await tx.get(cRef);
+    const pre = extraTx ? await extraTx(tx, null, null) : null;   // leituras extra (antes das escritas)
+    const n = (c.exists() ? c.data().valor : 0) + 1;
+    numero = `FO-${ano}-${String(n).padStart(4, '0')}`;
+    tx.set(cRef, { valor: n });
+    tx.set(fRef, {
+      ...dados,
+      numero,
+      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: dados.clienteEmail || cliente.email || '',
+      pesquisa: tokensFolha(numero, cliente.nome, cliente.nif, dados.descricao),
+      estado: 'Por agendar',
+      historico: [{ estado: 'Por agendar', de: null, uid: SESSAO.uid, nome: SESSAO.nome || SESSAO.email, em: Timestamp.now(), ...(dados.contratoId ? { nota: 'Gerada pelo contrato ' + dados.contratoNumero } : {}) }],
+      observacoesTecnico: '',
+      criadoEm: serverTimestamp(), criadoPor: SESSAO.uid, criadoPorNome: SESSAO.nome || SESSAO.email,
+      estadoAlteradoEm: serverTimestamp(),
+    });
+    if (pre) pre(fRef, numero);
+  });
+  return fRef.id;
+}
+
+// ---------- Contratos de manutenção ----------
+const PERIODICIDADES = { Mensal: 1, Bimestral: 2, Trimestral: 3, Semestral: 6, Anual: 12 };
+function addMeses(d, n) {
+  const x = new Date(d);
+  const dia = x.getDate();
+  x.setDate(1); x.setMonth(x.getMonth() + n);
+  const ult = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  x.setDate(Math.min(dia, ult));
+  return x;
+}
+// Quando gerar a folha da visita: «antecedência» dias antes da data da visita.
+function dataGeracao(proxima, antecedencia) { return addDias(inicioDia(proxima), -(Number(antecedencia) || 0)); }
+function descricaoVisita(ct) {
+  const eq = (ct.equipamentos || []).map((e) => [e.descricao, e.marca, e.serie ? 'n.º ' + e.serie : '', e.local].filter(Boolean).join(' · '));
+  return [`Manutenção ${String(ct.periodicidade || '').toLowerCase()} — contrato ${ct.numero}.`, ct.ambito || '', eq.length ? 'Equipamentos:\n- ' + eq.join('\n- ') : '']
+    .filter(Boolean).join('\n');
+}
+// Gera a folha da próxima visita de um contrato e avança a próxima data, numa só transação (nunca duplica).
+async function gerarVisitaContrato(ctId, { forcar = false } = {}) {
+  const ctRef = doc(db, 'contratos', ctId);
+  const ct0 = (await getDoc(ctRef)).data();
+  if (!ct0 || ct0.estado !== 'Ativo' || !ct0.proximaData) return null;
+  const prox = paraData(ct0.proximaData);
+  if (!forcar && dataGeracao(prox, ct0.antecedenciaDias) > new Date()) return null;
+  if (ct0.dataFim && prox > paraData(ct0.dataFim) && !ct0.renovacaoAutomatica) return null;
+  const [h, m] = String(ct0.horaPreferida || '09:00').split(':').map(Number);
+  const quando = new Date(prox); quando.setHours(h || 9, m || 0, 0, 0);
+  const cliente = { id: ct0.clienteId, nome: ct0.clienteNome, nif: ct0.clienteNif || '', email: ct0.clienteEmail || '' };
+  const dados = {
+    tipo: 'Manutenção', tecnicoUid: ct0.tecnicoUid || '', tecnicoNome: ct0.tecnicoNome || '',
+    dataPrevista: Timestamp.fromDate(quando), duracaoPrevista: Number(ct0.duracaoPrevista) || 0,
+    morada: ct0.morada || '', codigoPostal: ct0.codigoPostal || '', localidade: ct0.localidade || '', contacto: ct0.contacto || '', telefone: ct0.telefone || '',
+    descricao: descricaoVisita(ct0), tarefasExtra: (ct0.tarefas || []).slice(0, 30),
+    origem: 'contrato', contratoId: ctId, contratoNumero: ct0.numero, atualizadoEm: serverTimestamp(), atualizadoPor: SESSAO.uid,
+  };
+  let gerada = null;
+  const id = await criarFolhaNova(cliente, dados, async (tx) => {
+    const s = await tx.get(ctRef);
+    const ct = s.data();
+    // outro utilizador gerou entretanto?
+    if (!ct || ct.estado !== 'Ativo' || !ct.proximaData || paraData(ct.proximaData).getTime() !== prox.getTime()) throw Object.assign(new Error('já gerada'), { code: 'ja-gerada' });
+    return (fRef, numero) => {
+      let nova = addMeses(prox, PERIODICIDADES[ct.periodicidade] || 12);
+      const alt = { proximaData: Timestamp.fromDate(nova), geracaoEm: Timestamp.fromDate(dataGeracao(nova, ct.antecedenciaDias)),
+        ultimaVisita: Timestamp.fromDate(prox), atualizadoEm: serverTimestamp(), atualizadoPor: SESSAO.uid,
+        folhas: [{ folhaId: fRef.id, numero, data: Timestamp.fromDate(quando) }, ...(ct.folhas || [])].slice(0, 24) };
+      // fim do contrato: renova por mais um ano, ou deixa de gerar
+      if (ct.dataFim && nova > paraData(ct.dataFim)) {
+        if (ct.renovacaoAutomatica) alt.dataFim = Timestamp.fromDate(addMeses(paraData(ct.dataFim), 12));
+        else alt.geracaoEm = Timestamp.fromDate(new Date(2999, 0, 1));
+      }
+      tx.update(ctRef, alt);
+      gerada = numero;
+    };
+  }).catch((e) => { if (e.code === 'ja-gerada') return null; throw e; });
+  return id ? { id, numero: gerada } : null;
+}
+// Gera todas as visitas em falta (contratos ativos com data de geração já passada). Corre ao abrir as páginas (staff), no máx. 1 vez por hora neste aparelho.
+async function gerarManutencoesPendentes({ forcar = false } = {}) {
+  if (!ehStaff(SESSAO.perfil)) return [];
+  const chave = 'manut.ultima.' + SESSAO.uid;
+  try { if (!forcar && Date.now() - Number(localStorage.getItem(chave) || 0) < 3600e3) return []; } catch (e) { /* sem storage */ }
+  const feitas = [];
+  try {
+    for (let volta = 0; volta < 3; volta++) {   // até 3 visitas em atraso por contrato
+      const snap = await getDocs(query(collection(db, 'contratos'), where('estado', '==', 'Ativo'), where('geracaoEm', '<=', Timestamp.now()), orderBy('geracaoEm'), limit(20)));
+      if (snap.empty) break;
+      let nesta = 0;
+      for (const d of snap.docs) { const r = await gerarVisitaContrato(d.id); if (r) { feitas.push(r); nesta++; } }
+      if (!nesta) break;
+    }
+    try { localStorage.setItem(chave, String(Date.now())); } catch (e) { /* sem storage */ }
+  } catch (e) { console.warn('Contratos:', e); }
+  return feitas;
+}
+
+// Lista de técnicos ativos (coleção pequena; lida uma vez por página).
+let _tecnicos = null;
+async function carregarTecnicos() {
+  if (_tecnicos) return _tecnicos;
+  const col = collection(db, 'utilizadores');
+  const [a, b] = await Promise.all([
+    getDocs(query(col, where('perfil', '==', 'tecnico'), where('ativo', '==', true), limit(50))),
+    getDocs(query(col, where('tecnico', '==', true), where('ativo', '==', true), limit(50))),
+  ]);
+  const mapa = new Map();
+  for (const d of [...a.docs, ...b.docs]) mapa.set(d.id, { uid: d.id, ...d.data() });
+  _tecnicos = [...mapa.values()].sort((x, y) => (x.nome || '').localeCompare(y.nome || '', 'pt'));
+  return _tecnicos;
+}
+
+// ===== página: contratos =====
+// Contratos de manutenção: periodicidade, equipamentos, tarefas, técnico e hora preferidos.
+// As folhas de cada visita são geradas automaticamente («Por agendar», com data e técnico sugeridos)
+// «antecedência» dias antes da visita, quando o Master ou o backoffice abrem a plataforma.
+// O valor do contrato fica em contratos/{id}/privado/valores (só o Master).
+const sessao = await iniciarPagina({ perfis: ['master', 'backoffice'] });
+const master = sessao.perfil === 'master';
+
+let lista = [];
+let cursor = null;
+let atual = null;
+let tecnicos = [];
+carregarTecnicos().then((t) => { tecnicos = t; }).catch(() => {});
+
+const eur = (v) => (Number(v) || 0).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+const fmtDia = (v) => v ? fmtData(v) : '—';
+function aRenovar(c) { return c.dataFim && c.estado === 'Ativo' && paraData(c.dataFim) < addDias(new Date(), 60); }
+function tokensContrato(c) {
+  return tokensPesquisa(c.numero, String(c.numero || '').split('-').pop(), c.clienteNome, String(c.clienteNif || '').replace(/\D/g, ''), c.localidade,
+    ...(c.equipamentos || []).flatMap((e) => [e.descricao, e.marca, e.serie])).slice(0, 400);
+}
+
+// ---------- Geração automática ----------
+async function verGeracao(forcar = false) {
+  const feitas = await gerarManutencoesPendentes({ forcar });
+  const box = $('#cartaoGerar');
+  if (feitas.length) {
+    box.classList.remove('oculto');
+    box.innerHTML = `<b>${feitas.length} folha${feitas.length > 1 ? 's' : ''} de manutenção gerada${feitas.length > 1 ? 's' : ''}</b>
+      <p class="muted" style="margin:4px 0 0">Ficam «Por agendar» com a data e o técnico sugeridos: confirme em Folhas › «Agendar».</p>
+      <p style="margin:6px 0 0">${feitas.map((f) => `<a href="${pagina('folhas', { id: f.id })}">${esc(f.numero)}</a>`).join(' · ')}</p>`;
+    carregarLista();
+  } else if (forcar) toast('Não há visitas por gerar.', 'ok');
+}
+
+// ---------- Lista ----------
+$('#fEstado').onchange = () => carregarLista();
+$('#fPesq').onsubmit = (ev) => { ev.preventDefault(); carregarLista(); };
+$('#btnMais').onclick = () => comBotao($('#btnMais'), () => carregarLista(true));
+$('#btnNovo').onclick = () => abrirForm(null);
+
+async function carregarLista(mais = false) {
+  if (!mais) { lista = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
+  const texto = $('#q').value.trim();
+  const c = [where('estado', '==', $('#fEstado').value)];
+  let palavras = [];
+  if (texto) {
+    palavras = normalizar(texto).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
+    if (palavras.length) c.push(where('pesquisa', 'array-contains', palavras.reduce((a, b) => (b.length > a.length ? b : a))));
+  }
+  c.push(orderBy(texto ? 'criadoEm' : 'proximaData', texto ? 'desc' : 'asc'));
+  if (cursor) c.push(startAfter(cursor));
+  c.push(limit(PAGINA_TAM));
+  try {
+    const snap = await getDocs(query(collection(db, 'contratos'), ...c));
+    let novos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (palavras.length) novos = novos.filter((x) => palavras.every((p) => (x.pesquisa || []).includes(p)));
+    lista = lista.concat(novos);
+    cursor = snap.docs[snap.docs.length - 1] || cursor;
+    $('#maisWrap').classList.toggle('oculto', snap.docs.length < PAGINA_TAM);
+    $('#lista').innerHTML = lista.length ? lista.map((x) => `
+      <a class="lista-item" href="${pagina('contratos', { id: x.id })}" data-id="${esc(x.id)}">
+        <div class="li-topo"><span class="li-titulo">${esc(x.numero)} · ${esc(x.clienteNome)}</span>
+          <span class="badge">${esc(x.periodicidade)}</span></div>
+        <div class="li-sub">Próxima visita: <b>${esc(fmtDia(x.proximaData))}</b>${x.tecnicoNome ? ' · ' + esc(x.tecnicoNome) : ''}</div>
+        <div class="li-meta">${(x.equipamentos || []).length} equipamento${(x.equipamentos || []).length === 1 ? '' : 's'}${x.localidade ? ' · ' + esc(x.localidade) : ''}
+          ${aRenovar(x) ? ' · <span class="badge estado-pendente-material">Termina a ' + esc(fmtDia(x.dataFim)) + '</span>' : ''}</div>
+      </a>`).join('') : `<div class="vazio">${texto ? 'Nenhum contrato encontrado.' : 'Sem contratos neste estado.'}</div>`;
+  } catch (e) { $('#lista').innerHTML = `<div class="vazio">${esc(erroFirebase(e))}</div>`; }
+}
+$('#lista').addEventListener('click', (ev) => {
+  const a = ev.target.closest('a[data-id]');
+  if (!a || ev.metaKey || ev.ctrlKey) return;
+  ev.preventDefault();
+  irPara({ id: a.dataset.id });
+});
+function irPara(params) { history.pushState({}, '', pagina('contratos', params)); rota(); }
+window.addEventListener('popstate', rota);
+function rota() {
+  const p = new URLSearchParams(location.search);
+  fecharModal();
+  if (p.get('id')) { abrirDetalhe(p.get('id')); return; }
+  $('#vDetalhe').classList.add('oculto');
+  $('#vLista').classList.remove('oculto');
+  if (!lista.length) carregarLista();
+  if (p.get('novo')) abrirForm(null, p.get('cliente'));
+}
+
+// ---------- Detalhe ----------
+async function abrirDetalhe(id) {
+  $('#vLista').classList.add('oculto');
+  const v = $('#vDetalhe');
+  v.classList.remove('oculto');
+  v.innerHTML = '<div class="vazio">A carregar…</div>';
+  try {
+    const s = await getDoc(doc(db, 'contratos', id));
+    if (!s.exists()) { v.innerHTML = '<div class="vazio">Contrato não encontrado.</div>'; return; }
+    atual = { id: s.id, ...s.data() };
+    renderDetalhe();
+  } catch (e) { v.innerHTML = `<div class="vazio">${esc(erroFirebase(e))}</div>`; }
+}
+function renderDetalhe() {
+  const c = atual;
+  const v = $('#vDetalhe');
+  v.innerHTML = `
+    <button class="voltar" id="btnVoltar">‹ Contratos</button>
+    <div class="cartao">
+      <div class="det-cab"><div><h1 id="detNumero">${esc(c.numero)}</h1><span class="tipo">Manutenção ${esc(String(c.periodicidade).toLowerCase())}</span></div>
+        <div style="text-align:right">${badgeEstadoContrato(c.estado)}<br><button class="btn btn-peq" id="btnEditar" style="margin-top:6px">Editar</button></div></div>
+      ${aRenovar(c) ? `<p class="aviso-concl" style="margin-top:10px">O contrato termina a ${esc(fmtDia(c.dataFim))}${c.renovacaoAutomatica ? ' e renova automaticamente.' : '. Renove-o ou termine-o.'}</p>` : ''}
+      <dl class="dl">
+        <div><dt>Cliente</dt><dd>${esc(c.clienteNome)}${c.clienteNif ? `<br><span class="muted">NIF ${esc(c.clienteNif)}</span>` : ''}</dd></div>
+        <div><dt>Local</dt><dd>${esc([c.morada, [c.codigoPostal, c.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
+        <div><dt>Contacto</dt><dd>${esc([c.contacto, c.telefone].filter(Boolean).join(' · ') || '—')}${c.clienteEmail ? `<br>${esc(c.clienteEmail)}` : ''}</dd></div>
+        <div class="desc-destaque"><dt>Próxima visita</dt><dd id="detProxima">${esc(c.proximaData ? fmtDiaSemana(paraData(c.proximaData)) : '—')}, ${esc(c.horaPreferida || '09:00')}${c.duracaoPrevista ? ' · ' + esc(String(c.duracaoPrevista).replace('.', ',')) + ' h' : ''}${c.tecnicoNome ? ' · ' + esc(c.tecnicoNome) : ''}</dd></div>
+        <div><dt>Folha gerada</dt><dd>${esc(String(c.antecedenciaDias ?? 30))} dias antes de cada visita (fica «Por agendar» para confirmar)</dd></div>
+        <div><dt>Vigência</dt><dd>${esc(fmtDia(c.dataInicio))} a ${c.dataFim ? esc(fmtDia(c.dataFim)) + (c.renovacaoAutomatica ? ' (renova automaticamente)' : '') : 'sem fim'}</dd></div>
+        ${c.ambito ? `<div><dt>Âmbito</dt><dd style="white-space:pre-wrap">${esc(c.ambito)}</dd></div>` : ''}
+      </dl>
+      <div id="valorContrato"></div>
+    </div>
+    <div class="cartao">
+      <h3 style="margin-top:0">Equipamentos (${(c.equipamentos || []).length})</h3>
+      ${(c.equipamentos || []).length ? `<ul class="hist">${c.equipamentos.map((e) => `<li><b>${esc(e.descricao)}</b><span>${esc([e.marca, e.local].filter(Boolean).join(' · '))}${e.serie ? `<br><span class="serie-tag">${esc(e.serie)}</span>` : ''}</span></li>`).join('')}</ul>` : '<p class="muted" style="margin:0">Sem equipamentos registados.</p>'}
+    </div>
+    ${(c.tarefas || []).length ? `<div class="cartao"><h3 style="margin-top:0">Tarefas de cada visita</h3><ul class="hist">${c.tarefas.map((t) => `<li><span>☐ ${esc(t)}</span></li>`).join('')}</ul></div>` : ''}
+    <div class="cartao">
+      <h3 style="margin-top:0">Folhas geradas</h3>
+      ${(c.folhas || []).length ? `<ul class="hist" id="folhasContrato">${c.folhas.map((f) => `<li><a href="${pagina('folhas', { id: f.folhaId })}"><b>${esc(f.numero)}</b></a><span>${esc(fmtData(f.data))}</span></li>`).join('')}</ul>` : '<p class="muted" style="margin:0">Ainda nenhuma.</p>'}
+      ${c.estado === 'Ativo' ? '<div class="acoes"><button class="btn" id="btnGerarJa">Gerar já a folha da próxima visita</button></div>' : ''}
+    </div>
+    <div class="cartao estados-acoes">
+      ${c.estado === 'Ativo' ? '<button class="btn" id="btnSuspender">Suspender</button>' : ''}
+      ${c.estado === 'Suspenso' ? '<button class="btn btn-primario" id="btnReativar">Reativar</button>' : ''}
+      ${c.estado !== 'Terminado' ? '<button class="btn btn-perigo" id="btnTerminar">Terminar contrato</button>' : ''}
+    </div>`;
+  $('#btnVoltar').onclick = () => { if (history.state !== null && history.length > 1) history.back(); else irPara(null); };
+  $('#btnEditar').onclick = () => abrirForm(atual);
+  if ($('#btnGerarJa')) $('#btnGerarJa').onclick = () => comBotao($('#btnGerarJa'), async () => {
+    if (!(await confirmar(`Gerar já a folha da visita de ${fmtDia(atual.proximaData)}?`, { ok: 'Gerar' }))) return;
+    try {
+      const r = await gerarVisitaContrato(atual.id, { forcar: true });
+      if (r) { toast(`Folha ${r.numero} gerada («Por agendar»).`, 'ok', 5000); abrirDetalhe(atual.id); } else toast('Não foi possível gerar (contrato terminado ou já gerada).', 'erro');
+    } catch (e) { toast(erroFirebase(e), 'erro'); }
+  });
+  if ($('#btnSuspender')) $('#btnSuspender').onclick = () => mudarEstadoContrato('Suspenso', $('#btnSuspender'));
+  if ($('#btnReativar')) $('#btnReativar').onclick = () => mudarEstadoContrato('Ativo', $('#btnReativar'));
+  if ($('#btnTerminar')) $('#btnTerminar').onclick = () => mudarEstadoContrato('Terminado', $('#btnTerminar'));
+  if (master) mostrarValor();
+  window.scrollTo(0, 0);
+}
+function badgeEstadoContrato(e) {
+  const cls = e === 'Ativo' ? 'estado-concluida' : e === 'Suspenso' ? 'estado-pendente' : 'estado-faturada';
+  return `<span class="badge ${cls}" id="detEstado">${esc(e)}</span>`;
+}
+async function mostrarValor() {
+  try {
+    const s = await getDoc(doc(db, 'contratos', atual.id, 'privado', 'valores'));
+    const v = s.exists() ? s.data() : {};
+    const n = 12 / (PERIODICIDADES[atual.periodicidade] || 12);
+    $('#valorContrato').innerHTML = v.valorAnual ? `<p class="ok-at" style="margin:10px 0 0" id="valorAnual">Valor anual <b>${esc(eur(v.valorAnual))}</b> s/IVA · ${n} visitas/ano · ${esc(eur(v.valorAnual / n))} por visita <span class="muted">(só o Master vê)</span></p>` : '';
+  } catch (e) { /* sem valor */ }
+}
+async function mudarEstadoContrato(novo, btn) {
+  const msg = { Suspenso: 'Suspender o contrato? Deixam de ser geradas folhas até o reativar.', Ativo: 'Reativar o contrato?', Terminado: 'Terminar o contrato? Deixam de ser geradas folhas.' }[novo];
+  if (!(await confirmar(msg, { ok: novo === 'Ativo' ? 'Reativar' : novo === 'Suspenso' ? 'Suspender' : 'Terminar', perigo: novo === 'Terminado' }))) return;
+  await comBotao(btn, async () => {
+    try {
+      const alt = { estado: novo, atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid };
+      // ao reativar, a próxima visita não pode ficar no passado
+      if (novo === 'Ativo' && atual.proximaData && paraData(atual.proximaData) < inicioDia(new Date())) {
+        let p = paraData(atual.proximaData);
+        while (p < inicioDia(new Date())) p = addMeses(p, PERIODICIDADES[atual.periodicidade] || 12);
+        alt.proximaData = Timestamp.fromDate(p);
+        alt.geracaoEm = Timestamp.fromDate(dataGeracao(p, atual.antecedenciaDias));
+      }
+      await updateDoc(doc(db, 'contratos', atual.id), alt);
+      toast('Contrato ' + novo.toLowerCase() + '.', 'ok');
+      lista = [];
+      abrirDetalhe(atual.id);
+    } catch (e) { toast(erroFirebase(e), 'erro'); }
+  });
+}
+
+// ---------- Formulário ----------
+async function abrirForm(ct, clienteIdInicial) {
+  const ed = !!ct;
+  let cliente = ed ? { id: ct.clienteId, nome: ct.clienteNome, nif: ct.clienteNif, email: ct.clienteEmail, morada: ct.morada, codigoPostal: ct.codigoPostal, localidade: ct.localidade, contacto: ct.contacto, telefone: ct.telefone } : null;
+  if (!cliente && clienteIdInicial) {
+    try { const s = await getDoc(doc(db, 'clientes', clienteIdInicial)); if (s.exists()) cliente = { id: s.id, ...s.data() }; } catch (e) { /* ignora */ }
+  }
+  let valorAnual = '';
+  if (ed && master) { try { const s = await getDoc(doc(db, 'contratos', ct.id, 'privado', 'valores')); if (s.exists()) valorAnual = s.data().valorAnual || ''; } catch (e) { /* */ } }
+  if (!tecnicos.length) tecnicos = await carregarTecnicos().catch(() => []);
+  const equip = (ct?.equipamentos || []).map((e) => ({ ...e }));
+  const hoje = isoLocal(new Date());
+  const c = abrirModal(ed ? 'Editar contrato' : 'Novo contrato de manutenção', `
+    <div class="campo"><span>Cliente *</span><div id="cCliente"></div></div>
+    <div class="grelha-2">
+      <label class="campo"><span>Periodicidade *</span><select id="cPer">${Object.keys(PERIODICIDADES).map((p) => `<option ${ct?.periodicidade === p || (!ct && p === 'Trimestral') ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
+      <label class="campo"><span>Próxima visita *</span><input type="date" id="cProx" value="${ct?.proximaData ? isoLocal(paraData(ct.proximaData)) : hoje}"></label>
+    </div>
+    <div class="grelha-2">
+      <label class="campo"><span>Hora preferida</span><input type="time" id="cHora" value="${esc(ct?.horaPreferida || '09:00')}"></label>
+      <label class="campo"><span>Duração prevista (h)</span><input type="number" id="cDur" min="0" step="0.5" inputmode="decimal" value="${esc(String(ct?.duracaoPrevista ?? 2))}"></label>
+    </div>
+    <div class="grelha-2">
+      <label class="campo"><span>Técnico habitual</span><select id="cTec"><option value="">— por atribuir —</option>${tecnicos.map((t) => `<option value="${esc(t.uid)}" ${ct?.tecnicoUid === t.uid ? 'selected' : ''}>${esc(t.nome)}</option>`).join('')}</select></label>
+      <label class="campo"><span>Gerar a folha (dias antes)</span><input type="number" id="cAnt" min="0" max="120" value="${esc(String(ct?.antecedenciaDias ?? 30))}"></label>
+    </div>
+    <div class="grelha-2">
+      <label class="campo"><span>Início *</span><input type="date" id="cIni" value="${ct?.dataInicio ? isoLocal(paraData(ct.dataInicio)) : hoje}"></label>
+      <label class="campo"><span>Fim</span><input type="date" id="cFim" value="${ct?.dataFim ? isoLocal(paraData(ct.dataFim)) : ''}"></label>
+    </div>
+    <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cRen" style="width:auto;min-height:0" ${ct?.renovacaoAutomatica !== false ? 'checked' : ''}><span style="margin:0">Renova automaticamente por mais um ano</span></label>
+    <label class="campo"><span>Email do cliente (avisos e relatórios)</span><input type="email" id="cEmail" inputmode="email" autocomplete="off" value="${esc(ct?.clienteEmail || cliente?.email || '')}"></label>
+    <label class="campo"><span>Âmbito do contrato</span><textarea id="cAmb" placeholder="Ex.: limpeza de filtros, verificação de pressões e drenagens, relatório">${esc(ct?.ambito || '')}</textarea></label>
+    <div class="campo"><span>Equipamentos</span><div id="cEquip"></div><button type="button" class="btn btn-peq" id="cMaisEq" style="margin-top:6px">+ Equipamento</button></div>
+    <label class="campo"><span>Tarefas de cada visita (uma por linha)</span><textarea id="cTar" placeholder="Limpeza de filtros\nVerificação de pressões\nLimpeza de condensadores">${esc((ct?.tarefas || []).join('\n'))}</textarea></label>
+    ${master ? `<label class="campo"><span>Valor anual (€, s/IVA) — só o Master vê</span><input type="number" id="cValor" min="0" step="0.01" inputmode="decimal" value="${esc(String(valorAnual))}"></label>` : ''}
+    <div class="msg-erro" id="cErro"></div>
+    <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="cGuardar">Guardar</button></div>`);
+  const desenharCliente = () => {
+    $('#cCliente', c).innerHTML = cliente
+      ? `<div class="cliente-escolhido"><b>${esc(cliente.nome)}</b><br><span class="muted">${esc([cliente.morada, cliente.codigoPostal, cliente.localidade].filter(Boolean).join(', '))}</span>${ed ? '' : ' <button type="button" class="btn btn-peq" id="cTrocar">Trocar</button>'}</div>`
+      : `<div style="display:flex;gap:8px"><input id="cCliProc" placeholder="Nome, NIF ou localidade" autocomplete="off"><button type="button" class="btn" id="cCliBtn">Procurar</button></div><div id="cCliRes"></div>`;
+    if ($('#cTrocar', c)) $('#cTrocar', c).onclick = () => { cliente = null; desenharCliente(); };
+    if ($('#cCliBtn', c)) $('#cCliBtn', c).onclick = () => comBotao($('#cCliBtn', c), async () => {
+      const l = await pesquisarClientes($('#cCliProc', c).value, { soAtivos: true }).catch((e) => { toast(erroFirebase(e), 'erro'); return []; });
+      $('#cCliRes', c).innerHTML = l.map((x, i) => `<button type="button" class="artigo-op" data-c="${i}"><b>${esc(x.nome)}</b> <span class="muted">${esc(x.localidade || '')}</span></button>`).join('') || '<p class="muted">Nenhum cliente.</p>';
+      $$('[data-c]', c).forEach((b) => b.onclick = () => {
+        cliente = l[+b.dataset.c];
+        if (!$('#cEmail', c).value) $('#cEmail', c).value = cliente.email || '';
+        desenharCliente();
+      });
+    });
+  };
+  desenharCliente();
+  const lerEquip = () => $$('[data-eq]', c).forEach((row) => {
+    const i = +row.dataset.eq;
+    for (const k of ['descricao', 'marca', 'serie', 'local']) equip[i][k] = $(`[data-k="${k}"]`, row).value.trim();
+  });
+  const desenharEquip = () => {
+    $('#cEquip', c).innerHTML = equip.map((e, i) => `<div class="equip-linha" data-eq="${i}">
+      <input data-k="descricao" placeholder="Equipamento * (ex.: Split Daikin 3,5 kW)" value="${esc(e.descricao || '')}">
+      <div class="grelha-2"><input data-k="marca" placeholder="Marca / modelo" value="${esc(e.marca || '')}"><input data-k="serie" placeholder="N.º de série" value="${esc(e.serie || '')}"></div>
+      <div style="display:flex;gap:8px"><input data-k="local" placeholder="Localização (ex.: sala de reuniões)" value="${esc(e.local || '')}"><button type="button" class="lixo" data-xeq="${i}" aria-label="Tirar">✕</button></div>
+    </div>`).join('') || '<p class="muted" style="margin:0">Sem equipamentos.</p>';
+    $$('[data-xeq]', c).forEach((b) => b.onclick = () => { lerEquip(); equip.splice(+b.dataset.xeq, 1); desenharEquip(); });
+  };
+  desenharEquip();
+  $('#cMaisEq', c).onclick = () => { lerEquip(); equip.push({ id: Date.now().toString(36) + equip.length }); desenharEquip(); };
+  $('#cGuardar', c).onclick = () => {
+    const erro = (m) => { $('#cErro', c).textContent = m; };
+    lerEquip();
+    if (!cliente) return erro('Escolha o cliente.');
+    const per = $('#cPer', c).value;
+    if (!$('#cProx', c).value) return erro('Indique a data da próxima visita.');
+    if (!$('#cIni', c).value) return erro('Indique o início do contrato.');
+    const prox = deIsoLocal($('#cProx', c).value);
+    const ini = deIsoLocal($('#cIni', c).value);
+    const fim = $('#cFim', c).value ? deIsoLocal($('#cFim', c).value) : null;
+    if (fim && fim < ini) return erro('O fim do contrato não pode ser antes do início.');
+    if (prox < ini) return erro('A próxima visita não pode ser antes do início do contrato.');
+    const email = $('#cEmail', c).value.trim();
+    if (email && !/^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(email)) return erro('Email inválido.');
+    const eqs = equip.filter((e) => e.descricao || e.marca || e.serie);
+    if (eqs.some((e) => !e.descricao)) return erro('Indique a descrição de cada equipamento.');
+    const ant = Math.max(0, Math.min(120, Math.round(Number($('#cAnt', c).value) || 0)));
+    const tecUid = $('#cTec', c).value;
+    const dados = {
+      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: email,
+      morada: cliente.morada || '', codigoPostal: cliente.codigoPostal || '', localidade: cliente.localidade || '', contacto: cliente.contacto || '', telefone: cliente.telefone || '',
+      periodicidade: per, proximaData: Timestamp.fromDate(prox), geracaoEm: Timestamp.fromDate(dataGeracao(prox, ant)), antecedenciaDias: ant,
+      horaPreferida: $('#cHora', c).value || '09:00', duracaoPrevista: Math.max(0, Number(String($('#cDur', c).value).replace(',', '.')) || 0),
+      tecnicoUid: tecUid, tecnicoNome: tecUid ? ((tecnicos.find((t) => t.uid === tecUid) || {}).nome || '') : '',
+      dataInicio: Timestamp.fromDate(ini), dataFim: fim ? Timestamp.fromDate(fim) : null, renovacaoAutomatica: $('#cRen', c).checked,
+      ambito: $('#cAmb', c).value.trim(), equipamentos: eqs.map((e, i) => ({ id: e.id || String(i), descricao: e.descricao, marca: e.marca || '', serie: e.serie || '', local: e.local || '' })),
+      tarefas: $('#cTar', c).value.split(/\r?\n/).map((t) => t.trim()).filter(Boolean).slice(0, 30),
+      atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
+    };
+    const valor = master ? Number(String($('#cValor', c).value).replace(',', '.')) || 0 : null;
+    comBotao($('#cGuardar', c), async () => {
+      try {
+        let id = ct?.id;
+        if (ed) {
+          dados.pesquisa = tokensContrato({ ...dados, numero: ct.numero });
+          await updateDoc(doc(db, 'contratos', id), dados);
+        } else {
+          const ano = new Date().getFullYear();
+          const cRef = doc(db, 'contadores', 'contratos-' + ano);
+          const ref = doc(collection(db, 'contratos'));
+          id = ref.id;
+          await runTransaction(db, async (tx) => {
+            const s = await tx.get(cRef);
+            const n = (s.exists() ? s.data().valor : 0) + 1;
+            const numero = `CM-${ano}-${String(n).padStart(3, '0')}`;
+            tx.set(cRef, { valor: n });
+            tx.set(ref, { ...dados, numero, estado: 'Ativo', folhas: [], pesquisa: tokensContrato({ ...dados, numero }), criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email });
+          });
+        }
+        if (master && valor !== null) await setDoc(doc(db, 'contratos', id, 'privado', 'valores'), { valorAnual: valor, atualizadoEm: serverTimestamp() });
+        fecharModal();
+        toast('Contrato guardado.', 'ok');
+        lista = [];
+        if (ed) abrirDetalhe(id);
+        else { history.replaceState({}, '', pagina('contratos', { id })); abrirDetalhe(id); }
+        // se a próxima visita já está dentro da antecedência, gera logo a folha
+        if (dataGeracao(prox, ant) <= new Date()) {
+          const r = await gerarVisitaContrato(id).catch(() => null);
+          if (r) { toast(`Folha ${r.numero} gerada para a próxima visita («Por agendar»).`, 'ok', 6000); abrirDetalhe(id); }
+        }
+      } catch (e) { erro(erroFirebase(e)); }
+    });
+  };
+}
+
+rota();
+verGeracao();
+
+</script>
+</body>
+</html>

@@ -177,6 +177,7 @@ function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   if (colecao === 'emails') { if (STAFF.includes(s.perfil)) return; negar('emails'); }
   if (colecao === 'controlo') { if (STAFF.includes(s.perfil)) return; negar('controlo'); }
   if (colecao === 'series') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('series'); }
+  if (colecao === 'contratos') { if (STAFF.includes(s.perfil)) return; negar('contratos só staff'); }
   if (colecao === 'guias' && s.perfil === 'tecnico') {
     if (consulta) { if (consulta.some((c) => c.k === 'where' && c.campo === 'tecnicoUid' && c.op === '==' && c.valor === s.uid)) return; negar('técnico tem de filtrar guias por tecnicoUid'); }
     if (docRaw && docRaw.tecnicoUid === s.uid) return;
@@ -217,6 +218,17 @@ function regraEscrever(dbRaw, path, antes, depois) {
     return;
   }
   if (colecao === 'contadores') { if (!staff) negar('contadores'); return; }
+  if (colecao === 'contratos') {
+    if (!staff) negar('contratos só staff');
+    if (path.includes('/privado/')) { if (s.perfil !== 'master') negar('valor do contrato só master'); return; }
+    if (!depois) negar('apagar contrato');
+    if (!/^CM-[0-9]{4}-[0-9]{3,}$/.test(depois.numero || '') || !depois.clienteId || !depois.clienteNome || !['Ativo', 'Suspenso', 'Terminado'].includes(depois.estado)
+      || !['Mensal', 'Bimestral', 'Trimestral', 'Semestral', 'Anual'].includes(depois.periodicidade) || !depois.proximaData || !depois.geracaoEm) negar('contrato inválido');
+    if (antes && (antes.numero !== depois.numero || antes.clienteId !== depois.clienteId)) negar('contrato: campo imutável');
+    if (antes && antes.estado === 'Terminado' && depois.estado !== 'Terminado') negar('contrato terminado');
+    if (!antes && depois.estado !== 'Ativo') negar('contrato novo tem de estar Ativo');
+    return;
+  }
   if (colecao === 'config') { if (s.perfil !== 'master') negar('config só master'); return; }
   if (colecao === 'listas') { if (s.perfil !== 'master') negar('listas só master'); return; }
   if (colecao === 'series') {

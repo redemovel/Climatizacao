@@ -55,11 +55,6 @@ $('#fPesq').onsubmit = async (ev) => {
     renderLista(`Nenhuma folha encontrada para «${texto}».`);
   } catch (e) { toast(erroFirebase(e), 'erro'); }
 };
-// Prefixos para a pesquisa (n.º, cliente, NIF, avaria) — iguais aos que a PontePHC grava nas folhas do PHC.
-function tokensFolha(numero, clienteNome, nif, descricao) {
-  const n = String(numero || '');
-  return tokensPesquisa(n, n.split('-').pop().replace(/^0+/, ''), clienteNome, String(nif || '').replace(/\D/g, ''), descricao).slice(0, 400);
-}
 
 // ---------- Lista ----------
 function consultaLista() {
@@ -235,7 +230,8 @@ function renderDetalhe() {
         <div style="text-align:right">${badgeEstado(f.estado)}${staff ? '<br><button class="btn btn-peq" id="btnEditar" style="margin-top:8px">Editar</button>' : ''}</div></div>
       <dl class="dl">
         <div><dt>Cliente</dt><dd>${esc(f.clienteNome)}${f.clienteNif ? `<br><span class="muted">NIF ${esc(f.clienteNif)}</span>` : ''}</dd></div>
-        <div><dt>Data prevista</dt><dd>${f.dataPrevista ? `${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}` : '<span class="muted">Por agendar</span>'}</dd></div>
+        <div><dt>Data prevista</dt><dd>${f.dataPrevista ? `${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}` : '<span class="muted">Por agendar</span>'}${f.duracaoPrevista ? ` <span class="muted" id="detDuracao">· ${esc(String(f.duracaoPrevista).replace('.', ','))} h previstas</span>` : ''}</dd></div>
+        ${f.contratoId ? `<div><dt>Contrato</dt><dd>${staff ? `<a href="${pagina('contratos', { id: f.contratoId })}" id="detContrato">${esc(f.contratoNumero)}</a>` : `<span id="detContrato">${esc(f.contratoNumero)}</span>`}</dd></div>` : ''}
         <div><dt>Morada da obra</dt><dd>${esc([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join('\n') || '—')}</dd></div>
         <div><dt>Contacto no local</dt><dd>${esc([f.contacto, f.telefone].filter(Boolean).join(' · ') || '—')}</dd></div>
         <div><dt>Técnico responsável</dt><dd>${esc(f.tecnicoNome || 'Por atribuir')}</dd></div>
@@ -460,6 +456,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
         <label class="campo"><span>Data prevista</span><input type="date" id="ffData" value="${dp ? isoLocal(dp) : ''}"></label>
         <label class="campo"><span>Hora</span><input type="time" id="ffHora" value="${esc(horaIni)}" step="900"></label>
       </div>
+      <label class="campo"><span>Duração prevista (horas)</span><input type="number" id="ffDur" min="0" max="200" step="0.5" inputmode="decimal" value="${esc(String(folha?.duracaoPrevista || ''))}" placeholder="Ex.: 2"></label>
       <label class="campo"><span>Morada da obra</span><input id="ffMorada" value="${esc(folha?.morada || '')}" autocomplete="off"></label>
       <div class="linha2">
         <label class="campo"><span>Código postal</span><input id="ffCP" value="${esc(folha?.codigoPostal || '')}" inputmode="numeric" placeholder="0000-000"></label>
@@ -542,6 +539,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
       morada: $('#ffMorada', corpo).value.trim(), codigoPostal: $('#ffCP', corpo).value.trim(), localidade: $('#ffLoc', corpo).value.trim(),
       contacto: $('#ffContacto', corpo).value.trim(), telefone: $('#ffTel', corpo).value.trim(),
       descricao: $('#ffDesc', corpo).value.trim(),
+      duracaoPrevista: Math.max(0, Math.min(200, Number(String($('#ffDur', corpo).value).replace(',', '.')) || 0)),
       clienteEmail: $('#ffEmail', corpo).value.trim(),
       atualizadoEm: serverTimestamp(), atualizadoPor: sessao.uid,
     };
@@ -581,27 +579,6 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
   };
 }
 
-async function criarFolha(cliente, dados) {
-  const ano = new Date().getFullYear();
-  const cRef = doc(db, 'contadores', 'folhas-' + ano);
-  const fRef = doc(collection(db, 'folhas'));
-  await runTransaction(db, async (tx) => {
-    const c = await tx.get(cRef);
-    const n = (c.exists() ? c.data().valor : 0) + 1;
-    tx.set(cRef, { valor: n });
-    tx.set(fRef, {
-      ...dados,
-      numero: `FO-${ano}-${String(n).padStart(4, '0')}`,
-      clienteId: cliente.id, clienteNome: cliente.nome, clienteNif: cliente.nif || '', clienteEmail: dados.clienteEmail || cliente.email || '',
-      pesquisa: tokensFolha(`FO-${ano}-${String(n).padStart(4, '0')}`, cliente.nome, cliente.nif, dados.descricao),
-      estado: 'Por agendar',   // toda a folha nova nasce «Por agendar»; passa a «Agendada» no botão «Agendar»
-      historico: [{ estado: 'Por agendar', de: null, uid: sessao.uid, nome: sessao.nome || sessao.email, em: Timestamp.now() }],
-      observacoesTecnico: '',
-      criadoEm: serverTimestamp(), criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email,
-      estadoAlteradoEm: serverTimestamp(),
-    });
-  });
-  return fRef.id;
-}
+function criarFolha(cliente, dados) { return criarFolhaNova(cliente, dados); }
 
 rota();

@@ -21,7 +21,7 @@ const SO = (args.find((a) => a.startsWith('--so=')) || '').slice(5);
 const CAPTURAS = args.includes('--capturas');
 const DIR_CAP = path.join(__dirname, 'capturas');
 const INDICES = JSON.parse(fs.readFileSync(path.join(ROOT, 'firestore.indexes.json'), 'utf8')).indexes;
-const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'clientes', 'utilizadores'];
+const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'utilizadores'];
 
 // ---------- 1 e 2: build + sintaxe ----------
 execFileSync('node', [path.join(ROOT, 'build.js')], { stdio: 'inherit' });
@@ -161,13 +161,17 @@ teste('sessão: sem login, páginas internas redirecionam para o login', async (
 // =====================================================================
 // MENU POR PERFIL
 // =====================================================================
-for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'clientes', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
+for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'contratos', 'clientes', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'contratos', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
   teste(`menu: ${quem} vê ${menus.join(', ')}`, async () => {
     const { ctx, page } = await contexto();
     await entrar(page, quem);
     await page.waitForSelector('#nav a');
     const ids = await page.$$eval('#nav a', (as) => as.map((a) => a.dataset.menu));
     igual(ids.join(','), menus.join(','), 'itens do menu');
+    await semOverflow(page, 'menu ' + quem);
+    const cortados = await page.$$eval('#nav a', (as) => as.filter((a) => a.scrollWidth > a.clientWidth + 1).map((a) => a.dataset.menu));
+    assert(!cortados.length, 'rótulos do menu cortados: ' + cortados);
+    await captura(page, 'menu-' + quem);
     semErros(page); await ctx.close();
   });
 }
@@ -1133,6 +1137,132 @@ teste('fase 3: regras — técnico não vê guias de outros nem mexe no stock; c
   });
   igual(JSON.stringify(r), JSON.stringify({ g: 'permission-denied', s: 'permission-denied', c: 'permission-denied' }), 'recusas');
   semErros(page); await ctx.close();
+});
+
+// =====================================================================
+// CONTRATOS DE MANUTENÇÃO
+// =====================================================================
+teste('contratos: ao abrir, gera a folha da próxima visita (Por agendar) e avança a data; não duplica', async () => {
+  for (const vp of MOVEIS) {
+    const { ctx, page } = await contexto({ viewport: vp });
+    await entrar(page, 'backoffice');
+    await page.goto(BASE + '/contratos.html');
+    await page.waitForSelector('#cartaoGerar:not(.oculto)');
+    const txt = await page.textContent('#cartaoGerar');
+    assert(txt.includes('1 folha de manutenção gerada'), 'aviso de 1 folha gerada: ' + txt);
+    const db = await fake(page, () => window.__fake.db());
+    const geradas = Object.keys(db).filter((k) => /^folhas\/[^/]+$/.test(k) && db[k].contratoId === 'ct1');
+    igual(geradas.length, 1, 'uma folha do ct1');
+    const f = db[geradas[0]];
+    igual(f.estado, 'Por agendar', 'estado');
+    igual(f.tipo, 'Manutenção', 'tipo');
+    igual(f.tecnicoUid, 'u-tec1', 'técnico sugerido');
+    igual(f.duracaoPrevista, 2, 'duração');
+    igual(new Date(f.dataPrevista.__ts).getHours(), 10, 'hora preferida');
+    assert(f.tarefasExtra.includes('Limpeza de filtros'), 'tarefas do contrato');
+    assert(f.descricao.includes('Split Daikin') && f.descricao.includes('KX998877'), 'equipamentos na descrição');
+    const ct = db['contratos/ct1'];
+    const esperado = new Date(); esperado.setDate(esperado.getDate() + 10); esperado.setHours(0, 0, 0, 0);
+    const prox = new Date(ct.proximaData.__ts);
+    assert(prox.getMonth() === (esperado.getMonth() + 3) % 12, 'próxima visita avança 3 meses');
+    igual(ct.folhas.length, 1, 'histórico de folhas no contrato');
+    assert(new Date(ct.geracaoEm.__ts) > new Date(), 'próxima geração no futuro');
+    // ct3 suspenso e ct2 ainda não devido: nada gerado
+    assert(!Object.values(db).some((d) => d && (d.contratoId === 'ct2' || d.contratoId === 'ct3')), 'ct2/ct3 sem folhas');
+    // lista ativa: ct1 e ct2; ct2 com aviso de fim
+    await page.waitForSelector('#lista a[data-id="ct2"]');
+    assert((await page.textContent('#lista a[data-id="ct2"]')).includes('Termina a'), 'aviso de fim do contrato');
+    await semOverflow(page, 'contratos lista ' + vp.width);
+    await captura(page, 'contratos-lista-' + vp.width);
+    // forçar de novo: não gera mais nada (geração já não devida)
+    await page.evaluate(() => localStorage.removeItem('manut.ultima.u-bo'));
+    await page.reload();
+    await page.waitForSelector('#lista a[data-id="ct1"]');
+    await page.waitForTimeout(400);
+    const db2 = await fake(page, () => window.__fake.db());
+    igual(Object.keys(db2).filter((k) => /^folhas\/[^/]+$/.test(k) && db2[k].contratoId === 'ct1').length, 1, 'não duplica');
+    // detalhe e ligação à folha
+    await page.click('#lista a[data-id="ct1"]');
+    await page.waitForSelector('#folhasContrato a');
+    await semOverflow(page, 'contratos detalhe ' + vp.width);
+    await captura(page, 'contratos-detalhe-' + vp.width);
+    assert(!(await page.$('#valorAnual')), 'backoffice não vê o valor');
+    await page.click('#folhasContrato a');
+    await page.waitForSelector('#detContrato');
+    igual((await page.textContent('#detContrato')).trim(), ct.numero, 'folha mostra o contrato');
+    assert((await page.textContent('#vDetalhe')).includes('Verificação de pressões'), 'tarefas do contrato no cartão');
+    assert((await page.textContent('#detDuracao')).includes('2 h'), 'duração prevista');
+    semErros(page); await ctx.close();
+  }
+});
+
+teste('contratos: master cria contrato com equipamentos e valor; «gerar já»; suspender e terminar', async () => {
+  const { ctx, page } = await contexto({ viewport: MOVEIS[1] });
+  await entrar(page, 'master');
+  await page.goto(BASE + '/contratos.html');
+  await page.waitForSelector('#lista a[data-id="ct1"]');
+  await page.click('#btnNovo');
+  await page.waitForSelector('#cCliProc');
+  await page.fill('#cCliProc', 'santa');
+  await page.click('#cCliBtn');
+  await page.click('[data-c="0"]');
+  await page.waitForSelector('.cliente-escolhido');
+  await page.selectOption('#cPer', 'Semestral');
+  const d = new Date(); d.setDate(d.getDate() + 90);
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  await page.fill('#cProx', iso(d));
+  await page.selectOption('#cTec', 'u-tec2');
+  await page.click('#cMaisEq');
+  await page.fill('[data-eq="0"] [data-k="descricao"]', 'Chiller Carrier');
+  await page.fill('[data-eq="0"] [data-k="serie"]', 'CH-555');
+  await page.fill('#cTar', 'Análise de água\nLimpeza de filtros');
+  await page.fill('#cValor', '1200');
+  await captura(page, 'contratos-form-414');
+  await page.click('#cGuardar');
+  await page.waitForSelector('#detNumero');
+  const num = (await page.textContent('#detNumero')).trim();
+  igual(num, `CM-${new Date().getFullYear()}-004`, 'numeração sequencial');
+  await page.waitForSelector('#valorAnual');
+  assert((await page.textContent('#valorAnual')).includes('600'), 'valor por visita (2 visitas/ano)');
+  const id = new URLSearchParams(new URL(page.url()).search).get('id');
+  let ct = await fake(page, (p) => window.__fake.doc(p), 'contratos/' + id);
+  igual(ct.estado, 'Ativo', 'ativo'); igual(ct.equipamentos[0].serie, 'CH-555', 'equipamento'); igual(ct.tarefas.length, 2, 'tarefas');
+  assert(!ct.folhas.length, 'ainda sem folha (visita a 90 dias)');
+  igual((await fake(page, (p) => window.__fake.doc(p), 'contratos/' + id + '/privado/valores')).valorAnual, 1200, 'valor no privado');
+  // gerar já
+  await page.click('#btnGerarJa');
+  await page.click('.modal [data-r="1"]');
+  await page.waitForSelector('#folhasContrato a');
+  ct = await fake(page, (p) => window.__fake.doc(p), 'contratos/' + id);
+  igual(ct.folhas.length, 1, 'folha gerada');
+  // suspender, reativar, terminar
+  await page.click('#btnSuspender'); await page.click('.modal [data-r="1"]');
+  await page.waitForSelector('#btnReativar');
+  igual((await fake(page, (p) => window.__fake.doc(p), 'contratos/' + id)).estado, 'Suspenso', 'suspenso');
+  await page.click('#btnTerminar'); await page.click('.modal [data-r="1"]');
+  await page.waitForFunction(() => document.querySelector('#detEstado')?.textContent === 'Terminado');
+  assert(!(await page.$('#btnGerarJa')), 'terminado não gera');
+  semErros(page); await ctx.close();
+});
+
+teste('contratos: técnico não vê contratos nem entra na página; backoffice não lê o valor', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  const r = await page.evaluate(async () => {
+    const out = {};
+    try { await window.__fake.lerComoUtilizador('contratos/ct1'); out.l = 'lido'; } catch (e) { out.l = e.code; }
+    return out;
+  });
+  igual(r.l, 'permission-denied', 'técnico não lê contratos');
+  assert(!(await page.$('#nav a[data-menu="contratos"]')), 'sem menu');
+  await page.goto(BASE + '/contratos.html');
+  await page.waitForSelector('text=Não tem acesso a esta página.');
+  semErros(page); await ctx.close();
+  const { ctx: ctx2, page: page2 } = await contexto();
+  await entrar(page2, 'backoffice');
+  const r2 = await page2.evaluate(async () => { try { await window.__fake.lerComoUtilizador('contratos/ct1/privado/valores'); return 'lido'; } catch (e) { return e.code; } });
+  igual(r2, 'permission-denied', 'backoffice não lê o valor');
+  semErros(page2); await ctx2.close();
 });
 
 // =====================================================================

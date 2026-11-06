@@ -13,7 +13,7 @@ const path = require('path');
 
 const ROOT = __dirname;
 const SRC = path.join(ROOT, 'src');
-const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'clientes', 'utilizadores'];
+const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'utilizadores'];
 
 const args = process.argv.slice(2);
 let envs = ['prod', 'dev'];

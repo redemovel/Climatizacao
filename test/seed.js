@@ -161,6 +161,21 @@ function gerar() {
       { id: 'l2', artigoId: 'FTXP35', ref: 'FTXP35', design: 'Ar Condicionado Daikin FTXP35 (uni. int.)', unidade: 'un', qtd: 1, consumido: 0, devolvido: 0, consumos: [], series: ['K123456'], seriesUsadas: [] }],
     historico: [{ estado: 'Por comunicar', de: null, uid: 'u-bo', nome: 'Ana Ferreira', em: ts(dia(0, 7)) }, { estado: 'Comunicada', de: 'Por comunicar', uid: 'phc', nome: 'PHC (código AT)', em: ts(dia(0, 7)) }],
     criadoEm: ts(dia(0, 7)), criadoPor: 'u-bo', criadoPorNome: 'Ana Ferreira' };
+  // contratos de manutenção: ct1 com a folha da próxima visita por gerar (geração já devida), ct2 a terminar sem renovação, ct3 suspenso
+  const c1 = clientes[0], c2 = clientes[1];
+  const baseCt = (c, extra) => ({ clienteId: c.id, clienteNome: c.nome, clienteNif: c.nif, clienteEmail: 'manut@cliente.pt', morada: c.morada, codigoPostal: c.cp, localidade: c.loc,
+    contacto: c.contacto, telefone: c.tel, horaPreferida: '10:00', duracaoPrevista: 2, antecedenciaDias: 30, tecnicoUid: 'u-tec1', tecnicoNome: 'João Silva',
+    dataInicio: ts(dia(-200, 0)), dataFim: null, renovacaoAutomatica: true, ambito: 'Limpeza de filtros e verificação geral.', folhas: [],
+    criadoEm: ts(dia(-200, 9)), criadoPor: 'u-bo', criadoPorNome: 'Ana Ferreira', ...extra,
+    pesquisa: tokens(extra.numero, extra.numero.split('-').pop(), c.nome, c.nif, c.loc, ...(extra.equipamentos || []).flatMap((e) => [e.descricao, e.marca, e.serie])) });
+  db['contratos/ct1'] = baseCt(c1, { numero: `CM-${ano}-001`, estado: 'Ativo', periodicidade: 'Trimestral', proximaData: ts(dia(10, 0)), geracaoEm: ts(dia(-20, 0)),
+    equipamentos: [{ id: 'e1', descricao: 'Split Daikin 3,5 kW', marca: 'Daikin FTXP35', serie: 'KX998877', local: 'Sala de reuniões' }, { id: 'e2', descricao: 'Recuperador de calor', marca: 'Sodeca', serie: '', local: 'Cobertura' }],
+    tarefas: ['Limpeza de filtros', 'Verificação de pressões', 'Limpeza do condensador'] });
+  db['contratos/ct1/privado/valores'] = { valorAnual: 480 };
+  db['contratos/ct2'] = baseCt(c2, { numero: `CM-${ano}-002`, estado: 'Ativo', periodicidade: 'Anual', proximaData: ts(dia(120, 0)), geracaoEm: ts(dia(90, 0)),
+    dataFim: ts(dia(40, 0)), renovacaoAutomatica: false, equipamentos: [{ id: 'e1', descricao: 'VRV Mitsubishi', marca: 'Mitsubishi', serie: 'MZ123', local: 'Telhado' }], tarefas: [] });
+  db['contratos/ct3'] = baseCt(clientes[3], { numero: `CM-${ano}-003`, estado: 'Suspenso', periodicidade: 'Mensal', proximaData: ts(dia(-5, 0)), geracaoEm: ts(dia(-35, 0)), equipamentos: [], tarefas: [] });
+  db['contadores/contratos-' + ano] = { valor: 3 };
   db['contadores/folhas-' + ano] = { valor: F.length };
   return { db, users };
 }

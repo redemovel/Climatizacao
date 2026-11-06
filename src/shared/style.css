@@ -230,3 +230,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 #vRelatorio .rel-barra { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--linha); display: flex; gap: 8px; padding: 10px 12px; }
 #vRelatorio .rel-corpo { padding: 12px; }
 @media print { body.a-imprimir > *:not(#vRelatorio) { display: none !important; } body.a-imprimir #vRelatorio { position: static; } body.a-imprimir .rel-barra { display: none !important; } }
+
+/* Contratos */
+.equip-linha { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--linha); border-radius: 10px; margin-bottom: 6px; }
+.equip-linha .grelha-2 { gap: 6px; }

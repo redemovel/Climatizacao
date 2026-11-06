@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-04 (2) — n.º de série (series/), pesquisa nas folhas, aviso de agendamento por email
+// Atualizado: 2026-11-06 — contratos de manutenção (contratos/, geração automática das folhas)
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -90,6 +90,10 @@ service cloud.firestore {
         && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 5000))
         && (!('pesquisa' in d) || (d.pesquisa is list && d.pesquisa.size() <= 400))
         && (!('clienteEmail' in d) || (d.clienteEmail is string && d.clienteEmail.size() <= 200))
+        && (!('duracaoPrevista' in d) || (d.duracaoPrevista is number && d.duracaoPrevista >= 0 && d.duracaoPrevista <= 200))
+        // folhas geradas por contrato de manutenção
+        && (!('tarefasExtra' in d) || (d.tarefasExtra is list && d.tarefasExtra.size() <= 30))
+        && (!('contratoId' in d) || (d.contratoId is string && d.contratoNumero is string))
         // Fase 2: trabalho no local (sem preços)
         && (!('tempos' in d) || (d.tempos is list && d.tempos.size() <= 200))
         && (!('materiais' in d) || (d.materiais is list && d.materiais.size() <= 300))
@@ -253,6 +257,40 @@ service cloud.firestore {
         && request.resource.data.estado in ['guia', 'folha']
         && request.resource.data.uid == request.auth.uid;
       allow delete: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
+    }
+
+    // ---------- Contratos de manutenção ----------
+    // Master e backoffice gerem; o técnico não vê (recebe só as folhas geradas). Nunca se apagam: terminam.
+    // O valor do contrato fica em contratos/{id}/privado/valores (só o Master).
+    function contratoValido(d) {
+      return d.numero is string && d.numero.matches('^CM-[0-9]{4}-[0-9]{3,}$')
+        && d.clienteId is string && d.clienteNome is string && d.clienteNome.size() > 0
+        && d.estado in ['Ativo', 'Suspenso', 'Terminado']
+        && d.periodicidade in ['Mensal', 'Bimestral', 'Trimestral', 'Semestral', 'Anual']
+        && d.proximaData is timestamp && d.geracaoEm is timestamp
+        && d.antecedenciaDias is int && d.antecedenciaDias >= 0 && d.antecedenciaDias <= 120
+        && d.tecnicoUid is string
+        && (d.get('dataFim', null) == null || d.dataFim is timestamp)
+        && d.equipamentos is list && d.equipamentos.size() <= 100
+        && d.tarefas is list && d.tarefas.size() <= 30
+        && d.folhas is list && d.folhas.size() <= 24
+        && (!('ambito' in d) || (d.ambito is string && d.ambito.size() <= 5000))
+        && (!('pesquisa' in d) || (d.pesquisa is list && d.pesquisa.size() <= 400));
+    }
+    match /contratos/{id} {
+      allow read: if eStaff();
+      allow create: if eStaff() && contratoValido(request.resource.data)
+        && request.resource.data.estado == 'Ativo'
+        && request.resource.data.criadoPor == request.auth.uid
+        && exists(/databases/$(database)/documents/clientes/$(request.resource.data.clienteId));
+      allow update: if eStaff() && contratoValido(request.resource.data)
+        && !alterados().hasAny(['numero', 'clienteId', 'criadoEm', 'criadoPor'])
+        && (resource.data.estado != 'Terminado' || request.resource.data.estado == 'Terminado');
+      allow delete: if false;
+
+      match /privado/{doc} {
+        allow read, write: if eMaster();
+      }
     }
 
     // ---------- Pedido de sincronização imediata com o PHC (a PontePHC responde) ----------

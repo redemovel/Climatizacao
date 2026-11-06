@@ -18,6 +18,10 @@ if (staff) {
     $('#selTec').insertAdjacentHTML('beforeend', tecs.map((t) => `<option value="${esc(t.uid)}">${esc(t.nome)}</option>`).join(''));
   } catch (e) { toast(erroFirebase(e), 'erro'); }
   $('#selTec').onchange = () => { filtroTec = $('#selTec').value; carregar(); };
+  // contratos de manutenção: gera as folhas das próximas visitas (no máx. 1 vez por hora neste aparelho)
+  gerarManutencoesPendentes().then((feitas) => {
+    if (feitas.length) { toast(`${feitas.length} folha${feitas.length > 1 ? 's' : ''} de manutenção gerada${feitas.length > 1 ? 's' : ''} pelos contratos: veja em Folhas › Por agendar.`, 'ok', 7000); }
+  });
 }
 
 function intervalo() {
@@ -93,7 +97,7 @@ function cartao(f, comData = false) {
       <div class="ag-corpo">
         <div class="li-topo"><span class="li-titulo">${esc(f.clienteNome)}</span>${badgeEstado(f.estado)}</div>
         <div class="li-sub">${esc([f.morada, f.localidade].filter(Boolean).join(', ') || 'Sem morada')}</div>
-        <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span><span>${esc(f.numero || '')}</span>
+        <div class="li-meta"><span class="tipo">${esc(TIPO_NOME[f.tipo] || f.tipo)}</span><span>${esc(f.numero || '')}</span>${f.duracaoPrevista ? `<span>· ${esc(String(f.duracaoPrevista).replace('.', ','))} h</span>` : ''}
           ${staff ? `<span>· ${esc(f.tecnicoNome || '')}</span>` : ''}</div>
         ${f.descricao ? `<div class="li-sub">${esc(f.descricao.length > 120 ? f.descricao.slice(0, 120) + '…' : f.descricao)}</div>` : ''}
         ${(tel || mapa) ? `<div class="ag-acoes">
