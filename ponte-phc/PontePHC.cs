@@ -103,6 +103,20 @@ static class Log
     public static string Pasta = ".";
     public static bool Consola = false;
 
+    // apaga os registos mensais com mais de 6 meses (chamado no arranque)
+    public static void Limpar()
+    {
+        try
+        {
+            string d = Path.Combine(Pasta, "logs");
+            if (!Directory.Exists(d)) return;
+            string limite = "PontePHC_" + DateTime.Now.AddMonths(-6).ToString("yyyyMM") + ".log";
+            foreach (string f in Directory.GetFiles(d, "PontePHC_??????.log"))
+                if (string.CompareOrdinal(Path.GetFileName(f), limite) < 0) File.Delete(f);
+        }
+        catch { }
+    }
+
     public static void Info(string s) { Escrever("INFO ", s, false); }
     public static void Erro(string s) { Escrever("ERRO ", s, true); }
 
@@ -2574,6 +2588,7 @@ class Motor
 
     public void Preparar()
     {
+        Log.Limpar();
         Log.Info("PontePHC a iniciar. Projeto Firebase: " + cfg.Get("FirebaseProjeto", "climatizacao-c482a") +
                  (cfg.Simular ? " (SIMULACAO: nada e enviado)" : "") +
                  ". Clientes: " + (cfg.GetBool("Clientes", true) ? "sim" : "nao") +
