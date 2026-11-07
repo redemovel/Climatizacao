@@ -234,3 +234,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 /* Contratos */
 .equip-linha { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--linha); border-radius: 10px; margin-bottom: 6px; }
 .equip-linha .grelha-2 { gap: 6px; }
+
+/* Faturação */
+.separadores { display: flex; gap: 4px; overflow-x: auto; margin-bottom: 12px; border-bottom: 1px solid var(--linha); }
+.separadores button { flex: 0 0 auto; background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 10px; font: inherit; font-size: .9rem; color: var(--texto-2); cursor: pointer; min-height: 44px; }
+.separadores button b { background: var(--fundo); border-radius: 10px; padding: 0 7px; margin-left: 2px; font-size: .8rem; }
+.separadores button.ativo { color: var(--azul); border-bottom-color: var(--azul); font-weight: 600; }
+.fat-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.fat-linha { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--linha); }
+.fat-txt { min-width: 0; }
+.fat-desc { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+.fat-bts { flex: 0 0 auto; }
+.txt-erro { color: #b91c1c; font-weight: 600; }

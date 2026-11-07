@@ -127,6 +127,17 @@ function gerar() {
   db['folhas/phc-' + ano + '-1785/privado/phc'] = { totalVenda: 958.8,
     linhas: [{ ref: 'ST2', descricao: 'Serviço Técnico (Equipa)', qtd: 8, preco: 40.8, total: 326.4 }],
     valorHora: [{ data: ts(dia(-3, 0)), horas: 8, tipoIntervencao: 'Manutenção', tipoTecnico: 'Técnico-Técnico', preco: 40.8, total: 326.4 }] };
+  // faturação: cli002 exige nota de encomenda
+  db['clientes/cli002'].exigeNE = true;
+  const fat = (id, base, extra) => {
+    const b = db['folhas/' + base];
+    const hist = [...b.historico, { estado: extra.estado, de: 'Concluída', uid: 'u-master', nome: 'Ricardo Bastos', em: ts(dia(-20, 9)) }];
+    db['folhas/' + id] = { ...b, historico: hist, estadoAlteradoEm: ts(dia(-20, 9)), ...extra };
+  };
+  fat('fr1', 'fo015', { numero: `FO-${ano}-0901`, clienteId: clientes[1].id, clienteNome: clientes[1].nome, estado: 'Revista' });
+  fat('fr2', 'fo016', { numero: `FO-${ano}-0902`, clienteId: clientes[2].id, clienteNome: clientes[2].nome, estado: 'Revista' });
+  fat('fa1', 'fo017', { numero: `FO-${ano}-0903`, clienteId: clientes[1].id, clienteNome: clientes[1].nome, estado: 'Aguarda NE' });
+  fat('fa2', 'fo018', { numero: `FO-${ano}-0904`, clienteId: clientes[1].id, clienteNome: clientes[1].nome, estado: 'Aguarda NE' });
   // folhas antigas ainda abertas (importadas do PHC e nunca fechadas): não aparecem em «Em atraso»
   db['folhas/phc-' + (ano - 1) + '-0900'] = { ...db['folhas/fo004'], numero: `FO-${ano - 1}-0900`, origem: 'phc', phcNumero: 900,
     estado: 'Agendada', historico: [db['folhas/fo004'].historico[0]], dataPrevista: ts(dia(-200, 9)), criadoPor: 'phc', criadoPorNome: 'PHC' };

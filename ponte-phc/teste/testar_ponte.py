@@ -263,6 +263,24 @@ cod, out = ponte('/sincronizar')
 verifica(c('phc-2026-1785', 'dataPrevista').startswith('2026-11-09T09:00'), 'marcação alterada no PHC → nova data: ' + str(c('phc-2026-1785', 'dataPrevista')))
 verifica(c('phc-2026-1700', 'dataPrevista').startswith('2026-11-12T14:30'), 'folha antiga com a data do documento → passa para a marcação: ' + str(c('phc-2026-1700', 'dataPrevista')))
 verifica(c('phc-2026-1781', 'dataPrevista').startswith('2026-12-01T10:00'), 'reagendada na plataforma → mantém: ' + str(c('phc-2026-1781', 'dataPrevista')))
+# estados acompanham o PHC (só para a frente); «Revista» antiga (importada de 5-Concluído, nunca mexida) volta a «Concluída»
+F('phc-2026-1700')['estado'] = sv('Revista'); F('phc-2026-1700')['historico'] = {'arrayValue': {'values': [F('phc-2026-1700')['historico']['arrayValue']['values'][0]]}}
+folhas[1] = folhas[1].replace('4.1-Pendente Peças', '5-Concluido').replace('2026-10-31;10:00', '2026-11-01;10:00')
+folhas[3] = folhas[3].replace('1-Registado', '3-Em Execução').replace('2026-10-20;08:00', '2026-11-01;08:00')
+folhas[4] = folhas[4].replace('2-Atribuido', '5-Concluido').replace('2026-10-31;08:00', '2026-11-01;08:00')
+open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
+cod, out = ponte('/sincronizar')
+verifica(c('phc-2026-1700', 'estado') == 'Concluída', '«Revista» antiga sem mexer na plataforma → Concluída: ' + str(c('phc-2026-1700', 'estado')))
+verifica(c('phc-2026-1780', 'estado') == 'Em curso' and c('phc-2026-1780', 'tecnicoUid') == 'phc:sem-tecnico', 'Registado → Em Execução no PHC: Em curso (técnico só como nome)')
+verifica(c('phc-2026-1781', 'estado') == 'Concluída' and c('phc-2026-1781', 'tecnicoUid') == 'phc:Pascoal Rodrigues', '5-Concluído → Concluída (por rever)')
+h = F('phc-2026-1781')['historico']['arrayValue']['values']
+verifica(h[-1]['mapValue']['fields']['uid']['stringValue'] == 'phc' and h[-1]['mapValue']['fields']['de']['stringValue'] == 'Por agendar', 'mudança registada no histórico')
+# revista na plataforma e o PHC volta a «Em Execução»: não recua
+F('phc-2026-1781')['estado'] = sv('Revista'); F('phc-2026-1781')['historico']['arrayValue']['values'].append({'mapValue': {'fields': {'estado': sv('Revista'), 'uid': sv('u-ricardo')}}})
+folhas[4] = folhas[4].replace('5-Concluido', '3-Em Execução').replace('2026-11-01;08:00', '2026-11-02;08:00')
+open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
+cod, out = ponte('/sincronizar')
+verifica(c('phc-2026-1781', 'estado') == 'Revista', 'o PHC nunca faz recuar o estado da plataforma')
 BD['contadores/folhas-2026'] = {'valor': {'integerValue': '1800'}}
 folhas[1] = folhas[1].replace('2026-09-11;10:00', '2026-11-01;10:00')
 open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')

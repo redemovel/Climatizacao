@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-07 11:20 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-07 13:12 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -252,6 +252,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .equip-linha { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--linha); border-radius: 10px; margin-bottom: 6px; }
 .equip-linha .grelha-2 { gap: 6px; }
 
+/* Faturação */
+.separadores { display: flex; gap: 4px; overflow-x: auto; margin-bottom: 12px; border-bottom: 1px solid var(--linha); }
+.separadores button { flex: 0 0 auto; background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 10px; font: inherit; font-size: .9rem; color: var(--texto-2); cursor: pointer; min-height: 44px; }
+.separadores button b { background: var(--fundo); border-radius: 10px; padding: 0 7px; margin-left: 2px; font-size: .8rem; }
+.separadores button.ativo { color: var(--azul); border-bottom-color: var(--azul); font-weight: 600; }
+.fat-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.fat-linha { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--linha); }
+.fat-txt { min-width: 0; }
+.fat-desc { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+.fat-bts { flex: 0 0 auto; }
+.txt-erro { color: #b91c1c; font-weight: 600; }
+
 </style>
 </head>
 <body class="env-prod pagina-clientes">
@@ -291,7 +303,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-07 11:20 UTC';
+const BUILD = '2026-11-07 13:12 UTC';
 const PAGINA = 'clientes';
 
 const FIREBASE_CONFIG = {
@@ -479,6 +491,7 @@ const ICONES = {
   agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
   folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
   clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  faturacao: '<svg viewBox="0 0 24 24"><path d="M5 2h14v20l-2.5-1.5L14 22l-2-1.5L10 22l-2.5-1.5L5 22zm3 5v1.6h8V7zm0 4v1.6h8V11zm0 4v1.6h5V15z"/></svg>',
   contratos: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1v5h5M9 12h8v1.5H9zm0 3h8v1.5H9zm0 3h5v1.5H9z"/></svg>',
   guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
   utilizadores: '<svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V5zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm0 8c2 0 6 1 6 3v.5A10 10 0 0 1 12 21a10 10 0 0 1-6-2.5V18c0-2 4-3 6-3z"/></svg>',
@@ -489,7 +502,8 @@ const MENU = [
   { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'contratos', label: 'Contratos', perfis: ['master', 'backoffice'] },
   { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
-  { id: 'utilizadores', label: 'Utilizadores', perfis: ['master'] },
+  { id: 'faturacao', label: 'Faturação', perfis: ['master'] },
+  { id: 'utilizadores', label: 'Utilizadores', curto: 'Utiliz.', perfis: ['master'] },
 ];
 
 function montarCabecalho() {
@@ -874,6 +888,9 @@ function renderFicha() {
         <div><dt>Email</dt><dd>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '—'}</dd></div>
         <div><dt>Observações</dt><dd>${esc(c.observacoes || '—')}</dd></div>
       </dl>
+      ${sessao.perfil === 'master'
+        ? `<p style="margin:10px 0 0"><label class="interruptor"><input type="checkbox" id="cliNE" ${c.exigeNE ? 'checked' : ''}> <b>Exige nota de encomenda</b> antes de faturar</label></p>`
+        : (c.exigeNE ? '<p style="margin:10px 0 0"><span class="badge estado-aguarda-ne" id="cliNE">Exige nota de encomenda</span></p>' : '')}
       <div class="acoes-rapidas">
         <a class="btn btn-primario" href="${pagina('folhas', { nova: 1, cliente: c.id })}">+ Folha de obra</a>
         ${mapa ? `<a class="btn btn-sec" href="${esc(mapa)}" target="_blank" rel="noopener">Ver no mapa</a>` : ''}
@@ -885,6 +902,14 @@ function renderFicha() {
     </div>`;
   ligarVoltar();
   if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
+  if (sessao.perfil === 'master') $('#cliNE').onchange = async (ev) => {
+    const v = ev.target.checked;
+    try {
+      await updateDoc(doc(db, 'clientes', atual.id), { exigeNE: v, exigeNEPor: sessao.uid, exigeNEEm: serverTimestamp() });
+      atual.exigeNE = v;
+      toast(v ? 'O cliente passa a exigir nota de encomenda.' : 'O cliente deixa de exigir nota de encomenda.', 'ok');
+    } catch (e) { ev.target.checked = !v; toast(erroFirebase(e), 'erro'); }
+  };
   $('#btnVerFolhas').onclick = () => carregarFolhasCliente();
 }
 

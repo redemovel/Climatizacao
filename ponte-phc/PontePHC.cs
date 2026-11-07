@@ -2092,7 +2092,7 @@ class Motor
         if (f.Fechada) return "Faturada";
         string e = f.Estado.Trim();
         if (e.StartsWith("5.1")) return "Aguarda NE";
-        if (e.StartsWith("5")) return "Revista";
+        if (e.StartsWith("5")) return "Conclu\u00edda";   // concluída pelo técnico; a revisão é feita na plataforma (Master)
         if (e.StartsWith("4.1")) { motivo = "Peças"; return "Pendente"; }
         if (e.StartsWith("4.2")) { motivo = "Cliente"; return "Pendente"; }
         if (e.StartsWith("4")) { motivo = "Outro"; return "Pendente"; }
@@ -2102,6 +2102,34 @@ class Motor
 
     // data agendada = «Marcação Cliente» (bo.dataopen); sem marcação, a data do documento
     static DateTime Prevista(FolhaPHC f) { return Juntar(f.Marcacao.Year > 1900 ? f.Marcacao : f.Data, f.Hora); }
+
+    // ordem dos estados: o PHC só faz avançar (Em curso <-> Pendente é permitido)
+    static int Ordem(string e)
+    {
+        switch (e)
+        {
+            case "Por agendar": return 0; case "Agendada": return 1; case "Em curso": case "Pendente": return 2;
+            case "Conclu\u00edda": return 3; case "Revista": return 4; case "Aguarda NE": return 5; case "Faturada": return 6; default: return 9;
+        }
+    }
+    static bool Avanca(string atual, string novo)
+    {
+        if (novo == atual || novo == "Agendada" || Ordem(atual) >= 6) return false;   // agendar e faturar/anular tratam-se à parte
+        return Ordem(novo) > Ordem(atual) || (Ordem(novo) == 2 && Ordem(atual) == 2);
+    }
+    static int TamanhoLista(Dictionary<string, object> campos, string k)
+    {
+        object v;
+        if (campos == null || !campos.TryGetValue(k, out v)) return 0;
+        Dictionary<string, object> a = v as Dictionary<string, object>;
+        object av;
+        if (a == null || !a.TryGetValue("arrayValue", out av)) return 0;
+        Dictionary<string, object> m = av as Dictionary<string, object>;
+        object vals;
+        if (m == null || !m.TryGetValue("values", out vals)) return 0;
+        System.Collections.ICollection c = vals as System.Collections.ICollection;
+        return c == null ? 0 : c.Count;
+    }
 
     static DateTime Juntar(DateTime data, string hora)
     {
@@ -2306,6 +2334,39 @@ class Motor
         if (mudar && f.Data.Year > 1900) d.Data("dataPrevista", prev);
         d.Texto("marcacaoPHC", marcNova);
         string estadoAtual = Firestore.Valor(atual, "estado");
+        string motivo;
+        string novo = Estado(f, out motivo);
+        // Enquanto a NetWorker estiver em uso, o estado acompanha o PHC quando este muda — só para a frente
+        // (nunca desfaz o que foi revisto, pedido NE ou faturado na plataforma). As folhas importadas como «Revista»
+        // pelas versões antigas (5-Concluído) e nunca mexidas na plataforma voltam a «Concluída» (por rever).
+        bool mudouPHC = Firestore.Valor(atual, "phcEstado").Trim() != (f.Estado ?? "").Trim();
+        bool legadoRevista = estadoAtual == "Revista" && novo == "Conclu\u00edda" && TamanhoLista(atual, "historico") == 1;
+        if (!f.Fechada && (legadoRevista || (mudouPHC && Avanca(estadoAtual, novo))))
+        {
+            d.Texto("estado", novo);
+            Documento h = new Documento();
+            h.Texto("estado", novo); h.Texto("de", estadoAtual); h.Texto("uid", "phc"); h.Texto("nome", "PHC (" + (f.Estado ?? "").Trim() + ")");
+            h.Data("em", DateTime.Now);
+            if (motivo != null) h.Texto("motivo", motivo);
+            d.Acrescentar("historico", h);
+            d.HoraServidor("estadoAlteradoEm");
+            if (novo == "Pendente")
+            {
+                Documento p = new Documento();
+                p.Texto("motivo", motivo); p.Texto("nota", "Estado no PHC: " + f.Estado); p.Nulo("reverEm");
+                p.Texto("uid", "phc"); p.Texto("nome", "PHC"); p.Data("em", Juntar(f.AltData, f.AltHora));
+                d.Mapa("pendencia", p);
+            }
+            else if (estadoAtual == "Pendente") d.Nulo("pendencia");
+            // fora de «Por agendar» a folha precisa de técnico e data
+            if (Firestore.Valor(atual, "tecnicoUid") == "")
+            {
+                string nome = NomeTecnico(f);
+                d.Texto("tecnicoUid", "phc:" + (nome != "" ? nome : "sem-tecnico"));
+                d.Texto("tecnicoNome", nome);
+            }
+            if (Firestore.Valor(atual, "dataPrevista") == "" && !mudar) d.Data("dataPrevista", prev);
+        }
         if (f.Fechada && estadoAtual != "Faturada")
         {
             d.Texto("estado", "Faturada");

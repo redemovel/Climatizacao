@@ -213,6 +213,13 @@ function regraEscrever(dbRaw, path, antes, depois) {
   if (colecao === 'clientes') {
     if (!staff) negar('clientes');
     if (!depois) { if (s.perfil !== 'master') negar('apagar cliente'); return; }
+    if (antes) {
+      const mud = Object.keys({ ...antes, ...depois }).filter((k) => JSON.stringify(antes[k]) !== JSON.stringify(depois[k]));
+      if (mud.length && mud.every((k) => ['exigeNE', 'exigeNEPor', 'exigeNEEm'].includes(k))) {
+        if (s.perfil !== 'master' || typeof depois.exigeNE !== 'boolean' || depois.exigeNEPor !== s.uid) negar('exigeNE só o master');
+        return;
+      }
+    }
     if ((antes && antes.origem === 'phc') || depois.origem === 'phc') negar('cliente do PHC só é escrito pela PontePHC');
     if (typeof depois.nome !== 'string' || depois.nome.length < 2 || !/^([0-9]{9}|[A-Z]{2}[A-Z0-9]{2,13})$/.test(depois.nif || '')) negar('cliente inválido');
     return;

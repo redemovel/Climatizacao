@@ -108,6 +108,9 @@ function renderFicha() {
         <div><dt>Email</dt><dd>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : '—'}</dd></div>
         <div><dt>Observações</dt><dd>${esc(c.observacoes || '—')}</dd></div>
       </dl>
+      ${sessao.perfil === 'master'
+        ? `<p style="margin:10px 0 0"><label class="interruptor"><input type="checkbox" id="cliNE" ${c.exigeNE ? 'checked' : ''}> <b>Exige nota de encomenda</b> antes de faturar</label></p>`
+        : (c.exigeNE ? '<p style="margin:10px 0 0"><span class="badge estado-aguarda-ne" id="cliNE">Exige nota de encomenda</span></p>' : '')}
       <div class="acoes-rapidas">
         <a class="btn btn-primario" href="${pagina('folhas', { nova: 1, cliente: c.id })}">+ Folha de obra</a>
         ${mapa ? `<a class="btn btn-sec" href="${esc(mapa)}" target="_blank" rel="noopener">Ver no mapa</a>` : ''}
@@ -119,6 +122,14 @@ function renderFicha() {
     </div>`;
   ligarVoltar();
   if ($('#btnEditar')) $('#btnEditar').onclick = () => abrirForm(atual);
+  if (sessao.perfil === 'master') $('#cliNE').onchange = async (ev) => {
+    const v = ev.target.checked;
+    try {
+      await updateDoc(doc(db, 'clientes', atual.id), { exigeNE: v, exigeNEPor: sessao.uid, exigeNEEm: serverTimestamp() });
+      atual.exigeNE = v;
+      toast(v ? 'O cliente passa a exigir nota de encomenda.' : 'O cliente deixa de exigir nota de encomenda.', 'ok');
+    } catch (e) { ev.target.checked = !v; toast(erroFirebase(e), 'erro'); }
+  };
   $('#btnVerFolhas').onclick = () => carregarFolhasCliente();
 }
 

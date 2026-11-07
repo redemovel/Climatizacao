@@ -21,7 +21,7 @@ const SO = (args.find((a) => a.startsWith('--so=')) || '').slice(5);
 const CAPTURAS = args.includes('--capturas');
 const DIR_CAP = path.join(__dirname, 'capturas');
 const INDICES = JSON.parse(fs.readFileSync(path.join(ROOT, 'firestore.indexes.json'), 'utf8')).indexes;
-const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'utilizadores'];
+const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'faturacao', 'utilizadores'];
 
 // ---------- 1 e 2: build + sintaxe ----------
 execFileSync('node', [path.join(ROOT, 'build.js')], { stdio: 'inherit' });
@@ -161,7 +161,7 @@ teste('sessão: sem login, páginas internas redirecionam para o login', async (
 // =====================================================================
 // MENU POR PERFIL
 // =====================================================================
-for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'contratos', 'clientes', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'contratos', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
+for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'contratos', 'clientes', 'faturacao', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'contratos', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
   teste(`menu: ${quem} vê ${menus.join(', ')}`, async () => {
     const { ctx, page } = await contexto();
     await entrar(page, quem);
@@ -622,7 +622,7 @@ teste('folhas backoffice: filtros, paginação e pesquisa por número', async ()
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   assert(await page.locator('#maisWrap').isVisible(), 'botão carregar mais');
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 31);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 35);
   await page.selectOption('#fEstado', 'Concluída');
   await page.waitForFunction(() => [...document.querySelectorAll('#lista .badge')].every((b) => b.textContent === 'Concluída'));
   await page.selectOption('#fTec', 'u-tec2');
@@ -1263,6 +1263,79 @@ teste('contratos: técnico não vê contratos nem entra na página; backoffice n
   const r2 = await page2.evaluate(async () => { try { await window.__fake.lerComoUtilizador('contratos/ct1/privado/valores'); return 'lido'; } catch (e) { return e.code; } });
   igual(r2, 'permission-denied', 'backoffice não lê o valor');
   semErros(page2); await ctx2.close();
+});
+
+// =====================================================================
+// FATURAÇÃO
+// =====================================================================
+teste('faturação: rever → pedir NE → registar NE → faturar (Master), em 375 e 414', async () => {
+  for (const vp of MOVEIS) {
+    const { ctx, page } = await contexto({ viewport: vp });
+    await entrar(page, 'master');
+    await page.goto(BASE + '/faturacao.html');
+    await page.waitForFunction(() => document.querySelector('#nRever').textContent !== '…');
+    igual(await page.textContent('#nPedir'), '1', 'pedir NE: fr1 (cliente exige NE)');
+    igual(await page.textContent('#nAguarda'), '2', 'aguarda NE: fa1, fa2');
+    igual(await page.textContent('#nFaturar'), '1', 'a faturar: fr2');
+    const nRever = Number(await page.textContent('#nRever'));
+    assert(nRever > 0, 'há concluídas por rever');
+    await semOverflow(page, 'faturação rever ' + vp.width);
+    await captura(page, 'faturacao-rever-' + vp.width);
+    // rever a 1.ª
+    const id = await page.getAttribute('[data-acao="revista"]', 'data-id');
+    await page.click(`[data-acao="revista"][data-id="${id}"]`);
+    await page.waitForFunction((n) => document.querySelector('#nRever').textContent === String(n - 1), nRever);
+    const f = await fake(page, (k) => window.__fake.doc(k), 'folhas/' + id);
+    igual(f.estado, 'Revista', 'revista'); igual(f.historico[f.historico.length - 1].uid, 'u-master', 'histórico');
+    // pedir NE
+    await page.click('#sep [data-s="pedir"]');
+    await page.waitForSelector('[data-acao="pedir"]');
+    await page.click('[data-acao="pedir"]');
+    await page.waitForFunction(() => document.querySelector('#nAguarda').textContent === '3');
+    igual((await fake(page, () => window.__fake.doc('folhas/fr1'))).estado, 'Aguarda NE', 'fr1 aguarda NE');
+    // registar NE para fr1 e fa1 (fa2 fica à espera)
+    await page.click('#sep [data-s="aguarda"]');
+    await page.click('[data-acao="ne"]');
+    await page.fill('#neNum', 'NE-777');
+    await page.uncheck('[data-ne="fa2"]');
+    await captura(page, 'faturacao-ne-' + vp.width);
+    await page.click('#neOk');
+    await page.waitForFunction(() => document.querySelector('#nAguarda').textContent === '1');
+    igual((await fake(page, () => window.__fake.doc('folhas/fa1'))).ne.numero, 'NE-777', 'NE registada');
+    assert(!(await fake(page, () => window.__fake.doc('folhas/fa2'))).ne, 'fa2 sem NE');
+    // a faturar: fr2, fr1, fa1 (+ a revista agora, se o cliente não exigir NE)
+    await page.click('#sep [data-s="faturar"]');
+    await page.waitForSelector('[data-acao="faturada"][data-id="fr2"]');
+    await semOverflow(page, 'faturação a faturar ' + vp.width);
+    await captura(page, 'faturacao-faturar-' + vp.width);
+    await page.click('[data-acao="faturada"][data-id="fr2"]');
+    await page.fill('#fNum', 'FT 2026/55');
+    await page.click('#fOk');
+    await page.waitForFunction(() => !document.querySelector('[data-acao="faturada"][data-id="fr2"]'));
+    const fr2 = await fake(page, () => window.__fake.doc('folhas/fr2'));
+    igual(fr2.estado, 'Faturada', 'faturada'); igual(fr2.numeroFatura, 'FT 2026/55', 'n.º fatura');
+    semErros(page); await ctx.close();
+  }
+});
+
+teste('faturação: só o Master; «exige NE» na ficha do cliente só o Master altera', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/faturacao.html');
+  await page.waitForSelector('text=Não tem acesso a esta página.');
+  await page.goto(BASE + '/clientes.html?id=cli002');
+  await page.waitForSelector('#cliNE');
+  assert(!(await page.$('input#cliNE')), 'backoffice só vê a indicação');
+  const r = await page.evaluate(async () => { try { await window.__fake.atualizarComoUtilizador('clientes/cli003', { exigeNE: true, exigeNEPor: 'u-bo' }); return 'ok'; } catch (e) { return e.code; } });
+  igual(r, 'permission-denied', 'backoffice não altera exigeNE');
+  semErros(page); await ctx.close();
+  const { ctx: c2, page: p2 } = await contexto();
+  await entrar(p2, 'master');
+  await p2.goto(BASE + '/clientes.html?id=phc-1234');
+  await p2.waitForSelector('input#cliNE');
+  await p2.check('#cliNE');
+  await p2.waitForFunction(() => window.__fake.doc('clientes/phc-1234').exigeNE === true);
+  semErros(p2); await c2.close();
 });
 
 // =====================================================================

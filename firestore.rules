@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-06 — contratos de manutenção (contratos/, geração automática das folhas)
+// Atualizado: 2026-11-07 — faturação: cliente «exige nota de encomenda» (só Master) e NE nas folhas
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -57,6 +57,10 @@ service cloud.firestore {
         && (!('atualizadoPor' in request.resource.data) || request.resource.data.atualizadoPor == request.auth.uid);
       allow update: if eStaff() && clienteValido(request.resource.data) && quemAlterouCerto()
         && resource.data.get('origem', '') != 'phc' && request.resource.data.get('origem', '') != 'phc';
+      // «Exige nota de encomenda»: campo da plataforma, também nos clientes do PHC; só o Master altera
+      allow update: if eMaster()
+        && alterados().hasOnly(['exigeNE', 'exigeNEPor', 'exigeNEEm'])
+        && request.resource.data.exigeNE is bool && request.resource.data.exigeNEPor == request.auth.uid;
       allow delete: if eMaster();
     }
 
@@ -94,6 +98,8 @@ service cloud.firestore {
         // folhas geradas por contrato de manutenção
         && (!('tarefasExtra' in d) || (d.tarefasExtra is list && d.tarefasExtra.size() <= 30))
         && (!('contratoId' in d) || (d.contratoId is string && d.contratoNumero is string))
+        // nota de encomenda do cliente (Master): n.º e data
+        && (!('ne' in d) || d.ne == null || (d.ne is map && d.ne.numero is string && d.ne.numero.size() > 0 && d.ne.numero.size() <= 60))
         // Fase 2: trabalho no local (sem preços)
         && (!('tempos' in d) || (d.tempos is list && d.tempos.size() <= 200))
         && (!('materiais' in d) || (d.materiais is list && d.materiais.size() <= 300))
