@@ -56,7 +56,8 @@ service cloud.firestore {
         && request.resource.data.get('origem', '') != 'phc'
         && (!('atualizadoPor' in request.resource.data) || request.resource.data.atualizadoPor == request.auth.uid);
       allow update: if eStaff() && clienteValido(request.resource.data) && quemAlterouCerto()
-        && resource.data.get('origem', '') != 'phc' && request.resource.data.get('origem', '') != 'phc';
+        && resource.data.get('origem', '') != 'phc' && request.resource.data.get('origem', '') != 'phc'
+        && (eMaster() || !alterados().hasAny(['exigeNE', 'exigeNEPor', 'exigeNEEm']));
       // «Exige nota de encomenda»: campo da plataforma, também nos clientes do PHC; só o Master altera
       allow update: if eMaster()
         && alterados().hasOnly(['exigeNE', 'exigeNEPor', 'exigeNEEm'])

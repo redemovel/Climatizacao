@@ -219,6 +219,7 @@ function regraEscrever(dbRaw, path, antes, depois) {
         if (s.perfil !== 'master' || typeof depois.exigeNE !== 'boolean' || depois.exigeNEPor !== s.uid) negar('exigeNE só o master');
         return;
       }
+      if (s.perfil !== 'master' && mud.some((k) => ['exigeNE', 'exigeNEPor', 'exigeNEEm'].includes(k))) negar('exigeNE só o master');
     }
     if ((antes && antes.origem === 'phc') || depois.origem === 'phc') negar('cliente do PHC só é escrito pela PontePHC');
     if (typeof depois.nome !== 'string' || depois.nome.length < 2 || !/^([0-9]{9}|[A-Z]{2}[A-Z0-9]{2,13})$/.test(depois.nif || '')) negar('cliente inválido');
