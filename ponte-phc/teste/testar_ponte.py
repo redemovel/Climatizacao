@@ -252,6 +252,17 @@ cod, out = ponte('/sincronizar')
 h = F('phc-2026-1785')['historico']['arrayValue']['values']
 verifica(c('phc-2026-1785', 'estado') == 'Faturada' and h[-1]['mapValue']['fields']['de']['stringValue'] == 'Concluída' and len(h) == 2, 'faturada no PHC → Faturada, com registo no histórico')
 verifica(c('phc-2026-1785', 'observacoesTecnico') == 'feito' and c('phc-2026-1785', 'tecnicoUid') == 'u-paulo', 'não apaga o que foi feito na plataforma')
+# marcação alterada no PHC → nova data; folha antiga (sem marcacaoPHC) com a data do documento → corrigida; reagendada na plataforma → mantém
+F('phc-2026-1700')['dataPrevista'] = {'timestampValue': '2026-09-10T13:30:00Z'}; del F('phc-2026-1700')['marcacaoPHC']
+F('phc-2026-1781')['dataPrevista'] = {'timestampValue': '2026-12-01T10:00:00Z'}; del F('phc-2026-1781')['marcacaoPHC']
+folhas[0] = folhas[0].replace(';2026-11-03', ';2026-11-09').replace('2026-10-30;18:00', '2026-10-31;18:00')
+folhas[1] = folhas[1].replace('2026-09-11;10:00', '2026-10-31;10:00') + ';;;;;2026-11-12'
+folhas[4] = folhas[4].replace('2026-10-21;08:00', '2026-10-31;08:00')
+open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')
+cod, out = ponte('/sincronizar')
+verifica(c('phc-2026-1785', 'dataPrevista').startswith('2026-11-09T09:00'), 'marcação alterada no PHC → nova data: ' + str(c('phc-2026-1785', 'dataPrevista')))
+verifica(c('phc-2026-1700', 'dataPrevista').startswith('2026-11-12T14:30'), 'folha antiga com a data do documento → passa para a marcação: ' + str(c('phc-2026-1700', 'dataPrevista')))
+verifica(c('phc-2026-1781', 'dataPrevista').startswith('2026-12-01T10:00'), 'reagendada na plataforma → mantém: ' + str(c('phc-2026-1781', 'dataPrevista')))
 BD['contadores/folhas-2026'] = {'valor': {'integerValue': '1800'}}
 folhas[1] = folhas[1].replace('2026-09-11;10:00', '2026-11-01;10:00')
 open(os.path.join(d, 'folhas.csv'), 'w', encoding='utf-8').write(cab + '\n' + '\n'.join(folhas) + '\n')

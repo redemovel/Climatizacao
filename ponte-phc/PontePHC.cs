@@ -2086,6 +2086,9 @@ class Motor
         return "Agendada";   // 1-Registado, 2-Atribuido, vazio
     }
 
+    // data agendada = «Marcação Cliente» (bo.dataopen); sem marcação, a data do documento
+    static DateTime Prevista(FolhaPHC f) { return Juntar(f.Marcacao.Year > 1900 ? f.Marcacao : f.Data, f.Hora); }
+
     static DateTime Juntar(DateTime data, string hora)
     {
         TimeSpan t;
@@ -2168,7 +2171,8 @@ class Motor
         d.Texto("tecnicoUid", tecUid);
         d.Texto("tecnicoNome", tecNome);
         // data agendada = «Marcação Cliente» (bo.dataopen); sem marcação, a data do documento
-        d.Data("dataPrevista", semData ? (DateTime?)null : Juntar(f.Marcacao.Year > 1900 ? f.Marcacao : f.Data, f.Hora));
+        d.Data("dataPrevista", semData ? (DateTime?)null : Prevista(f));
+        d.Texto("marcacaoPHC", Prevista(f).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
         d.Texto("descricao", f.Descricao);
         d.Texto("estado", estado);
         Documento h = new Documento();
@@ -2270,6 +2274,23 @@ class Motor
         Documento d = new Documento();
         d.Id = IdFolha(f);
         DadosPHC(d, f);
+        // Data agendada no PHC («Marcação Cliente» + hora). Só substitui a da plataforma quando a marcação muda no PHC;
+        // um reagendamento feito na plataforma mantém-se até haver nova marcação no PHC.
+        DateTime prev = Prevista(f);
+        string marcNova = prev.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        string marcAnt = Firestore.Valor(atual, "marcacaoPHC");
+        bool mudar;
+        if (marcAnt != "") mudar = marcAnt != marcNova;
+        else
+        {
+            // folhas enviadas antes desta versão: corrige se a data ainda é a do documento (não foi reagendada na plataforma)
+            DateTime cur;
+            string s = Firestore.Valor(atual, "dataPrevista");
+            mudar = s != "" && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out cur)
+                && cur == Juntar(f.Data, f.Hora).ToUniversalTime();
+        }
+        if (mudar && f.Data.Year > 1900) d.Data("dataPrevista", prev);
+        d.Texto("marcacaoPHC", marcNova);
         string estadoAtual = Firestore.Valor(atual, "estado");
         if (f.Fechada && estadoAtual != "Faturada")
         {
