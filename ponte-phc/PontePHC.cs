@@ -914,7 +914,7 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                 ? " AND bo.dataobra >= '" + desde.ToString("yyyyMMdd") + "'" : "";
             string sql = "SELECT TOP (@max) bo.bostamp, bo.obrano, bo.boano, bo.dataobra, bo.no, bo.nome, bo.ncont, bo.morada, bo.local, bo.codpost, " +
                 Bo(cn, "tecnnm") + " AS tecnnm, " + Bo(cn, "trab1") + " AS trab1, " + Bo(cn, "trab5") + " AS trab5, " + Bo(cn, "tabela1") + " AS tabela1, " +
-                Bo(cn, "u_davaria") + " AS u_davaria, " + (colunasBo.Contains("fechada") ? "bo.fechada" : "0") + " AS fechada, " +
+                Bo(cn, "u_davaria") + " AS u_davaria, " + (colunasBo.Contains("dataopen") ? "bo.dataopen" : "bo.dataobra") + " AS dataopen, " + (colunasBo.Contains("fechada") ? "bo.fechada" : "0") + " AS fechada, " +
                 Bo(cn, "tabela2") + " AS tabela2, " + (colunasBo.Contains("etotaldeb") ? "bo.etotaldeb" : "0") + " AS etotaldeb, " +
                 "CAST(" + Bo(cn, "u_dinterve") + " AS NVARCHAR(4000)) AS u_dinterve, CAST(" + Bo(cn, "obstab2") + " AS NVARCHAR(4000)) AS obstab2, " + Bo(cn, "obranome") + " AS obranome, " +
                 "ISNULL(bo2.contacto, '') AS b2contacto, ISNULL(bo2.telefone, '') AS b2telefone, ISNULL(bo2.email, '') AS b2email, " +
@@ -940,6 +940,7 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                         x.Stamp = S(r, "bostamp"); x.Numero = Convert.ToInt64(r["obrano"]); x.Ano = Convert.ToInt32(r["boano"]);
                         x.Data = r["dataobra"] == DBNull.Value ? new DateTime(1900, 1, 1) : Convert.ToDateTime(r["dataobra"]).Date;
                         x.Hora = S(r, "xpdhora"); x.ClienteNo = Convert.ToInt64(r["no"]);
+                        if (r["dataopen"] != DBNull.Value) x.Marcacao = Convert.ToDateTime(r["dataopen"]).Date;
                         x.Nome = S(r, "nome"); x.Ncont = S(r, "ncont"); x.Morada = S(r, "morada"); x.Local = S(r, "local"); x.CodPost = S(r, "codpost");
                         x.Telefone = S(r, "telefone"); if (x.Telefone == "" || x.Telefone == x.Nome) x.Telefone = S(r, "tlmvl"); if (x.Telefone == x.Nome) x.Telefone = "";
                         x.Tecnico = S(r, "tecnnm"); x.Contacto = S(r, "trab1"); x.Tipo = S(r, "trab5"); x.Estado = S(r, "tabela1"); x.Descricao = S(r, "u_davaria");
@@ -1059,7 +1060,7 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
             stamps, delegate(SqlDataReader r)
             {
                 FolhaPHC fo;
-                if (porStamp.TryGetValue(S(r, "s"), out fo) && S(r, "descricao") != "") fo.Tarefas.Add(S(r, "descricao"));
+                if (porStamp.TryGetValue(S(r, "s"), out fo) && S(r, "descricao") != "" && !fo.Tarefas.Contains(S(r, "descricao"))) fo.Tarefas.Add(S(r, "descricao")); // a NetWorker grava cada tarefa repetida
             });
     }
 
@@ -1715,6 +1716,7 @@ class FolhaPHC
     public long Numero;
     public int Ano;
     public DateTime Data;
+    public DateTime Marcacao = new DateTime(1900, 1, 1); // bo.dataopen = «Marcação Cliente» (data agendada)
     public string Hora = "";
     public long ClienteNo;
     public string Nome = "", Ncont = "", Morada = "", Local = "", CodPost = "", Telefone = "";
@@ -1816,6 +1818,7 @@ class FonteCsvFolhas : IFonteFolhas
             FolhaPHC x = new FolhaPHC();
             x.Stamp = d["bostamp"]; x.Numero = long.Parse(d["obrano"]); x.Ano = int.Parse(d["boano"]);
             x.Data = DateTime.ParseExact(d["dataobra"], "yyyy-MM-dd", CultureInfo.InvariantCulture); x.Hora = d["xpdhora"];
+            if (d.ContainsKey("dataopen") && d["dataopen"] != "") x.Marcacao = DateTime.ParseExact(d["dataopen"], "yyyy-MM-dd", CultureInfo.InvariantCulture);
             x.ClienteNo = long.Parse(d["no"]); x.Nome = d["nome"]; x.Ncont = d["ncont"]; x.Morada = d["morada"]; x.Local = d["local"];
             x.CodPost = d["codpost"]; x.Telefone = d["telefone"]; x.Tecnico = d["tecnnm"]; x.Contacto = d["trab1"]; x.Tipo = d["trab5"];
             x.Estado = d["tabela1"]; x.Descricao = d["u_davaria"]; x.Fechada = d["fechada"] == "1";
@@ -2164,7 +2167,8 @@ class Motor
         d.Texto("tipo", Tipo(f.Tipo));
         d.Texto("tecnicoUid", tecUid);
         d.Texto("tecnicoNome", tecNome);
-        d.Data("dataPrevista", semData ? (DateTime?)null : Juntar(f.Data, f.Hora));
+        // data agendada = «Marcação Cliente» (bo.dataopen); sem marcação, a data do documento
+        d.Data("dataPrevista", semData ? (DateTime?)null : Juntar(f.Marcacao.Year > 1900 ? f.Marcacao : f.Data, f.Hora));
         d.Texto("descricao", f.Descricao);
         d.Texto("estado", estado);
         Documento h = new Documento();

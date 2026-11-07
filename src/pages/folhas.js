@@ -269,7 +269,7 @@ function renderDetalhe() {
         : '<p class="muted" style="margin:0">Sem linhas de trabalho ou material.</p>'}
       ${(f.temposPHC || []).length ? `<h3>Registo de tempos</h3><ul class="hist" id="temposPhc">${f.temposPHC.map((t) => `
         <li><b>${esc(String(t.horas ?? ''))} h</b><span>${esc(t.funcionario || '')}</span><span class="muted">${esc(fmtData(t.data))}</span></li>`).join('')}</ul>` : ''}
-      ${(f.tarefasPHC || []).length ? `<h3>Tarefas</h3><ul class="hist">${f.tarefasPHC.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+      ${(f.tarefasPHC || []).length ? `<h3>Tarefas</h3><ul class="hist">${[...new Set(f.tarefasPHC)].map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       ${sessao.perfil === 'master' ? '<div id="valoresPhc" style="margin-top:12px"><button class="btn btn-sec btn-bloco" id="btnValores">Ver valores (só Master)</button></div>' : ''}
     </div>` : ''}
     <div class="cartao">
