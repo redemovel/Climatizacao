@@ -816,7 +816,7 @@ teste('clientes: lista paginada, pesquisa por nome/localidade/NIF', async () => 
   await page.goto(BASE + '/clientes.html');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 20);
   await page.click('#btnMais');
-  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 27);
+  await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 28);
   await page.fill('#q', 'ovar');
   await page.click('#fPesq button');
   await page.waitForFunction(() => document.querySelectorAll('#lista .lista-item').length === 1);
@@ -1263,6 +1263,20 @@ teste('contratos: técnico não vê contratos nem entra na página; backoffice n
   const r2 = await page2.evaluate(async () => { try { await window.__fake.lerComoUtilizador('contratos/ct1/privado/valores'); return 'lido'; } catch (e) { return e.code; } });
   igual(r2, 'permission-denied', 'backoffice não lê o valor');
   semErros(page2); await ctx2.close();
+});
+
+teste('clientes: pesquisa por siglas («M. D.», «MDA») e início do nome', async () => {
+  const { ctx, page } = await contexto({ viewport: MOVEIS[0] });
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/clientes.html');
+  await page.waitForSelector('#lista .lista-item');
+  for (const q of ['M. D.', 'MDA', 'm.d.a', 'M. D. A. - Mol', 'moldes azemeis']) {
+    await page.fill('#q', q);
+    await page.click('#fPesq button');
+    await page.waitForFunction(() => !document.querySelector('#lista').textContent.includes('A procurar'));
+    assert((await page.textContent('#lista')).includes('M. D. A. - Moldes'), 'encontra com «' + q + '»');
+  }
+  semErros(page); await ctx.close();
 });
 
 // =====================================================================

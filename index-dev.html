@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-07 13:13 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-07 13:24 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -289,11 +289,11 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, orderBy,
-  limit, startAfter, serverTimestamp, Timestamp, runTransaction, writeBatch,
+  limit, startAfter, startAt, endAt, serverTimestamp, Timestamp, runTransaction, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-07 13:13 UTC';
+const BUILD = '2026-11-07 13:24 UTC';
 const PAGINA = 'index';
 
 const FIREBASE_CONFIG = {
@@ -551,20 +551,39 @@ function tokensPesquisa(...textos) {
 async function pesquisarClientes(texto, { soAtivos = false } = {}) {
   const t = String(texto || '').trim();
   const n = validarNIF(t);
-  let snap;
-  if (n.ok) {
-    snap = await getDocs(query(collection(db, 'clientes'), where('nif', '==', n.nif), limit(10)));
-  } else {
-    const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
-    if (!palavras.length) return [];
-    const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
-    snap = await getDocs(query(collection(db, 'clientes'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)));
-  }
   const palavras = normalizar(t).split(/[^a-z0-9]+/).filter((p) => p.length >= 2).map((p) => p.slice(0, 15));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    .filter((c) => n.ok || palavras.every((p) => (c.pesquisa || []).includes(p)))
+  let docs = [];
+  if (n.ok) {
+    docs = (await getDocs(query(collection(db, 'clientes'), where('nif', '==', n.nif), limit(10)))).docs;
+  } else {
+    const consultas = [];
+    if (palavras.length) {
+      const chave = palavras.reduce((a, b) => (b.length > a.length ? b : a));
+      consultas.push(getDocs(query(collection(db, 'clientes'), where('pesquisa', 'array-contains', chave), limit(PAGINA_TAM)))
+        .then((sn) => sn.docs.filter((d) => palavras.every((p) => (d.data().pesquisa || []).includes(p)))));
+    }
+    // início do nome, também para siglas («M. D.», «MDA» → «m. d. a. - moldes…» / «m.d.a.»)
+    for (const pre of prefixosNome(t)) {
+      consultas.push(getDocs(query(collection(db, 'clientes'), orderBy('nomePesquisa'), startAt(pre), endAt(pre + '\uf8ff'), limit(PAGINA_TAM))).then((sn) => sn.docs));
+    }
+    const vistos = new Set();
+    for (const l of await Promise.all(consultas)) for (const d of l) if (!vistos.has(d.id)) { vistos.add(d.id); docs.push(d); }
+  }
+  return docs.map((d) => ({ id: d.id, ...d.data() }))
     .filter((c) => !soAtivos || c.ativo !== false)
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt'));
+}
+function prefixosNome(t) {
+  const base = normalizar(t).replace(/\s+/g, ' ').trim();
+  if (base.length < 2) return [];
+  const l = new Set([base]);
+  const letras = base.replace(/[^a-z0-9]/g, '');
+  // parece uma sigla: letras soltas com pontos/espaços, ou uma palavra curta
+  if (letras.length >= 2 && letras.length <= 5 && (/^([a-z0-9][. ]*)+$/.test(base) && (base.includes('.') || base.includes(' ') || letras.length <= 4))) {
+    const c = letras.split('');
+    l.add(c.join('. ') + '.'); l.add(c.join('.') + '.'); l.add(c.join(' '));
+  }
+  return [...l].slice(0, 4);
 }
 
 // ---------- Artigos (stock do armazém da climatização, vindo do PHC) ----------

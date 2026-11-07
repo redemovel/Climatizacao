@@ -95,6 +95,8 @@ export const where = (campo, op, valor) => ({ k: 'where', campo, op, valor });
 export const orderBy = (campo, dir = 'asc') => ({ k: 'orderBy', campo, dir });
 export const limit = (n) => ({ k: 'limit', n });
 export const startAfter = (cur) => ({ k: 'startAfter', cur });
+export const startAt = (v) => ({ k: 'startAt', v });
+export const endAt = (v) => ({ k: 'endAt', v });
 export function query(ref, ...cs) {
   const base = ref.type === 'query' ? ref : { type: 'query', path: ref.path, cs: [] };
   return { type: 'query', path: base.path, cs: [...base.cs, ...cs] };
@@ -355,6 +357,10 @@ function executarConsulta(q) {
     for (const o of ords) { const c = cmp(a.d[o.campo], b.d[o.campo]); if (c) return o.dir === 'desc' ? -c : c; }
     return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
   });
+  // startAt/endAt por valor (só sobre o 1.º orderBy)
+  const st = cs.find((c) => c.k === 'startAt'), en = cs.find((c) => c.k === 'endAt');
+  if (ords.length && st) docs = docs.filter((x) => cmp(x.d[ords[0].campo], st.v) >= 0);
+  if (ords.length && en) docs = docs.filter((x) => cmp(x.d[ords[0].campo], en.v) <= 0);
   const sa = cs.find((c) => c.k === 'startAfter');
   if (sa) {
     const i = docs.findIndex((x) => x.path === sa.cur.ref.path);

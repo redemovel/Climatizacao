@@ -66,6 +66,9 @@ function gerar() {
   db['clientes/phc-1234'] = { nome: 'Lar de Idosos Santa Clara', nomePesquisa: 'lar de idosos santa clara', pesquisa: tokens('Lar de Idosos Santa Clara', 'Feira'),
     nif: '506000001', nifPais: 'PT', nifValido: true, morada: 'Rua do Lar 5', codigoPostal: '4520-000', localidade: 'Feira', telefone: '256111222',
     email: '', contacto: 'Diretora', ativo: true, origem: 'phc', phcId: '1234' };
+  db['clientes/phc-28'] = { nome: 'M. D. A. - Moldes de Azeméis, SA', nomePesquisa: 'm. d. a. - moldes de azemeis, sa', pesquisa: tokens('M. D. A. - Moldes de Azeméis, SA', 'Santiago de Riba-Ul'),
+    nif: '502546646', nifPais: 'PT', nifValido: true, morada: 'R António Silva Rodrigues, 285', codigoPostal: '3720-502', localidade: 'SANTIAGO DE RIBA-UL', telefone: '912520696',
+    email: '', contacto: 'S. Armando', ativo: true, origem: 'phc', phcId: '28' };
   db['clientes/phc-999'] = { nome: 'Santa Clara Antiga Lda', nomePesquisa: 'santa clara antiga lda', pesquisa: tokens('Santa Clara Antiga Lda', 'Feira'),
     nif: '123456780', nifPais: 'PT', nifValido: false, morada: '', codigoPostal: '', localidade: 'Feira', telefone: '', email: '', contacto: '',
     ativo: false, origem: 'phc', phcId: '999' };
