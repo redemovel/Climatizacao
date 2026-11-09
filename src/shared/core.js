@@ -304,6 +304,16 @@ function prefixosNome(t) {
   return [...l].slice(0, 4);
 }
 
+// ---------- Emails ao cliente: cabeçalho sóbrio com a cor Arpuro (RGB 0·134·137, Pantone 321C) ----------
+const COR_ARPURO = '#008689';
+function cabecalhoEmail(subtitulo) {
+  const e = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-bottom:3px solid ${COR_ARPURO}"><tr>
+    <td style="font-family:Arial,Helvetica,sans-serif;padding:14px 18px 10px"><span style="font-size:22px;font-weight:bold;letter-spacing:2px;color:${COR_ARPURO}">ARPURO</span>
+      <span style="font-size:13px;color:#64748b;white-space:nowrap">&nbsp;Climatização e Ventilação</span>
+      <div style="font-size:14px;color:#334155;margin-top:4px">${e(subtitulo)}</div></td></tr></table>`;
+}
+
 // ---------- Artigos (stock do armazém da climatização, vindo do PHC) ----------
 // disponível = stock − reservado em FO abertas no PHC − ainda em guias abertas no PHC
 //              − reservado em folhas da plataforma − em guias abertas da plataforma

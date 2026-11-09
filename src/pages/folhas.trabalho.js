@@ -513,9 +513,8 @@ function relatorioHtml(f, assinaturaSrc) {
   const th = 'style="font-family:Arial,Helvetica,sans-serif;text-align:left;padding:6px 4px;border-bottom:1px solid #cbd5e1;font-size:13px;color:#475569"';
   const td = 'style="font-family:Arial,Helvetica,sans-serif;padding:6px 4px;border-bottom:1px solid #e2e8f0;font-size:14px;vertical-align:top"';
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
-  <div style="background:#008080;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:18px;font-weight:bold">Arpuro Climatização</div>
-    <div style="font-size:14px">Relatório de intervenção · ${e(f.numero)}</div></div>
-  <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px">
+  ${cabecalhoEmail('Relatório de intervenção · ' + f.numero)}
+  <div style="padding:16px 18px">
   <p style="margin:0 0 12px;padding:8px 10px;background:#fef9c3;border-radius:6px;font-size:13px;color:#713f12"><b>Documento informativo, para conferência.</b>
     Os tempos e os materiais aqui indicados são provisórios e podem ser ajustados na conferência final, antes da faturação. Este documento não substitui a fatura.</p>
   <table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;font-size:14px;margin-bottom:12px">
@@ -646,9 +645,8 @@ function avisoAgendamentoHtml(f, reagendar) {
   const e = esc;
   const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
-  <div style="background:#008080;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0"><div style="font-size:18px;font-weight:bold">Arpuro Climatização</div>
-    <div style="font-size:14px">${reagendar ? 'Intervenção reagendada' : 'Intervenção agendada'} · ${e(f.numero)}</div></div>
-  <div style="border:1px solid #e2e8f0;border-top:0;padding:16px 18px;border-radius:0 0 8px 8px;font-size:14px">
+  ${cabecalhoEmail((reagendar ? 'Intervenção reagendada' : 'Intervenção agendada') + ' · ' + f.numero)}
+  <div style="padding:16px 18px;font-size:14px">
   <p style="margin:0 0 12px">Informamos que a intervenção ${reagendar ? 'foi reagendada' : 'está agendada'} para <b>${e(quando)}</b> (hora prevista de chegada).</p>
   <table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;font-size:14px">
     <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Cliente</td><td>${e(f.clienteNome)}</td></tr>
