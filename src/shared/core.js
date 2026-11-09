@@ -199,6 +199,7 @@ const ICONES = {
   agenda: '<svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zM5 9h14v11H5zm2 2v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2z"/></svg>',
   folhas: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5zM8 12v2h8v-2zm0 4v2h8v-2z"/></svg>',
   clientes: '<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg>',
+  orcamentos: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1.5V8h4.5zM9 12v1.6h8V12zm0 4v1.6h8V16zm0-8v1.6h4V8z"/></svg>',
   faturacao: '<svg viewBox="0 0 24 24"><path d="M5 2h14v20l-2.5-1.5L14 22l-2-1.5L10 22l-2.5-1.5L5 22zm3 5v1.6h8V7zm0 4v1.6h8V11zm0 4v1.6h5V15z"/></svg>',
   contratos: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1v5h5M9 12h8v1.5H9zm0 3h8v1.5H9zm0 3h5v1.5H9z"/></svg>',
   guias: '<svg viewBox="0 0 24 24"><path d="M1 5h13v11H1zm14 4h4l4 4v3h-8zM5 19.5a2 2 0 1 1 0-.01zm13 0a2 2 0 1 1 0-.01z"/></svg>',
@@ -210,6 +211,7 @@ const MENU = [
   { id: 'guias', label: 'Guias', perfis: ['master', 'backoffice', 'tecnico'] },
   { id: 'contratos', label: 'Contratos', perfis: ['master', 'backoffice'] },
   { id: 'clientes', label: 'Clientes', perfis: ['master', 'backoffice'] },
+  { id: 'orcamentos', label: 'Orçamentos', curto: 'Orçam.', perfis: ['master'] },
   { id: 'faturacao', label: 'Faturação', perfis: ['master'] },
   { id: 'utilizadores', label: 'Utilizadores', curto: 'Utiliz.', perfis: ['master'] },
 ];

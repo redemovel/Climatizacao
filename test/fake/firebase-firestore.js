@@ -172,7 +172,13 @@ const negar = (m) => { throw erro('permission-denied', 'Missing or insufficient 
 
 function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   const s = sessaoAtual(dbRaw);
+  if (colecao === 'propostas') {
+    if (!consulta && id && id.length === 32) return;
+    if (s.perfil === 'master') return;
+    negar('propostas: só pelo link');
+  }
   if (!s.uid) negar('sem sessão');
+  if (colecao === 'orcamentos') { if (s.perfil === 'master') return; negar('orçamentos só master'); }
   if (colecao === 'config') { if (s.perfil === 'master') return; negar('config só master'); }
   if (colecao === 'colaboradores') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('colaboradores'); }
   if (colecao === 'artigos' || colecao === 'listas') { if (s.perfil) return; negar(colecao); }
@@ -203,7 +209,19 @@ function regraLer(dbRaw, colecao, id, docRaw, consulta) {
 function regraEscrever(dbRaw, path, antes, depois) {
   const s = sessaoAtual(dbRaw);
   const [colecao, id] = path.split('/');
+  if (colecao === 'propostas') {
+    if (s.perfil === 'master') return;
+    if (!antes || !depois || id.length !== 32) negar('propostas: só o master cria');
+    const mud = Object.keys({ ...antes, ...depois }).filter((k) => JSON.stringify(antes[k]) !== JSON.stringify(depois[k]));
+    if (mud.length === 1 && mud[0] === 'vistoEm' && !antes.vistoEm) return;
+    const ok = ['estado', 'respostaNome', 'respostaNota', 'respostaNE', 'respondidoEm', 'notificar'];
+    if (antes.estado !== 'Enviado') negar('proposta já respondida');
+    if (antes.validade && antes.validade.toMillis() < Date.now()) negar('proposta expirada');
+    if (!mud.every((k) => ok.includes(k)) || !['Aceite', 'Rejeitado'].includes(depois.estado) || typeof depois.respostaNome !== 'string' || depois.respostaNome.length < 2 || depois.notificar !== 'sim') negar('resposta inválida');
+    return;
+  }
   if (!s.perfil) negar('sem perfil ativo');
+  if (colecao === 'orcamentos') { if (s.perfil !== 'master') negar('orçamentos só master'); return; }
   const staff = STAFF.includes(s.perfil);
   if (colecao === 'utilizadores') {
     if (s.perfil !== 'master') negar('só master gere utilizadores');
@@ -252,7 +270,8 @@ function regraEscrever(dbRaw, path, antes, depois) {
   }
   if (colecao === 'emails') {
     if (antes || !depois) negar('emails só se criam');
-    if (!['relatorio', 'agendamento'].includes(depois.tipo) || depois.estado !== 'Pendente' || !/^[^@ ,;]+@[^@ ,;]+[.][^@ ,;]+$/.test(depois.para || '') || depois.criadoPor !== s.uid) negar('email inválido');
+    if (depois.tipo === 'orcamento' && s.perfil !== 'master') negar('email de orçamento só master');
+    if (!['relatorio', 'agendamento', 'orcamento'].includes(depois.tipo) || depois.estado !== 'Pendente' || !/^[^@ ,;]+@[^@ ,;]+[.][^@ ,;]+$/.test(depois.para || '') || depois.criadoPor !== s.uid) negar('email inválido');
     if (staff) return;
     const fo = dbRaw['folhas/' + depois.folhaId];
     if (s.perfil === 'tecnico' && depois.tipo === 'relatorio' && fo && fo.tecnicoUid === s.uid) return;

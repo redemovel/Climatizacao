@@ -2613,7 +2613,19 @@ class Motor
                 d.Data("enviadoEm", DateTime.Now);
                 List<Documento> docs = new List<Documento> { d };
                 fs.Gravar("emails", docs);
-                if (folhaId != "")
+                string orcId = Firestore.Valor(c, "orcamentoId");
+                if (Firestore.Valor(c, "tipo") == "orcamento" && orcId != "")
+                {
+                    // orçamento enviado ao cliente: estado do envio no próprio orçamento
+                    Documento o = new Documento();
+                    o.Id = orcId;
+                    Documento m = new Documento();
+                    m.Texto("para", para); m.Texto("estado", estado); m.Texto("erro", erro); m.Texto("emailId", e.Key); m.Data("em", DateTime.Now);
+                    o.Mapa("envio", m);
+                    fs.Gravar("orcamentos", new List<Documento> { o });
+                    ContarEscritas(1);
+                }
+                else if (folhaId != "")
                 {
                     Documento f = new Documento();
                     f.Id = folhaId;
@@ -2641,7 +2653,53 @@ class Motor
         CicloFolhas();
         CicloArtigos();
         CicloEmails();
+        CicloPropostas();
         CicloDuracoes(false);
+    }
+
+    // ---- respostas dos clientes às propostas (página pública): passa a resposta para o orçamento e avisa por email
+    public int CicloPropostas()
+    {
+        if (cfg.Simular) return 0;
+        int n = 0;
+        try
+        {
+            if (fs == null) fs = new Firestore(cfg);
+            foreach (KeyValuePair<string, Dictionary<string, object>> e in fs.Consultar("propostas", "notificar", "sim", 20))
+            {
+                Dictionary<string, object> c = e.Value;
+                string orcId = Firestore.Valor(c, "orcamentoId"), estado = Firestore.Valor(c, "estado"), numero = Firestore.Valor(c, "numero");
+                string nome = Firestore.Valor(c, "respostaNome"), nota = Firestore.Valor(c, "respostaNota"), ne = Firestore.Valor(c, "respostaNE");
+                if (orcId != "" && (estado == "Aceite" || estado == "Rejeitado"))
+                {
+                    Documento o = new Documento();
+                    o.Id = orcId;
+                    o.Texto("estado", estado);
+                    o.Texto("respostaNome", nome); o.Texto("respostaNota", nota); o.Texto("respostaNE", ne);
+                    o.Data("respondidoEm", DateTime.Now);
+                    fs.Gravar("orcamentos", new List<Documento> { o });
+                    string avisar = cfg.Get("EmailAvisos", cfg.Get("EmailCopiaOculta", ""));
+                    if (cfg.GetBool("EnviarEmails", false) && avisar != "")
+                    {
+                        string cli = Firestore.Valor(c, "clienteNome");
+                        string assunto = "Proposta " + numero + " " + (estado == "Aceite" ? "ACEITE" : "rejeitada") + " - " + cli;
+                        string txt = "A proposta " + numero + " (" + cli + ") foi " + (estado == "Aceite" ? "ACEITE" : "rejeitada") + " por " + nome + "." +
+                            (ne != "" ? "\nNota de encomenda: " + ne : "") + (nota != "" ? "\nObservacoes: " + nota : "") + "\n\nVeja em Orcamentos na plataforma.";
+                        try { Correio.Enviar(cfg, avisar, assunto, "<pre style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px\">" + System.Net.WebUtility.HtmlEncode(txt) + "</pre>", txt); }
+                        catch (Exception ex) { Log.Erro("Aviso da proposta " + numero + " nao enviado: " + ex.Message); }
+                    }
+                    Log.Info("Proposta " + numero + " " + estado + " por " + nome + ".");
+                }
+                Documento p = new Documento();
+                p.Id = e.Key;
+                p.Texto("notificar", "nao");
+                fs.Gravar("propostas", new List<Documento> { p });
+                ContarEscritas(2);
+                n++;
+            }
+        }
+        catch (Exception e) { Log.Erro("Falha ao ver respostas as propostas: " + e.Message); }
+        return n;
     }
 
     // ---- duração real das intervenções (mediana dos últimos 24 meses), uma vez por dia → listas/duracoes
@@ -2964,7 +3022,7 @@ class Servico : ServiceBase
                         for (int i = 0; i < verificar * 2 && !parar && DateTime.Now < fim; i++) Thread.Sleep(500);
                         if (parar) break;
                         if (m.HaPedidoSincronizar()) { m.CicloCompleto(); m.ConcluirPedido(); }
-                        else m.CicloEmails();
+                        else { m.CicloEmails(); m.CicloPropostas(); }
                     }
                 }
             }
@@ -3173,6 +3231,8 @@ static class Programa
                 int nf = m.CicloFolhas();
                 int na = m.CicloArtigos();
                 int ne = m.CicloEmails();
+                int np = m.CicloPropostas();
+                if (np > 0) Console.WriteLine(np + " respostas a propostas.");
                 if (cfg.GetBool("EnviarEmails", false)) Console.WriteLine(ne + " emails enviados.");
                 if (cfg.GetBool("ImportarArtigos", false)) Console.WriteLine(((cfg.Simular || cfg.GetBool("SimularArtigos", false)) ? "SIMULACAO: " : "") + na + " artigos com alteracoes.");
                 bool simF = cfg.Simular || cfg.GetBool("SimularFolhas", false);

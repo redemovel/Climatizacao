@@ -130,6 +130,23 @@ function gerar() {
   db['folhas/phc-' + ano + '-1785/privado/phc'] = { totalVenda: 958.8,
     linhas: [{ ref: 'ST2', descricao: 'Serviço Técnico (Equipa)', qtd: 8, preco: 40.8, total: 326.4 }],
     valorHora: [{ data: ts(dia(-3, 0)), horas: 8, tipoIntervencao: 'Manutenção', tipoTecnico: 'Técnico-Técnico', preco: 40.8, total: 326.4 }] };
+  // orçamentos: fo027 parada à espera de orçamento; ORC-0001 enviado (proposta pública); tabela de preço/hora
+  db['folhas/fo027'].pendencia = { ...db['folhas/fo027'].pendencia, motivo: 'Orçamento', nota: 'Trocar placa eletrónica da unidade exterior' };
+  db['config/precosHora'] = { linhas: [{ tipo: 'Assistência Técnica', composicao: 'Técnico', tecnicos: 1, ajudantes: 0, aprendizes: 0, preco: 34 }], primeiraHora: 20, segundaHora: 10, fimDeSemana: 100 };
+  db['artigos/PLACA1/privado/custo'] = { custo: 100 };
+  const COD = 'Ab3dEf6hJk9mNp2qRs5tUv8wXy4zAb7c';
+  const linhasO = [{ id: 'l1', tipo: 'livre', ref: '', artigoId: '', descricao: 'Substituição de compressor', qtd: 1, unidade: 'un', preco: 850, desconto: 0, custo: 520 },
+    { id: 'l2', tipo: 'mo', ref: 'MO', artigoId: '', descricao: 'Mão de obra — Técnico', qtd: 4, unidade: 'h', preco: 34, desconto: 0, custo: null }];
+  db['orcamentos/o1'] = { numero: `ORC-${ano}-0001`, estado: 'Enviado', codigo: COD, clienteId: clientes[2].id, clienteNome: clientes[2].nome, clienteNif: clientes[2].nif, clienteEmail: 'compras@cliente.pt',
+    morada: clientes[2].morada, codigoPostal: clientes[2].cp, localidade: clientes[2].loc, assunto: 'Substituição do compressor da UE da cozinha', introducao: '', linhas: linhasO, ivaTaxa: 23,
+    validadeDias: 30, validade: ts(dia(25, 0)), condicoes: 'Validade: 30 dias.', notasInternas: '', folhaId: '', folhaNumero: '', total: 1213.62, enviadoPara: 'compras@cliente.pt', enviadoEm: ts(dia(-5, 10)),
+    pesquisa: tokens(`ORC-${ano}-0001`, clientes[2].nome), criadoEm: ts(dia(-5, 9)), criadoPor: 'u-master', criadoPorNome: 'Ricardo Bastos' };
+  db['propostas/' + COD] = { orcamentoId: 'o1', numero: `ORC-${ano}-0001`, estado: 'Enviado', clienteNome: clientes[2].nome, clienteNif: clientes[2].nif, morada: clientes[2].morada, codigoPostal: clientes[2].cp,
+    localidade: clientes[2].loc, assunto: 'Substituição do compressor da UE da cozinha', introducao: '', condicoes: 'Validade: 30 dias.', ivaTaxa: 23,
+    linhas: linhasO.map((l) => ({ ref: '', descricao: l.descricao, qtd: l.qtd, unidade: l.unidade, preco: l.preco, desconto: 0 })), validade: ts(dia(25, 0)), data: ts(dia(-5, 10)), notificar: 'nao' };
+  const COD2 = 'Zz3dEf6hJk9mNp2qRs5tUv8wXy4zAb7c';
+  db['propostas/' + COD2] = { ...db['propostas/' + COD], orcamentoId: 'o2', numero: `ORC-${ano}-0002`, validade: ts(dia(-1, 0)) };
+  db['contadores/orcamentos-' + ano] = { valor: 2 };
   // duração real (PontePHC): cli006 em Instalação 3 h (4 intervenções); por tipo AT 1,5 h
   db['listas/duracoes'] = { porTipo: { AT: { h: 1.5, n: 40 }, 'Manutenção': { h: 2, n: 30 }, 'Instalação': { h: 5, n: 12 } },
     porCliente: { cli006: { 'Instalação': { h: 3, n: 4 } } }, folhas: 82 };

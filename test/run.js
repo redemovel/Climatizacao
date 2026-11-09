@@ -21,7 +21,7 @@ const SO = (args.find((a) => a.startsWith('--so=')) || '').slice(5);
 const CAPTURAS = args.includes('--capturas');
 const DIR_CAP = path.join(__dirname, 'capturas');
 const INDICES = JSON.parse(fs.readFileSync(path.join(ROOT, 'firestore.indexes.json'), 'utf8')).indexes;
-const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'faturacao', 'utilizadores'];
+const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'orcamentos', 'faturacao', 'utilizadores', 'proposta'];
 
 // ---------- 1 e 2: build + sintaxe ----------
 execFileSync('node', [path.join(ROOT, 'build.js')], { stdio: 'inherit' });
@@ -161,7 +161,7 @@ teste('sessão: sem login, páginas internas redirecionam para o login', async (
 // =====================================================================
 // MENU POR PERFIL
 // =====================================================================
-for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'contratos', 'clientes', 'faturacao', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'contratos', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
+for (const [quem, menus] of [['master', ['agenda', 'folhas', 'guias', 'contratos', 'clientes', 'orcamentos', 'faturacao', 'utilizadores']], ['backoffice', ['agenda', 'folhas', 'guias', 'contratos', 'clientes']], ['tecnico1', ['agenda', 'folhas', 'guias']]]) {
   teste(`menu: ${quem} vê ${menus.join(', ')}`, async () => {
     const { ctx, page } = await contexto();
     await entrar(page, quem);
@@ -1356,6 +1356,113 @@ teste('agenda: o técnico não tem a vista Equipa; nova folha sugere a duração
   await p2.waitForFunction(() => document.querySelector('#ffDur').value === '1.5');
   assert((await p2.textContent('#ffDurDica')).includes('40 intervenções'), 'mediana do tipo');
   semErros(p2); await c2.close();
+});
+
+// =====================================================================
+// ORÇAMENTOS E PROPOSTA PÚBLICA
+// =====================================================================
+teste('orçamentos: do pedido da folha ao envio (artigo, mão de obra, linha livre; margem só aqui), em 375 e 414', async () => {
+  for (const vp of MOVEIS) {
+    const { ctx, page } = await contexto({ viewport: vp });
+    await entrar(page, 'master');
+    await page.goto(BASE + '/orcamentos.html');
+    await page.waitForFunction(() => document.querySelector('#nPedidos').textContent === '1');
+    await page.waitForSelector('#lista a[data-id="o1"]');
+    await semOverflow(page, 'orçamentos lista ' + vp.width);
+    await page.click('#sep [data-s="pedidos"]');
+    await page.click('[data-pedido="fo027"]');
+    await page.waitForSelector('#oAssunto');
+    assert((await page.inputValue('#oNotas')).includes('Trocar placa'), 'nota do técnico');
+    await page.click('#oMaisMO');
+    await page.fill('#mHoras', '3');
+    await page.click('#mOk');
+    await page.click('#oMaisLivre');
+    await page.fill('[data-l="1"] [data-k=descricao]', 'Placa eletrónica da unidade exterior');
+    await page.fill('[data-l="1"] [data-k=preco]', '180');
+    await page.fill('[data-l="1"] [data-k=custo]', '100');
+    await page.waitForFunction(() => document.querySelector('#oTotal').textContent.includes('346,86'));
+    await semOverflow(page, 'orçamento editor ' + vp.width);
+    await captura(page, 'orcamento-editor-' + vp.width);
+    await page.click('#oGuardar');
+    await page.waitForSelector('#detNumero');
+    const num = (await page.textContent('#detNumero')).trim();
+    assert(/^ORC-\d{4}-000[34]$/.test(num), 'numeração ' + num);
+    assert((await page.textContent('#detMargem')).includes('margem'), 'margem para o Master');
+    const id = new URLSearchParams(new URL(page.url()).search).get('id');
+    igual((await fake(page, () => window.__fake.doc('folhas/fo027'))).orcamentoNumero, num, 'folha ligada ao orçamento');
+    await page.click('#btnEnviar');
+    await page.fill('#eEmail', 'cliente@exemplo.pt');
+    await page.click('#eOk');
+    await page.waitForFunction(() => document.querySelector('#detEstado') && document.querySelector('#detEstado').textContent === 'Enviado');
+    const db = await fake(page, () => window.__fake.db());
+    const o = db['orcamentos/' + id];
+    igual(o.codigo.length, 32, 'código do link');
+    const p = db['propostas/' + o.codigo];
+    igual(p.estado, 'Enviado', 'proposta pública');
+    assert(!JSON.stringify(p).includes('custo'), 'proposta sem custos');
+    assert(Object.values(db).some((x) => x && x.tipo === 'orcamento' && x.orcamentoId === id && x.html.includes('.html?c=' + o.codigo)), 'email com o link');
+    await semOverflow(page, 'orçamento detalhe ' + vp.width);
+    await captura(page, 'orcamento-detalhe-' + vp.width);
+    semErros(page); await ctx.close();
+  }
+});
+
+teste('proposta pública: o cliente (sem conta) vê, aceita com NE; o Master vê a resposta e cria a folha', async () => {
+  const COD = 'Ab3dEf6hJk9mNp2qRs5tUv8wXy4zAb7c';
+  for (const vp of MOVEIS) {
+    const { ctx, page } = await contexto({ viewport: vp });
+    await page.goto(BASE + '/proposta.html?c=' + COD);
+    await page.waitForSelector('#btnAceitar');
+    { const tx = await page.textContent('#prop'); assert(tx.includes('212,78'), 'total com IVA: ' + tx.slice(0, 600)); }
+    await semOverflow(page, 'proposta ' + vp.width);
+    await captura(page, 'proposta-publica-' + vp.width);
+    if (vp === MOVEIS[0]) { semErros(page); await ctx.close(); continue; }
+    await page.click('#btnAceitar');
+    await page.fill('#rNome', 'Maria Sousa');
+    await page.fill('#rNE', 'NE 2026/77');
+    await page.click('#rEnviar');
+    await page.waitForSelector('#rErro:has-text("Confirme")');
+    await page.check('#rOk');
+    await page.click('#rEnviar');
+    await page.waitForSelector('.prop-estado.ok');
+    const p = await fake(page, (c) => window.__fake.doc('propostas/' + c), COD);
+    igual(p.estado, 'Aceite', 'aceite'); igual(p.respostaNE, 'NE 2026/77', 'NE'); igual(p.notificar, 'sim', 'a PontePHC avisa');
+    assert(p.vistoEm, 'visto');
+    // o Master (no mesmo navegador, para ver a mesma base simulada): a resposta passa para o orçamento; cria a folha
+    await entrar(page, 'master');
+    await page.goto(BASE + '/orcamentos.html?id=o1');
+    await page.waitForSelector('#detResposta');
+    assert((await page.textContent('#detResposta')).includes('NE 2026/77'), 'resposta do cliente');
+    await page.click('#btnCriarFolha');
+    await page.click('#cOk');
+    await page.waitForSelector('#detFolha');
+    const o = await fake(page, () => window.__fake.doc('orcamentos/o1'));
+    const f = await fake(page, (k) => window.__fake.doc('folhas/' + k), o.folhaId);
+    igual(f.estado, 'Por agendar', 'folha por agendar'); igual(f.orcamentoId, 'o1', 'ligada ao orçamento'); igual(f.duracaoPrevista, 4, 'duração = horas de MO');
+    semErros(page); await ctx.close();
+  }
+  // proposta expirada: sem botões
+  const { ctx: c3, page: p3 } = await contexto();
+  await p3.goto(BASE + '/proposta.html?c=Zz3dEf6hJk9mNp2qRs5tUv8wXy4zAb7c');
+  await p3.waitForSelector('.prop-estado');
+  assert(!(await p3.$('#btnAceitar')), 'expirada não se aceita');
+  semErros(p3); await c3.close();
+});
+
+teste('orçamentos: só o Master (backoffice e técnico não leem; a proposta não se lista)', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'backoffice');
+  await page.goto(BASE + '/orcamentos.html');
+  await page.waitForSelector('text=Não tem acesso a esta página.');
+  const r = await page.evaluate(async () => {
+    const out = {};
+    try { await window.__fake.lerComoUtilizador('orcamentos/o1'); out.o = 'lido'; } catch (e) { out.o = e.code; }
+    try { await window.__fake.atualizarComoUtilizador('propostas/Ab3dEf6hJk9mNp2qRs5tUv8wXy4zAb7c', { linhas: [] }); out.p = 'ok'; } catch (e) { out.p = e.code; }
+    return out;
+  });
+  igual(r.o, 'permission-denied', 'backoffice não lê orçamentos');
+  igual(r.p, 'permission-denied', 'não altera a proposta');
+  semErros(page); await ctx.close();
 });
 
 // =====================================================================

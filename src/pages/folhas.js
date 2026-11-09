@@ -246,6 +246,7 @@ function renderDetalhe() {
       ${pend ? `<div class="pendencia" id="pendencia"><b>Pendente — ${esc(pend.motivo)}</b>${pend.nota ? `<div>${esc(pend.nota)}</div>` : ''}
         <div class="muted">${esc(pend.nome || '')}, ${esc(fmtDataHora(pend.em))}${pend.reverEm ? ` · rever em ${esc(fmtData(pend.reverEm))}` : ''}</div></div>` : ''}
       ${f.estado === 'Faturada' && f.numeroFatura ? `<p class="muted" style="margin-top:0">Fatura ${esc(f.numeroFatura)}</p>` : ''}
+      ${f.orcamentoId && sessao.perfil === 'master' ? `<p class="muted" style="margin-top:0">Orçamento <a href="${pagina('orcamentos', { id: f.orcamentoId })}" id="detOrc">${esc(f.orcamentoNumero || '')}</a></p>` : ''}
       ${f.ne ? `<p class="muted" style="margin-top:0" id="detNE">Nota de encomenda ${esc(f.ne.numero)}${f.ne.data ? ' de ' + esc(fmtData(f.ne.data)) : ''}</p>` : ''}
       ${['Agendada', 'Em curso', 'Pendente'].includes(f.estado) && (f.avisoEnviado || f.avisoAgendamento) ? `<p class="muted" style="margin-top:0" id="estadoAviso">${f.avisoEnviado
         ? (f.avisoEnviado.estado === 'Enviado' ? `Aviso de agendamento enviado para ${esc(f.avisoEnviado.para)} em ${esc(fmtDataHora(f.avisoEnviado.em))}` : `Aviso de agendamento não enviado (${esc(f.avisoEnviado.erro || 'erro')})`)

@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-07 — faturação: cliente «exige nota de encomenda» (só Master) e NE nas folhas
+// Atualizado: 2026-11-09 — orçamentos (só Master) e propostas públicas (o cliente vê e responde pelo link); agenda Equipa
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -99,6 +99,7 @@ service cloud.firestore {
         // folhas geradas por contrato de manutenção
         && (!('tarefasExtra' in d) || (d.tarefasExtra is list && d.tarefasExtra.size() <= 30))
         && (!('contratoId' in d) || (d.contratoId is string && d.contratoNumero is string))
+        && (!('orcamentoId' in d) || (d.orcamentoId is string && d.orcamentoNumero is string))
         // nota de encomenda do cliente (Master): n.º e data
         && (!('ne' in d) || d.ne == null || (d.ne is map && d.ne.numero is string && d.ne.numero.size() > 0 && d.ne.numero.size() <= 60))
         // Fase 2: trabalho no local (sem preços)
@@ -238,7 +239,7 @@ service cloud.firestore {
 
     // ---------- Emails a enviar (relatório ao cliente): a PontePHC envia pelo Exchange e marca o estado ----------
     function emailValido(d) {
-      return d.tipo in ['relatorio', 'agendamento'] && d.estado == 'Pendente'
+      return d.tipo in ['relatorio', 'agendamento', 'orcamento'] && d.estado == 'Pendente'
         && d.para is string && d.para.matches('^[^@ ,;]+@[^@ ,;]+[.][^@ ,;]+$')
         && d.assunto is string && d.assunto.size() <= 200
         && d.html is string && d.html.size() <= 300000
@@ -250,6 +251,7 @@ service cloud.firestore {
       allow read: if eStaff();
       // técnico: só para folhas suas
       allow create: if emailValido(request.resource.data)
+        && (request.resource.data.tipo != 'orcamento' || eMaster())
         && (eStaff() || (eTecnico() && request.resource.data.tipo == 'relatorio'
             && get(/databases/$(database)/documents/folhas/$(request.resource.data.folhaId)).data.tecnicoUid == request.auth.uid));
       allow update, delete: if false;
@@ -298,6 +300,29 @@ service cloud.firestore {
       match /privado/{doc} {
         allow read, write: if eMaster();
       }
+    }
+
+    // ---------- Orçamentos (preços e custos: só o Master) ----------
+    match /orcamentos/{id} {
+      allow read, write: if eMaster();
+    }
+
+    // ---------- Propostas: cópia do orçamento para o cliente, sem custos, aberta pelo link do email ----------
+    // O id é um código aleatório de 32 caracteres (só quem recebeu o link o conhece). O cliente, sem conta,
+    // só pode marcar que viu e responder (Aceite/Rejeitado) enquanto estiver «Enviado» e dentro da validade.
+    match /propostas/{codigo} {
+      allow get: if codigo.size() == 32;
+      allow list: if eMaster();
+      allow create, delete: if eMaster();
+      allow update: if eMaster()
+        || (codigo.size() == 32 && alterados().hasOnly(['vistoEm']) && !('vistoEm' in resource.data) && request.resource.data.vistoEm == request.time)
+        || (codigo.size() == 32 && resource.data.estado == 'Enviado' && request.time < resource.data.validade
+            && alterados().hasOnly(['estado', 'respostaNome', 'respostaNota', 'respostaNE', 'respondidoEm', 'notificar'])
+            && request.resource.data.estado in ['Aceite', 'Rejeitado']
+            && request.resource.data.respostaNome is string && request.resource.data.respostaNome.size() >= 2 && request.resource.data.respostaNome.size() <= 120
+            && request.resource.data.respostaNota is string && request.resource.data.respostaNota.size() <= 1000
+            && request.resource.data.respostaNE is string && request.resource.data.respostaNE.size() <= 60
+            && request.resource.data.respondidoEm == request.time && request.resource.data.notificar == 'sim');
     }
 
     // ---------- Pedido de sincronização imediata com o PHC (a PontePHC responde) ----------

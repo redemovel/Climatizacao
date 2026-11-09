@@ -332,6 +332,25 @@ try:
         verifica(REC2[0].rcpt_tos == ['rbastos@arpuro.pt'] and 'TESTE' in str(_email.header.make_header(_email.header.decode_header(m['Subject']))), 'modo de teste: vai para rbastos com aviso no assunto')
         c2 = REC2[0].content.decode(errors='ignore'); verifica('assinatura' in c2.lower().split('content-id')[1][:40] if 'content-id' in c2.lower() else False, 'assinatura em anexo inline (cid) ' + c2[c2.lower().find('content-'):][:300])
     verifica(BD['emails/e1']['estado'] == sv('Enviado') and BD['folhas/phc-2026-1785']['relatorioEnviado']['mapValue']['fields']['estado'] == sv('Enviado'), 'email e folha marcados como enviados')
+    # orçamento enviado ao cliente: estado no orçamento; resposta do cliente na página pública → orçamento + aviso por email
+    REC2.clear()
+    ctl2 = Controller(H2(), hostname='127.0.0.1', port=10026); ctl2.start()
+    BD['orcamentos/o1'] = {'numero': sv('ORC-2026-0001'), 'estado': sv('Enviado')}
+    BD['emails/e3'] = {'estado': sv('Pendente'), 'tipo': sv('orcamento'), 'orcamentoId': sv('o1'), 'folhaId': sv(''), 'para': sv('cliente@exemplo.pt'),
+                       'assunto': sv('Proposta ORC-2026-0001'), 'html': sv('<p>Proposta</p>'), 'texto': sv('Proposta'), 'assinaturaPng': sv('')}
+    BD['propostas/' + 'x' * 32] = {'orcamentoId': sv('o1'), 'numero': sv('ORC-2026-0001'), 'clienteNome': sv('Cliente X'), 'estado': sv('Aceite'),
+                                   'respostaNome': sv('Maria Sousa'), 'respostaNota': sv('Pode ser na próxima semana'), 'respostaNE': sv('NE 55'), 'notificar': sv('sim')}
+    open(os.path.join(d, 'PontePHC.ini'), 'a').write('\nEmailAvisos=rbastos@arpuro.pt\n')
+    cod, out = ponte('/sincronizar')
+    ctl2.stop()
+    o1 = BD['orcamentos/o1']
+    verifica(o1.get('envio', {}).get('mapValue', {}).get('fields', {}).get('estado') == sv('Enviado'), 'orçamento marcado como enviado')
+    verifica(o1['estado'] == sv('Aceite') and o1.get('respostaNome') == sv('Maria Sousa') and o1.get('respostaNE') == sv('NE 55'), 'resposta do cliente passa para o orçamento')
+    verifica(BD['propostas/' + 'x' * 32]['notificar'] == sv('nao'), 'proposta marcada como tratada')
+    assuntos = [str(_email.header.make_header(_email.header.decode_header(_email.message_from_bytes(r.content)['Subject']))) for r in REC2]
+    verifica(any('ACEITE' in a for a in assuntos), 'aviso por email da proposta aceite: ' + str(assuntos))
+    cod, out = ponte('/sincronizar')
+    verifica('respostas a propostas' not in out, 'não volta a tratar a mesma resposta')
     cfg = open(os.path.join(d, 'PontePHC.ini')).read().replace('EnviarEmails=1', 'EnviarEmails=0'); open(os.path.join(d, 'PontePHC.ini'), 'w').write(cfg)
 except ImportError:
     print('  (aiosmtpd não instalado: teste de emails ignorado)')

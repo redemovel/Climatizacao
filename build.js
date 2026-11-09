@@ -14,8 +14,8 @@ const path = require('path');
 const ROOT = __dirname;
 const SRC = path.join(ROOT, 'src');
 // módulos de outra página que também entram nesta (ex.: o aviso de agendamento é usado na Agenda)
-const PARTILHADOS = { agenda: ['folhas.aviso.js'] };
-const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'faturacao', 'utilizadores'];
+const PARTILHADOS = { agenda: ['folhas.aviso.js'], orcamentos: ['proposta.doc.js'] };
+const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'orcamentos', 'faturacao', 'utilizadores', 'proposta'];
 
 const args = process.argv.slice(2);
 let envs = ['prod', 'dev'];
