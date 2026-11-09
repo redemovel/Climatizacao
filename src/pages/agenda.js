@@ -11,7 +11,9 @@ try { mostrarConcl = localStorage.getItem('agenda.concluidas') === '1'; } catch 
 const sessao = await iniciarPagina({ perfis: ['master', 'backoffice', 'tecnico'] });
 const staff = ehStaff(sessao.perfil);
 
+if (!staff && vista === 'equipa') vista = 'dia';
 if (staff) {
+  $('#vEquipa').classList.remove('oculto');
   $('#barraTec').classList.remove('oculto');
   try {
     const tecs = await carregarTecnicos();
@@ -25,14 +27,17 @@ if (staff) {
 }
 
 function intervalo() {
-  const ini = vista === 'dia' ? inicioDia(base) : inicioSemana(base);
-  return { ini, fim: addDias(ini, vista === 'dia' ? 1 : 7) };
+  const ini = vista === 'semana' ? inicioSemana(base) : inicioDia(base);
+  return { ini, fim: addDias(ini, vista === 'semana' ? 7 : 1) };
 }
 
 function marcarVista() {
   $$('#segVista button').forEach((b) => b.classList.toggle('ativo', b.dataset.v === vista));
   const { ini, fim } = intervalo();
-  $('#periodo').textContent = vista === 'dia'
+  $('#barraTec').classList.toggle('oculto', !staff || vista === 'equipa');
+  $('#lista').classList.toggle('oculto', vista === 'equipa');
+  $('#equipa').classList.toggle('oculto', vista !== 'equipa');
+  $('#periodo').textContent = vista !== 'semana'
     ? fmtDiaSemana(ini)
     : `${fmtData(ini, { day: 'numeric', month: 'short' })} – ${fmtData(addDias(fim, -1), { day: 'numeric', month: 'short' })}`;
 }
@@ -69,7 +74,7 @@ async function carregar(mais = false) {
   if (!mais) carregarAtrasos();
   if (!mais) { itens = []; cursor = null; $('#lista').innerHTML = '<div class="vazio">A carregar…</div>'; }
   const { ini, fim } = intervalo();
-  const tec = staff ? filtroTec : sessao.uid;
+  const tec = staff ? (vista === 'equipa' ? '' : filtroTec) : sessao.uid;
   const c = [];
   if (tec) c.push(where('tecnicoUid', '==', tec));
   if (!mostrarConcl) c.push(where('estado', 'in', ESTADOS_ABERTOS));   // agenda = trabalho por fazer
@@ -108,6 +113,7 @@ function cartao(f, comData = false) {
 }
 
 function render() {
+  if (vista === 'equipa') { renderEquipa(); return; }
   const { ini } = intervalo();
   const dias = vista === 'dia' ? 1 : 7;
   const hoje = isoLocal(new Date());
@@ -127,7 +133,7 @@ function render() {
 }
 
 const abrirCartao = (ev) => {
-  if (ev.target.closest('[data-ext]')) return;
+  if (ev.target.closest('[data-ext]') || ev.target.closest('[data-mover]')) return;
   const it = ev.target.closest('[data-id]');
   if (it) location.href = pagina('folhas', { id: it.dataset.id });
 };
@@ -144,8 +150,8 @@ $('#mostrarConcl').onchange = () => {
   try { localStorage.setItem('agenda.concluidas', mostrarConcl ? '1' : '0'); } catch (e) { /* sem storage */ }
   carregar();
 };
-$('#ant').onclick = () => { base = addDias(base, vista === 'dia' ? -1 : -7); carregar(); };
-$('#seg').onclick = () => { base = addDias(base, vista === 'dia' ? 1 : 7); carregar(); };
+$('#ant').onclick = () => { base = addDias(base, vista === 'semana' ? -7 : -1); carregar(); };
+$('#seg').onclick = () => { base = addDias(base, vista === 'semana' ? 7 : 1); carregar(); };
 $('#hoje').onclick = () => { base = inicioDia(new Date()); carregar(); };
 $('#btnMais').onclick = () => comBotao($('#btnMais'), () => carregar(true));
 

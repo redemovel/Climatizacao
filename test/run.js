@@ -1280,6 +1280,85 @@ teste('clientes: pesquisa por siglas («M. D.», «MDA») e início do nome', as
 });
 
 // =====================================================================
+// AGENDA — VISTA EQUIPA E DURAÇÃO REAL
+// =====================================================================
+teste('agenda equipa: grelha por técnico, ocupação, agendar da lista «Por agendar» e mover (⇄), em 375 e 414', async () => {
+  for (const vp of MOVEIS) {
+    const { ctx, page } = await contexto({ viewport: vp });
+    await entrar(page, 'backoffice');
+    await page.evaluate(() => { try { localStorage.setItem('agenda.vista', 'equipa'); } catch (e) {} });
+    await page.goto(BASE + '/agenda.html');
+    await page.waitForSelector('.eq-coluna[data-tec="u-tec1"] .eq-bloco');
+    igual(await page.$$eval('.eq-coluna[data-tec="u-tec1"] .eq-bloco', (l) => l.length), 3, 'João: 3 trabalhos hoje');
+    assert((await page.textContent('.eq-coluna[data-tec="u-tec1"] .eq-cab')).includes('/ 8 h'), 'ocupação');
+    await page.waitForSelector('[data-agendar="fo028"]');
+    await semOverflow(page, 'equipa ' + vp.width);
+    await captura(page, 'agenda-equipa-' + vp.width);
+    // agendar a fo028 (Instalação do cli006): duração real do cliente = 3 h
+    await page.click('[data-agendar="fo028"]');
+    await page.waitForSelector('#mTec');
+    igual(await page.inputValue('#mDur'), '3', 'duração real do cliente');
+    await page.selectOption('#mTec', 'u-tec2');
+    await page.fill('#mHora', '16:00');
+    await page.check('#mSem');
+    await captura(page, 'agenda-agendar-' + vp.width);
+    await page.click('#mOk');
+    await page.waitForSelector('.eq-coluna[data-tec="u-tec2"] .eq-bloco[data-id="fo028"]');
+    const f = await fake(page, () => window.__fake.doc('folhas/fo028'));
+    igual(f.estado, 'Agendada', 'agendada'); igual(f.tecnicoUid, 'u-tec2', 'técnico'); igual(f.duracaoPrevista, 3, 'duração');
+    igual(new Date(f.dataPrevista.toMillis ? f.dataPrevista.toMillis() : f.dataPrevista.seconds * 1000).getHours(), 16, 'hora');
+    // mover a fo002 (João 11h) para o Pedro, com aviso ao cliente
+    await page.click('[data-mover="fo002"]');
+    await page.selectOption('#mTec', 'u-tec2');
+    await page.fill('#mEmail', 'cliente@exemplo.pt');
+    await page.click('#mOk');
+    await page.waitForSelector('.eq-coluna[data-tec="u-tec2"] .eq-bloco[data-id="fo002"]');
+    const db = await fake(page, () => window.__fake.db());
+    assert(Object.values(db).some((x) => x && x.tipo === 'agendamento' && x.folhaId === 'fo002' && x.para === 'cliente@exemplo.pt'), 'aviso de reagendamento');
+    igual(db['folhas/fo002'].estado, 'Agendada', 'continua agendada');
+    semErros(page); await ctx.close();
+  }
+});
+
+teste('agenda equipa: arrastar um trabalho para outro técnico e hora (computador)', async () => {
+  const { ctx, page } = await contexto({ viewport: { width: 1280, height: 900 } });
+  await entrar(page, 'master');
+  await page.evaluate(() => { try { localStorage.setItem('agenda.vista', 'equipa'); } catch (e) {} });
+  await page.goto(BASE + '/agenda.html');
+  await page.waitForSelector('.eq-bloco[data-id="fo004"]');
+  const alvo = await page.$('.eq-corpo[data-tec="u-tec1"]');
+  const bb = await alvo.boundingBox();
+  await page.dragAndDrop('.eq-bloco[data-id="fo004"]', '.eq-corpo[data-tec="u-tec1"]', { targetPosition: { x: 20, y: 44 * (13 - 7) + 2 } });
+  await page.waitForSelector('#mTec');
+  igual(await page.inputValue('#mTec'), 'u-tec1', 'técnico da coluna');
+  igual(await page.inputValue('#mHora'), '13:00', 'hora onde largou');
+  await page.check('#mSem');
+  await page.click('#mOk');
+  await page.waitForSelector('.eq-coluna[data-tec="u-tec1"] .eq-bloco[data-id="fo004"]');
+  await captura(page, 'agenda-equipa-1280');
+  semErros(page); await ctx.close();
+});
+
+teste('agenda: o técnico não tem a vista Equipa; nova folha sugere a duração real', async () => {
+  const { ctx, page } = await contexto();
+  await entrar(page, 'tecnico1');
+  await page.goto(BASE + '/agenda.html');
+  await page.waitForSelector('#lista .lista-item');
+  assert(await page.$eval('#vEquipa', (b) => b.classList.contains('oculto')), 'sem botão Equipa');
+  semErros(page); await ctx.close();
+  const { ctx: c2, page: p2 } = await contexto();
+  await entrar(p2, 'backoffice');
+  await p2.goto(BASE + '/folhas.html?nova=1&cliente=cli006');
+  await p2.waitForSelector('#ffDurDica');
+  await p2.waitForFunction(() => document.querySelector('#ffDurDica').textContent.includes('3 h'));
+  igual(await p2.inputValue('#ffDur'), '3', 'Instalação no cli006: 3 h');
+  await p2.check('input[name=tipo][value="AT"]');
+  await p2.waitForFunction(() => document.querySelector('#ffDur').value === '1.5');
+  assert((await p2.textContent('#ffDurDica')).includes('40 intervenções'), 'mediana do tipo');
+  semErros(p2); await c2.close();
+});
+
+// =====================================================================
 // FATURAÇÃO
 // =====================================================================
 teste('faturação: rever → pedir NE → registar NE → faturar (Master), em 375 e 414', async () => {

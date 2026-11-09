@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 09:41 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 09:51 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -264,6 +264,24 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .fat-bts { flex: 0 0 auto; }
 .txt-erro { color: #b91c1c; font-weight: 600; }
 
+/* Agenda — vista Equipa */
+.eq-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; }
+.eq-grade { display: flex; min-width: max-content; }
+.eq-horas { flex: 0 0 40px; position: sticky; left: 0; background: var(--branco); z-index: 2; border-right: 1px solid var(--linha); }
+.eq-horas span { position: absolute; right: 4px; font-size: .72rem; color: var(--texto-2); transform: translateY(-50%); }
+.eq-horas span:first-child { transform: none; }
+.eq-coluna { flex: 1 0 140px; border-right: 1px solid var(--linha); }
+.eq-cab { height: 46px; padding: 4px 6px; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; justify-content: center; font-size: .82rem; line-height: 1.2; overflow: hidden; }
+.eq-cab b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eq-corpo { position: relative; background-image: linear-gradient(to bottom, var(--linha) 1px, transparent 1px); }
+.eq-bloco { position: absolute; background: var(--azul-claro); border-left: 4px solid #3b82f6; border-radius: 6px; padding: 2px 22px 2px 5px; font-size: .74rem; line-height: 1.25; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.eq-bloco span { color: var(--texto-2); }
+.eq-bloco.b-agendada { border-left-color: #3b82f6; } .eq-bloco.b-em-curso { border-left-color: #f59e0b; background: #fff7e6; }
+.eq-bloco.b-pendente { border-left-color: #ea580c; background: #fff1e6; } .eq-bloco.b-concluida { border-left-color: #22c55e; background: #eefbf3; }
+.eq-bloco.b-por-agendar { border-left-color: #94a3b8; background: #f1f5f9; }
+.eq-mover { position: absolute; top: 1px; right: 1px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: rgba(255,255,255,.8); cursor: pointer; font-size: .75rem; padding: 0; }
+.eq-pa { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: grab; }
+
 </style>
 </head>
 <body class="env-prod pagina-folhas">
@@ -308,7 +326,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-09 09:41 UTC';
+const BUILD = '2026-11-09 09:51 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -599,6 +617,28 @@ function prefixosNome(t) {
     l.add(c.join('. ') + '.'); l.add(c.join('.') + '.'); l.add(c.join(' '));
   }
   return [...l].slice(0, 4);
+}
+
+// ---------- Duração prevista: real (mediana do PHC, calculada pela PontePHC em listas/duracoes) ou por omissão ----------
+// duração habitual de um tipo, sem esperar (depois de duracaoSugerida já ter sido chamada uma vez)
+function duracaoTipo(tipo) {
+  const t = ((_duracoesDados || {}).porTipo || {})[tipo];
+  return t && t.n >= 5 ? t.h : (DURACAO_PADRAO[tipo] || 2);
+}
+const fmtHorasD = (h) => String(Number(h) || 0).replace('.', ',') + ' h';
+const DURACAO_PADRAO = { AT: 2, 'Manutenção': 1.5, 'Instalação': 4 };
+let _duracoes = null, _duracoesDados = null;
+async function duracaoSugerida(clienteId, tipo) {
+  if (!_duracoes) {
+    _duracoes = getDoc(doc(db, 'listas', 'duracoes')).then((s) => (s.exists() ? s.data() : {})).catch(() => ({}));
+  }
+  const d = await _duracoes;
+  _duracoesDados = d;
+  const c = ((d.porCliente || {})[clienteId] || {})[tipo];
+  if (c && c.n >= 2) return { h: c.h, n: c.n, fonte: 'cliente' };
+  const t = (d.porTipo || {})[tipo];
+  if (t && t.n >= 5) return { h: t.h, n: t.n, fonte: 'tipo' };
+  return { h: DURACAO_PADRAO[tipo] || 2, n: 0, fonte: 'padrao' };
 }
 
 // ---------- Emails ao cliente: cabeçalho sóbrio com a cor Arpuro (RGB 0·134·137, Pantone 321C) ----------
@@ -1271,7 +1311,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
         <label class="campo"><span>Data prevista</span><input type="date" id="ffData" value="${dp ? isoLocal(dp) : ''}"></label>
         <label class="campo"><span>Hora</span><input type="time" id="ffHora" value="${esc(horaIni)}" step="900"></label>
       </div>
-      <label class="campo"><span>Duração prevista (horas)</span><input type="number" id="ffDur" min="0" max="200" step="0.5" inputmode="decimal" value="${esc(String(folha?.duracaoPrevista || ''))}" placeholder="Ex.: 2"></label>
+      <label class="campo"><span>Duração prevista (horas)</span><input type="number" id="ffDur" min="0" max="200" step="0.5" inputmode="decimal" value="${esc(String(folha?.duracaoPrevista || ''))}" placeholder="Ex.: 2"><small class="muted" id="ffDurDica"></small></label>
       <label class="campo"><span>Morada da obra</span><input id="ffMorada" value="${esc(folha?.morada || '')}" autocomplete="off"></label>
       <div class="linha2">
         <label class="campo"><span>Código postal</span><input id="ffCP" value="${esc(folha?.codigoPostal || '')}" inputmode="numeric" placeholder="0000-000"></label>
@@ -1309,7 +1349,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
     $('#ffTel', corpo).value = c.telefone || '';
     if (!$('#ffEmail', corpo).value) $('#ffEmail', corpo).value = c.email || '';
   }
-  function renderCliente() {
+  let renderCliente = function () {
     const box = $('#cliBox', corpo);
     if (cliente) {
       box.innerHTML = `<div class="cliente-escolhido"><div><b>${esc(cliente.nome)}</b><br><span class="muted">NIF ${esc(cliente.nif || '—')}</span></div>
@@ -1332,7 +1372,22 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
     });
     $('#cliProcurar', corpo).onclick = procurar;
     $('#cliQ', corpo).onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); procurar(); } };
+  };
+  // duração sugerida: mediana real deste cliente/tipo (PHC), senão do tipo, senão o valor por omissão
+  let durAuto = !(folha && folha.duracaoPrevista);
+  $('#ffDur', corpo).oninput = () => { durAuto = false; };
+  async function sugerirDuracao() {
+    const tipo = ($('input[name=tipo]:checked', corpo) || {}).value;
+    if (!tipo) return;
+    const s = await duracaoSugerida(cliente ? cliente.id : '', tipo);
+    const txt = s.fonte === 'cliente' ? `Duração real neste cliente: ${fmtHorasD(s.h)} (mediana de ${s.n} intervenções)`
+      : s.fonte === 'tipo' ? `Duração real deste tipo: ${fmtHorasD(s.h)} (mediana de ${s.n} intervenções)` : `Valor habitual: ${fmtHorasD(s.h)}`;
+    $('#ffDurDica', corpo).textContent = txt;
+    if (durAuto) $('#ffDur', corpo).value = s.h;
   }
+  $$('input[name=tipo]', corpo).forEach((r) => r.addEventListener('change', sugerirDuracao));
+  const renderCliente0 = renderCliente;
+  renderCliente = function () { renderCliente0(); sugerirDuracao(); };
   renderCliente();
   if (!ed && clienteIdInicial) {
     getDoc(doc(db, 'clientes', clienteIdInicial)).then((s) => { if (s.exists()) { cliente = { id: s.id, ...s.data() }; preencherDoCliente(cliente); renderCliente(); } });
@@ -1397,6 +1452,58 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
 function criarFolha(cliente, dados) { return criarFolhaNova(cliente, dados); }
 
 rota();
+
+// ===== módulo: folhas.aviso.js =====
+// Aviso de agendamento/reagendamento ao cliente (email pela PontePHC). Partilhado pelas páginas Folhas e Agenda.
+function emailValido(e) { return /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(String(e || '').trim()); }
+function emailDoCliente(f) { return (f.emailContacto || f.clienteEmail || '').trim(); }
+function pedirAvisoAgendamento(f, reagendar = false) {
+  return new Promise((resolve) => {
+    const em = emailDoCliente(f);
+    const c = abrirModal(reagendar ? 'Reagendar' : 'Agendar', `
+      <p style="margin-top:0">${esc(TIPO_NOME[f.tipo] || f.tipo)} · ${f.dataPrevista ? `<b>${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}</b>` : ''} · ${esc(f.tecnicoNome || '')}</p>
+      <label class="campo"><span>Enviar aviso ao cliente para</span><input id="aEmail" type="email" inputmode="email" autocomplete="off" value="${esc(em)}" placeholder="email@cliente.pt"></label>
+      <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="aSem" style="width:auto;min-height:0"><span style="margin:0">Não enviar aviso desta vez</span></label>
+      <div class="msg-erro" id="aErro"></div>
+      <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="aOk">${reagendar ? 'Reagendar' : 'Agendar'}</button></div>`,
+    { aoFechar: () => resolve(null) });
+    $('#aOk', c).onclick = () => {
+      if ($('#aSem', c).checked) { fecharModal(); resolve(''); return; }
+      const para = $('#aEmail', c).value.trim();
+      if (!emailValido(para)) { $('#aErro', c).textContent = 'Indique o email do cliente, ou marque «Não enviar aviso desta vez».'; return; }
+      fecharModal();
+      resolve(para);
+    };
+  });
+}
+function avisoAgendamentoHtml(f, reagendar) {
+  const e = esc;
+  const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
+  ${cabecalhoEmail((reagendar ? 'Intervenção reagendada' : 'Intervenção agendada') + ' · ' + f.numero)}
+  <div style="padding:16px 18px;font-size:14px">
+  <p style="margin:0 0 12px">Informamos que a intervenção ${reagendar ? 'foi reagendada' : 'está agendada'} para <b>${e(quando)}</b> (hora prevista de chegada).</p>
+  <table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;font-size:14px">
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Cliente</td><td>${e(f.clienteNome)}</td></tr>
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Local</td><td>${e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</td></tr>
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Tipo</td><td>${e(TIPO_NOME[f.tipo] || f.tipo)}</td></tr>
+    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Técnico</td><td>${e(f.tecnicoNome || '')}</td></tr>
+    ${f.descricao ? `<tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b;vertical-align:top">Trabalho</td><td style="white-space:pre-wrap">${e(f.descricao)}</td></tr>` : ''}
+  </table>
+  <p style="margin:14px 0 0">Se esta data não for conveniente, responda a este email para combinarmos outra.</p>
+  <p style="margin:18px 0 0;font-size:12px;color:#64748b">ARPURO &amp; REDEMÓVEL, LDA · NIF 503198749 · São João da Madeira</p>
+  </div></div>`;
+}
+function dadosEmailAgendamento(f, para, reagendar = false) {
+  const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
+  return {
+    tipo: 'agendamento', estado: 'Pendente', para: para.trim(), folhaId: f.id, folhaNumero: f.numero,
+    assunto: `${reagendar ? 'Intervenção reagendada' : 'Intervenção agendada'} ${f.numero} — ${quando} — Arpuro Climatização`,
+    html: avisoAgendamentoHtml(f, reagendar),
+    texto: `Arpuro Climatização — ${reagendar ? 'intervenção reagendada' : 'intervenção agendada'} ${f.numero}\n\nData prevista: ${quando}\nCliente: ${f.clienteNome}\nTécnico: ${f.tecnicoNome || ''}\n${f.descricao ? 'Trabalho: ' + f.descricao + '\n' : ''}\nSe esta data não for conveniente, responda a este email.`,
+    assinaturaPng: '', criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email, criadoEm: serverTimestamp(),
+  };
+}
 
 // ===== módulo: folhas.trabalho.js =====
 // Fase 2 — trabalho no local: registo de tempos, material aplicado, tarefas, relatório e assinatura do cliente.
@@ -1899,8 +2006,6 @@ async function mostrarValorMO() {
 }
 
 // ---------- Relatório para o cliente (email pela PontePHC e versão para imprimir/PDF) ----------
-function emailValido(e) { return /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(String(e || '').trim()); }
-function emailDoCliente(f) { return (f.emailContacto || f.clienteEmail || '').trim(); }
 
 // HTML do relatório (estilos em linha, para o Outlook). assinaturaSrc: 'cid:assinatura' no email, data URL ao imprimir.
 function relatorioHtml(f, assinaturaSrc) {
@@ -2023,53 +2128,6 @@ function fecharRelatorio() {
 
 // ---------- Aviso de agendamento ao cliente (ao agendar e ao reagendar) ----------
 // Devolve o email (enviar), '' (não enviar) ou null (cancelar a ação).
-function pedirAvisoAgendamento(f, reagendar = false) {
-  return new Promise((resolve) => {
-    const em = emailDoCliente(f);
-    const c = abrirModal(reagendar ? 'Reagendar' : 'Agendar', `
-      <p style="margin-top:0">${esc(TIPO_NOME[f.tipo] || f.tipo)} · ${f.dataPrevista ? `<b>${esc(fmtDiaSemana(paraData(f.dataPrevista)))}, ${esc(fmtHora(f.dataPrevista))}</b>` : ''} · ${esc(f.tecnicoNome || '')}</p>
-      <label class="campo"><span>Enviar aviso ao cliente para</span><input id="aEmail" type="email" inputmode="email" autocomplete="off" value="${esc(em)}" placeholder="email@cliente.pt"></label>
-      <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="aSem" style="width:auto;min-height:0"><span style="margin:0">Não enviar aviso desta vez</span></label>
-      <div class="msg-erro" id="aErro"></div>
-      <div class="acoes"><button class="btn" data-fechar>Cancelar</button><button class="btn btn-primario" id="aOk">${reagendar ? 'Reagendar' : 'Agendar'}</button></div>`,
-    { aoFechar: () => resolve(null) });
-    $('#aOk', c).onclick = () => {
-      if ($('#aSem', c).checked) { fecharModal(); resolve(''); return; }
-      const para = $('#aEmail', c).value.trim();
-      if (!emailValido(para)) { $('#aErro', c).textContent = 'Indique o email do cliente, ou marque «Não enviar aviso desta vez».'; return; }
-      fecharModal();
-      resolve(para);
-    };
-  });
-}
-function avisoAgendamentoHtml(f, reagendar) {
-  const e = esc;
-  const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
-  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:680px;margin:0 auto">
-  ${cabecalhoEmail((reagendar ? 'Intervenção reagendada' : 'Intervenção agendada') + ' · ' + f.numero)}
-  <div style="padding:16px 18px;font-size:14px">
-  <p style="margin:0 0 12px">Informamos que a intervenção ${reagendar ? 'foi reagendada' : 'está agendada'} para <b>${e(quando)}</b> (hora prevista de chegada).</p>
-  <table style="font-family:Arial,Helvetica,sans-serif;border-collapse:collapse;font-size:14px">
-    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Cliente</td><td>${e(f.clienteNome)}</td></tr>
-    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Local</td><td>${e([f.morada, [f.codigoPostal, f.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', '))}</td></tr>
-    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Tipo</td><td>${e(TIPO_NOME[f.tipo] || f.tipo)}</td></tr>
-    <tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b">Técnico</td><td>${e(f.tecnicoNome || '')}</td></tr>
-    ${f.descricao ? `<tr><td style="font-family:Arial,Helvetica,sans-serif;padding:3px 8px 3px 0;color:#64748b;vertical-align:top">Trabalho</td><td style="white-space:pre-wrap">${e(f.descricao)}</td></tr>` : ''}
-  </table>
-  <p style="margin:14px 0 0">Se esta data não for conveniente, responda a este email para combinarmos outra.</p>
-  <p style="margin:18px 0 0;font-size:12px;color:#64748b">ARPURO &amp; REDEMÓVEL, LDA · NIF 503198749 · São João da Madeira</p>
-  </div></div>`;
-}
-function dadosEmailAgendamento(f, para, reagendar = false) {
-  const quando = f.dataPrevista ? `${fmtDiaSemana(paraData(f.dataPrevista))}, às ${fmtHora(f.dataPrevista)}` : '';
-  return {
-    tipo: 'agendamento', estado: 'Pendente', para: para.trim(), folhaId: f.id, folhaNumero: f.numero,
-    assunto: `${reagendar ? 'Intervenção reagendada' : 'Intervenção agendada'} ${f.numero} — ${quando} — Arpuro Climatização`,
-    html: avisoAgendamentoHtml(f, reagendar),
-    texto: `Arpuro Climatização — ${reagendar ? 'intervenção reagendada' : 'intervenção agendada'} ${f.numero}\n\nData prevista: ${quando}\nCliente: ${f.clienteNome}\nTécnico: ${f.tecnicoNome || ''}\n${f.descricao ? 'Trabalho: ' + f.descricao + '\n' : ''}\nSe esta data não for conveniente, responda a este email.`,
-    assinaturaPng: '', criadoPor: sessao.uid, criadoPorNome: sessao.nome || sessao.email, criadoEm: serverTimestamp(),
-  };
-}
 
 </script>
 </body>

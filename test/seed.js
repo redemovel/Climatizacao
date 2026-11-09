@@ -130,6 +130,9 @@ function gerar() {
   db['folhas/phc-' + ano + '-1785/privado/phc'] = { totalVenda: 958.8,
     linhas: [{ ref: 'ST2', descricao: 'Serviço Técnico (Equipa)', qtd: 8, preco: 40.8, total: 326.4 }],
     valorHora: [{ data: ts(dia(-3, 0)), horas: 8, tipoIntervencao: 'Manutenção', tipoTecnico: 'Técnico-Técnico', preco: 40.8, total: 326.4 }] };
+  // duração real (PontePHC): cli006 em Instalação 3 h (4 intervenções); por tipo AT 1,5 h
+  db['listas/duracoes'] = { porTipo: { AT: { h: 1.5, n: 40 }, 'Manutenção': { h: 2, n: 30 }, 'Instalação': { h: 5, n: 12 } },
+    porCliente: { cli006: { 'Instalação': { h: 3, n: 4 } } }, folhas: 82 };
   // faturação: cli002 exige nota de encomenda
   db['clientes/cli002'].exigeNE = true;
   const fat = (id, base, extra) => {

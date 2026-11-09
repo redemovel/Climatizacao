@@ -339,6 +339,12 @@ except ImportError:
 # 5d) botão «Sincronizar agora» na plataforma: controlo/sincronizar estado «Pedido»
 cod, out = ponte('/verificar-pedido')
 verifica('Sem pedido' in out, 'sem pedido não faz nada')
+# duração real: por dia conta o funcionário com mais horas (equipa em paralelo); mediana por tipo
+open(os.path.join(d, 'tempos.csv'), 'a', encoding='utf-8').write('E;2026-10-21;3;Rodrigues, Pascoal\nE;2026-10-22;2;Rodrigues, Pascoal\nE;2026-10-22;1;Duarte, Paulo\nF;2021-05-04;9;Duarte, Paulo\n')
+cod, out = ponte('/duracoes')
+du = BD.get('listas/duracoes', {})
+mt = du.get('porTipo', {}).get('mapValue', {}).get('fields', {}).get('Manutenção', {}).get('mapValue', {}).get('fields', {})
+verifica(cod == 0 and mt.get('h', {}).get('doubleValue') == 6.5 and mt.get('n', {}).get('integerValue') == '2', 'duração real: mediana de 8 h (A) e 5 h (E); 2021 fica de fora: ' + json.dumps(du)[:300] + out[-200:])
 BD['controlo/sincronizar'] = {'estado': sv('Pedido'), 'pedidoPorNome': sv('Ricardo')}
 cod, out = ponte('/verificar-pedido')
 verifica('atendido' in out and BD['controlo/sincronizar']['estado'] == sv('Concluído') and BD['controlo/sincronizar']['resultado'] == sv('OK'), 'pedido atendido e marcado como concluído ' + out[-200:])

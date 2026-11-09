@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 09:41 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 09:51 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -264,6 +264,24 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .fat-bts { flex: 0 0 auto; }
 .txt-erro { color: #b91c1c; font-weight: 600; }
 
+/* Agenda — vista Equipa */
+.eq-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; }
+.eq-grade { display: flex; min-width: max-content; }
+.eq-horas { flex: 0 0 40px; position: sticky; left: 0; background: var(--branco); z-index: 2; border-right: 1px solid var(--linha); }
+.eq-horas span { position: absolute; right: 4px; font-size: .72rem; color: var(--texto-2); transform: translateY(-50%); }
+.eq-horas span:first-child { transform: none; }
+.eq-coluna { flex: 1 0 140px; border-right: 1px solid var(--linha); }
+.eq-cab { height: 46px; padding: 4px 6px; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; justify-content: center; font-size: .82rem; line-height: 1.2; overflow: hidden; }
+.eq-cab b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eq-corpo { position: relative; background-image: linear-gradient(to bottom, var(--linha) 1px, transparent 1px); }
+.eq-bloco { position: absolute; background: var(--azul-claro); border-left: 4px solid #3b82f6; border-radius: 6px; padding: 2px 22px 2px 5px; font-size: .74rem; line-height: 1.25; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.eq-bloco span { color: var(--texto-2); }
+.eq-bloco.b-agendada { border-left-color: #3b82f6; } .eq-bloco.b-em-curso { border-left-color: #f59e0b; background: #fff7e6; }
+.eq-bloco.b-pendente { border-left-color: #ea580c; background: #fff1e6; } .eq-bloco.b-concluida { border-left-color: #22c55e; background: #eefbf3; }
+.eq-bloco.b-por-agendar { border-left-color: #94a3b8; background: #f1f5f9; }
+.eq-mover { position: absolute; top: 1px; right: 1px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: rgba(255,255,255,.8); cursor: pointer; font-size: .75rem; padding: 0; }
+.eq-pa { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: grab; }
+
 </style>
 </head>
 <body class="env-prod pagina-clientes">
@@ -303,7 +321,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-09 09:41 UTC';
+const BUILD = '2026-11-09 09:51 UTC';
 const PAGINA = 'clientes';
 
 const FIREBASE_CONFIG = {
@@ -594,6 +612,28 @@ function prefixosNome(t) {
     l.add(c.join('. ') + '.'); l.add(c.join('.') + '.'); l.add(c.join(' '));
   }
   return [...l].slice(0, 4);
+}
+
+// ---------- Duração prevista: real (mediana do PHC, calculada pela PontePHC em listas/duracoes) ou por omissão ----------
+// duração habitual de um tipo, sem esperar (depois de duracaoSugerida já ter sido chamada uma vez)
+function duracaoTipo(tipo) {
+  const t = ((_duracoesDados || {}).porTipo || {})[tipo];
+  return t && t.n >= 5 ? t.h : (DURACAO_PADRAO[tipo] || 2);
+}
+const fmtHorasD = (h) => String(Number(h) || 0).replace('.', ',') + ' h';
+const DURACAO_PADRAO = { AT: 2, 'Manutenção': 1.5, 'Instalação': 4 };
+let _duracoes = null, _duracoesDados = null;
+async function duracaoSugerida(clienteId, tipo) {
+  if (!_duracoes) {
+    _duracoes = getDoc(doc(db, 'listas', 'duracoes')).then((s) => (s.exists() ? s.data() : {})).catch(() => ({}));
+  }
+  const d = await _duracoes;
+  _duracoesDados = d;
+  const c = ((d.porCliente || {})[clienteId] || {})[tipo];
+  if (c && c.n >= 2) return { h: c.h, n: c.n, fonte: 'cliente' };
+  const t = (d.porTipo || {})[tipo];
+  if (t && t.n >= 5) return { h: t.h, n: t.n, fonte: 'tipo' };
+  return { h: DURACAO_PADRAO[tipo] || 2, n: 0, fonte: 'padrao' };
 }
 
 // ---------- Emails ao cliente: cabeçalho sóbrio com a cor Arpuro (RGB 0·134·137, Pantone 321C) ----------

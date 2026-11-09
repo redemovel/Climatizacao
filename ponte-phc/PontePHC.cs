@@ -1103,6 +1103,34 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
         }
     }
 
+    public List<DuracaoPHC> Duracoes(DateTime desde)
+    {
+        List<DuracaoPHC> l = new List<DuracaoPHC>();
+        using (SqlConnection cn = Abrir())
+        {
+            if (!Existe(cn, "U_NWRegistoTempos")) return l;
+            using (SqlCommand c = new SqlCommand(
+                "SELECT t.BOSTAMP AS s, bo.no, bo.trab5, CONVERT(date, t.DATA) AS dia, t.FUNCIONARIO, SUM(t.NTOTALHORAS) AS horas " +
+                "FROM U_NWRegistoTempos t WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = t.BOSTAMP " +
+                "WHERE bo.ndos = @n AND t.DATA >= @d AND t.NTOTALHORAS > 0 " +
+                "GROUP BY t.BOSTAMP, bo.no, bo.trab5, CONVERT(date, t.DATA), t.FUNCIONARIO", cn))
+            {
+                c.CommandTimeout = 120;
+                c.Parameters.AddWithValue("@n", cfg.GetInt("SerieFolhas", 114));
+                c.Parameters.AddWithValue("@d", desde);
+                using (SqlDataReader r = c.ExecuteReader())
+                    while (r.Read())
+                    {
+                        DuracaoPHC x = new DuracaoPHC();
+                        x.Stamp = S(r, "s"); x.ClienteNo = Convert.ToInt64(r["no"]); x.Trab5 = S(r, "trab5");
+                        x.Dia = Convert.ToDateTime(r["dia"]); x.Funcionario = S(r, "FUNCIONARIO"); x.Horas = Convert.ToDecimal(r["horas"]);
+                        l.Add(x);
+                    }
+            }
+        }
+        return l;
+    }
+
     public long MaiorNumero(int ano)
     {
         using (SqlConnection cn = Abrir())
@@ -1755,7 +1783,11 @@ interface IFonteFolhas
 {
     List<FolhaPHC> FolhasSeguintes(Marca desde, int max);
     long MaiorNumero(int ano);
+    List<DuracaoPHC> Duracoes(DateTime desde);
 }
+
+// horas registadas por funcionário e dia numa FO (para a duração real média das intervenções)
+class DuracaoPHC { public string Stamp = "", Trab5 = ""; public long ClienteNo; public DateTime Dia; public string Funcionario = ""; public decimal Horas; }
 
 // ---------------------------------------------------------------- artigos e stock (armazem da climatizacao)
 class ArtigoPHC
@@ -1911,6 +1943,20 @@ class FonteCsvFolhas : IFonteFolhas
         long n = 0;
         foreach (FolhaPHC x in todas) if (x.Ano == ano && x.Numero > n) n = x.Numero;
         return n;
+    }
+
+    public List<DuracaoPHC> Duracoes(DateTime desde)
+    {
+        List<DuracaoPHC> l = new List<DuracaoPHC>();
+        foreach (FolhaPHC f in todas)
+            foreach (TempoPHC t in f.Tempos)
+                if (t.Data >= desde && t.Horas > 0)
+                {
+                    DuracaoPHC x = new DuracaoPHC();
+                    x.Stamp = f.Stamp; x.ClienteNo = f.ClienteNo; x.Trab5 = f.Tipo; x.Dia = t.Data.Date; x.Funcionario = t.Funcionario; x.Horas = t.Horas;
+                    l.Add(x);
+                }
+        return l;
     }
 }
 
@@ -2595,6 +2641,81 @@ class Motor
         CicloFolhas();
         CicloArtigos();
         CicloEmails();
+        CicloDuracoes(false);
+    }
+
+    // ---- duração real das intervenções (mediana dos últimos 24 meses), uma vez por dia → listas/duracoes
+    // Duração de uma FO = soma, por dia, das horas do funcionário que mais horas registou nesse dia
+    // (a equipa trabalha em paralelo; não é a soma das horas de todos).
+    public int CicloDuracoes(bool forcar)
+    {
+        if (!cfg.GetBool("ImportarFolhas", false) || FonteFolhas == null) return 0;
+        string fMarca = Path.Combine(cfg.Pasta, "estado_duracoes.txt");
+        string hoje = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (!forcar && File.Exists(fMarca) && File.ReadAllText(fMarca).Trim() == hoje) return 0;
+        try
+        {
+            List<DuracaoPHC> l = FonteFolhas.Duracoes(DateTime.Today.AddMonths(-24));
+            Dictionary<string, Dictionary<DateTime, Dictionary<string, decimal>>> porFo = new Dictionary<string, Dictionary<DateTime, Dictionary<string, decimal>>>();
+            Dictionary<string, DuracaoPHC> info = new Dictionary<string, DuracaoPHC>();
+            foreach (DuracaoPHC x in l)
+            {
+                Dictionary<DateTime, Dictionary<string, decimal>> dias;
+                if (!porFo.TryGetValue(x.Stamp, out dias)) { dias = new Dictionary<DateTime, Dictionary<string, decimal>>(); porFo[x.Stamp] = dias; info[x.Stamp] = x; }
+                Dictionary<string, decimal> fun;
+                if (!dias.TryGetValue(x.Dia.Date, out fun)) { fun = new Dictionary<string, decimal>(); dias[x.Dia.Date] = fun; }
+                decimal h; fun.TryGetValue(x.Funcionario, out h); fun[x.Funcionario] = h + x.Horas;
+            }
+            Dictionary<string, List<decimal>> tipo = new Dictionary<string, List<decimal>>();
+            Dictionary<string, Dictionary<string, List<decimal>>> cli = new Dictionary<string, Dictionary<string, List<decimal>>>();
+            foreach (KeyValuePair<string, Dictionary<DateTime, Dictionary<string, decimal>>> fo in porFo)
+            {
+                decimal tot = 0;
+                foreach (Dictionary<string, decimal> fun in fo.Value.Values) { decimal m = 0; foreach (decimal h in fun.Values) if (h > m) m = h; tot += m; }
+                if (tot <= 0 || tot > 80) continue;
+                string t = Tipo(info[fo.Key].Trab5);
+                string c = "phc-" + info[fo.Key].ClienteNo;
+                if (!tipo.ContainsKey(t)) tipo[t] = new List<decimal>();
+                tipo[t].Add(tot);
+                if (!cli.ContainsKey(c)) cli[c] = new Dictionary<string, List<decimal>>();
+                if (!cli[c].ContainsKey(t)) cli[c][t] = new List<decimal>();
+                cli[c][t].Add(tot);
+            }
+            Documento d = new Documento();
+            d.Id = "duracoes";
+            Documento dt = new Documento();
+            foreach (KeyValuePair<string, List<decimal>> kv in tipo) dt.Mapa(kv.Key, Mediana(kv.Value));
+            d.Mapa("porTipo", dt);
+            Documento dc = new Documento();
+            int nc = 0;
+            foreach (KeyValuePair<string, Dictionary<string, List<decimal>>> kv in cli)
+            {
+                Documento m = new Documento();
+                int n = 0;
+                foreach (KeyValuePair<string, List<decimal>> t in kv.Value) if (t.Value.Count >= 2) { m.Mapa(t.Key, Mediana(t.Value)); n++; }
+                if (n > 0) { dc.Mapa(kv.Key, m); nc++; }
+            }
+            d.Mapa("porCliente", dc);
+            d.Inteiro("folhas", porFo.Count);
+            d.Data("calculadoEm", DateTime.Now);
+            if (cfg.Simular) Log.Info("SIMULACAO duracoes: " + d.Json);
+            else { if (fs == null) fs = new Firestore(cfg); fs.Gravar("listas", new List<Documento> { d }); ContarEscritas(1); }
+            File.WriteAllText(fMarca, hoje);
+            Log.Info("Duracoes: " + porFo.Count + " folhas com tempos; " + tipo.Count + " tipos; " + nc + " clientes.");
+            return porFo.Count;
+        }
+        catch (Exception e) { Log.Erro("Falha ao calcular as duracoes: " + e.Message); return 0; }
+    }
+
+    // mediana arredondada à meia hora, com o n.º de folhas
+    static Documento Mediana(List<decimal> v)
+    {
+        v.Sort();
+        decimal m = v.Count % 2 == 1 ? v[v.Count / 2] : (v[v.Count / 2 - 1] + v[v.Count / 2]) / 2;
+        Documento d = new Documento();
+        d.Decimal("h", Math.Max(0.5m, Math.Round(m * 2, MidpointRounding.AwayFromZero) / 2));
+        d.Inteiro("n", v.Count);
+        return d;
     }
 
     // ---- pedido de sincronizacao feito na plataforma (controlo/sincronizar: estado 'Pedido')
@@ -3059,6 +3180,13 @@ static class Programa
                 Console.WriteLine((cfg.Simular ? "SIMULACAO: " : "") + n + " clientes " + (cfg.Simular ? "seriam enviados (nada enviado; veja Simular no .ini)." : "enviados."));
                 return m.UltimoErro == "" || m.UltimoErro == "quota" ? 0 : 2;
             }
+            if (cmd == "/duracoes")
+            {
+                m.Preparar();
+                int n = m.CicloDuracoes(true);
+                Console.WriteLine((cfg.Simular ? "SIMULACAO: " : "") + "duracao real calculada a partir de " + n + " folhas com tempos (ultimos 24 meses). Veja o registo.");
+                return 0;
+            }
             if (cmd == "/emails")
             {
                 Console.WriteLine("EnviarEmails=" + cfg.Get("EnviarEmails", "0") + "  EmailsTeste=" + cfg.Get("EmailsTeste", "") + "  SmtpServidor=" + cfg.Get("SmtpServidor", "") + "  EmailCopiaOculta=" + cfg.Get("EmailCopiaOculta", ""));
@@ -3109,6 +3237,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /guias-abertas     linhas das Guias 111 abertas (levado e ja passado para FO)");
                 Console.WriteLine("  PontePHC.exe /emails            emails da plataforma (pendentes, com erro, enviados) e envia os pendentes");
                 Console.WriteLine("  PontePHC.exe /estrutura SERIE   colunas, gatilhos e ultimos documentos de uma serie (preparacao da Fase 5)");
+                Console.WriteLine("  PontePHC.exe /duracoes          calcula ja a duracao real media das intervencoes (normalmente 1 vez por dia)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");

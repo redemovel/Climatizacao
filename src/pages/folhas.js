@@ -457,7 +457,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
         <label class="campo"><span>Data prevista</span><input type="date" id="ffData" value="${dp ? isoLocal(dp) : ''}"></label>
         <label class="campo"><span>Hora</span><input type="time" id="ffHora" value="${esc(horaIni)}" step="900"></label>
       </div>
-      <label class="campo"><span>Duração prevista (horas)</span><input type="number" id="ffDur" min="0" max="200" step="0.5" inputmode="decimal" value="${esc(String(folha?.duracaoPrevista || ''))}" placeholder="Ex.: 2"></label>
+      <label class="campo"><span>Duração prevista (horas)</span><input type="number" id="ffDur" min="0" max="200" step="0.5" inputmode="decimal" value="${esc(String(folha?.duracaoPrevista || ''))}" placeholder="Ex.: 2"><small class="muted" id="ffDurDica"></small></label>
       <label class="campo"><span>Morada da obra</span><input id="ffMorada" value="${esc(folha?.morada || '')}" autocomplete="off"></label>
       <div class="linha2">
         <label class="campo"><span>Código postal</span><input id="ffCP" value="${esc(folha?.codigoPostal || '')}" inputmode="numeric" placeholder="0000-000"></label>
@@ -495,7 +495,7 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
     $('#ffTel', corpo).value = c.telefone || '';
     if (!$('#ffEmail', corpo).value) $('#ffEmail', corpo).value = c.email || '';
   }
-  function renderCliente() {
+  let renderCliente = function () {
     const box = $('#cliBox', corpo);
     if (cliente) {
       box.innerHTML = `<div class="cliente-escolhido"><div><b>${esc(cliente.nome)}</b><br><span class="muted">NIF ${esc(cliente.nif || '—')}</span></div>
@@ -518,7 +518,22 @@ async function abrirForm(folha, clienteIdInicial, { agendarDepois = false } = {}
     });
     $('#cliProcurar', corpo).onclick = procurar;
     $('#cliQ', corpo).onkeydown = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); procurar(); } };
+  };
+  // duração sugerida: mediana real deste cliente/tipo (PHC), senão do tipo, senão o valor por omissão
+  let durAuto = !(folha && folha.duracaoPrevista);
+  $('#ffDur', corpo).oninput = () => { durAuto = false; };
+  async function sugerirDuracao() {
+    const tipo = ($('input[name=tipo]:checked', corpo) || {}).value;
+    if (!tipo) return;
+    const s = await duracaoSugerida(cliente ? cliente.id : '', tipo);
+    const txt = s.fonte === 'cliente' ? `Duração real neste cliente: ${fmtHorasD(s.h)} (mediana de ${s.n} intervenções)`
+      : s.fonte === 'tipo' ? `Duração real deste tipo: ${fmtHorasD(s.h)} (mediana de ${s.n} intervenções)` : `Valor habitual: ${fmtHorasD(s.h)}`;
+    $('#ffDurDica', corpo).textContent = txt;
+    if (durAuto) $('#ffDur', corpo).value = s.h;
   }
+  $$('input[name=tipo]', corpo).forEach((r) => r.addEventListener('change', sugerirDuracao));
+  const renderCliente0 = renderCliente;
+  renderCliente = function () { renderCliente0(); sugerirDuracao(); };
   renderCliente();
   if (!ed && clienteIdInicial) {
     getDoc(doc(db, 'clientes', clienteIdInicial)).then((s) => { if (s.exists()) { cliente = { id: s.id, ...s.data() }; preencherDoCliente(cliente); renderCliente(); } });

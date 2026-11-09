@@ -246,3 +246,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outl
 .fat-desc { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
 .fat-bts { flex: 0 0 auto; }
 .txt-erro { color: #b91c1c; font-weight: 600; }
+
+/* Agenda — vista Equipa */
+.eq-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--branco); border: 1px solid var(--linha); border-radius: 12px; }
+.eq-grade { display: flex; min-width: max-content; }
+.eq-horas { flex: 0 0 40px; position: sticky; left: 0; background: var(--branco); z-index: 2; border-right: 1px solid var(--linha); }
+.eq-horas span { position: absolute; right: 4px; font-size: .72rem; color: var(--texto-2); transform: translateY(-50%); }
+.eq-horas span:first-child { transform: none; }
+.eq-coluna { flex: 1 0 140px; border-right: 1px solid var(--linha); }
+.eq-cab { height: 46px; padding: 4px 6px; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; justify-content: center; font-size: .82rem; line-height: 1.2; overflow: hidden; }
+.eq-cab b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eq-corpo { position: relative; background-image: linear-gradient(to bottom, var(--linha) 1px, transparent 1px); }
+.eq-bloco { position: absolute; background: var(--azul-claro); border-left: 4px solid #3b82f6; border-radius: 6px; padding: 2px 22px 2px 5px; font-size: .74rem; line-height: 1.25; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.eq-bloco span { color: var(--texto-2); }
+.eq-bloco.b-agendada { border-left-color: #3b82f6; } .eq-bloco.b-em-curso { border-left-color: #f59e0b; background: #fff7e6; }
+.eq-bloco.b-pendente { border-left-color: #ea580c; background: #fff1e6; } .eq-bloco.b-concluida { border-left-color: #22c55e; background: #eefbf3; }
+.eq-bloco.b-por-agendar { border-left-color: #94a3b8; background: #f1f5f9; }
+.eq-mover { position: absolute; top: 1px; right: 1px; width: 20px; height: 20px; border: 0; border-radius: 4px; background: rgba(255,255,255,.8); cursor: pointer; font-size: .75rem; padding: 0; }
+.eq-pa { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: grab; }

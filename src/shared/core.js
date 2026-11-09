@@ -304,6 +304,28 @@ function prefixosNome(t) {
   return [...l].slice(0, 4);
 }
 
+// ---------- Duração prevista: real (mediana do PHC, calculada pela PontePHC em listas/duracoes) ou por omissão ----------
+// duração habitual de um tipo, sem esperar (depois de duracaoSugerida já ter sido chamada uma vez)
+function duracaoTipo(tipo) {
+  const t = ((_duracoesDados || {}).porTipo || {})[tipo];
+  return t && t.n >= 5 ? t.h : (DURACAO_PADRAO[tipo] || 2);
+}
+const fmtHorasD = (h) => String(Number(h) || 0).replace('.', ',') + ' h';
+const DURACAO_PADRAO = { AT: 2, 'Manutenção': 1.5, 'Instalação': 4 };
+let _duracoes = null, _duracoesDados = null;
+async function duracaoSugerida(clienteId, tipo) {
+  if (!_duracoes) {
+    _duracoes = getDoc(doc(db, 'listas', 'duracoes')).then((s) => (s.exists() ? s.data() : {})).catch(() => ({}));
+  }
+  const d = await _duracoes;
+  _duracoesDados = d;
+  const c = ((d.porCliente || {})[clienteId] || {})[tipo];
+  if (c && c.n >= 2) return { h: c.h, n: c.n, fonte: 'cliente' };
+  const t = (d.porTipo || {})[tipo];
+  if (t && t.n >= 5) return { h: t.h, n: t.n, fonte: 'tipo' };
+  return { h: DURACAO_PADRAO[tipo] || 2, n: 0, fonte: 'padrao' };
+}
+
 // ---------- Emails ao cliente: cabeçalho sóbrio com a cor Arpuro (RGB 0·134·137, Pantone 321C) ----------
 const COR_ARPURO = '#008689';
 function cabecalhoEmail(subtitulo) {

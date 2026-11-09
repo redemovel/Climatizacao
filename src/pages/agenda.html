@@ -1,7 +1,7 @@
 <!-- titulo: Agenda -->
 <div class="titulo-pag">
   <h1>Agenda</h1>
-  <div class="seg" id="segVista"><button data-v="dia">Dia</button><button data-v="semana">Semana</button></div>
+  <div class="seg" id="segVista"><button data-v="dia">Dia</button><button data-v="semana">Semana</button><button data-v="equipa" class="oculto" id="vEquipa">Equipa</button></div>
 </div>
 <div class="barra oculto" id="barraTec">
   <select id="selTec" aria-label="Técnico"><option value="">Todos os técnicos</option></select>
@@ -15,4 +15,5 @@
 <div class="barra" style="margin-top:-4px"><label class="interruptor"><input type="checkbox" id="mostrarConcl"> Mostrar concluídas e faturadas</label></div>
 <div id="atrasos"></div>
 <div id="lista"><div class="vazio">A carregar…</div></div>
+<div id="equipa" class="oculto"></div>
 <div class="mais oculto" id="maisWrap"><button class="btn" id="btnMais">Carregar mais</button></div>

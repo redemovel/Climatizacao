@@ -13,6 +13,8 @@ const path = require('path');
 
 const ROOT = __dirname;
 const SRC = path.join(ROOT, 'src');
+// módulos de outra página que também entram nesta (ex.: o aviso de agendamento é usado na Agenda)
+const PARTILHADOS = { agenda: ['folhas.aviso.js'] };
 const PAGINAS = ['index', 'agenda', 'folhas', 'guias', 'contratos', 'clientes', 'faturacao', 'utilizadores'];
 
 const args = process.argv.slice(2);
@@ -37,6 +39,7 @@ for (const nome of PAGINAS) {
   const corpo = ler(`pages/${nome}.html`);
   // página principal + módulos extra da mesma página (pages/<nome>.<parte>.js, por ordem alfabética)
   const extras = fs.readdirSync(path.join(SRC, 'pages')).filter((f) => f.startsWith(nome + '.') && f.endsWith('.js') && f !== nome + '.js').sort();
+  extras.push(...(PARTILHADOS[nome] || []));
   const js = [ler(`pages/${nome}.js`), ...extras.map((f) => `// ===== módulo: ${f} =====\n` + ler('pages/' + f))].join('\n');
   const mTitulo = corpo.match(/<!--\s*titulo:\s*(.+?)\s*-->/);
   const titulo = mTitulo ? mTitulo[1] : nome;
