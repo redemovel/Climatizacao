@@ -755,6 +755,266 @@ interface IFonteClientes
     int Total();
 }
 
+// =====================================================================================
+// FASE 5 — escrita no PHC, só na base de TESTE (BaseTestePHC, por omissão «TESTE»).
+// Regras: o nome da base tem de conter «TESTE» e ser diferente da base de leitura (ARPURO); qualquer
+// escrita é feita numa transação (ou fica tudo, ou nada). Na base de produção só se lê.
+// =====================================================================================
+class EscritaTeste
+{
+    Config cfg;
+    // a verificação da base de testes é feita logo ao criar, antes de qualquer ligação
+    public EscritaTeste(Config c) { cfg = c; Confirmar(); }
+
+    static readonly string[] TABELAS = { "bo", "bo2", "bo3", "bot", "bi", "bi2", "boma" };
+
+    SqlConnectionStringBuilder Base()
+    {
+        SqlConnectionStringBuilder b = new SqlConnectionStringBuilder(cfg.Get("SqlLigacao", "Data Source=.;Initial Catalog=ARPURO;Integrated Security=True"));
+        string senha = cfg.GetSegredo("SqlSenha");
+        if (senha != "") { b.IntegratedSecurity = false; b.UserID = cfg.Get("SqlUtilizador", "sa"); b.Password = senha; }
+        b.ApplicationName = "PontePHC-Teste";
+        b.ConnectTimeout = 15;
+        return b;
+    }
+    public string BaseLeitura { get { return Base().InitialCatalog; } }
+    public string BaseTeste { get { return cfg.Get("BaseTestePHC", "TESTE").Trim(); } }
+
+    // A proteção principal: nunca escrever na base de produção.
+    void Confirmar()
+    {
+        string t = BaseTeste;
+        if (t == "" || t.IndexOf("TESTE", StringComparison.OrdinalIgnoreCase) < 0)
+            throw new Exception("BaseTestePHC=" + t + " recusada: o nome da base de testes tem de conter TESTE.");
+        if (string.Equals(t, BaseLeitura, StringComparison.OrdinalIgnoreCase))
+            throw new Exception("BaseTestePHC e a mesma base que a de leitura (" + BaseLeitura + "): recusado.");
+    }
+    SqlConnection Abrir(bool teste)
+    {
+        SqlConnectionStringBuilder b = Base();
+        if (teste) { Confirmar(); b.InitialCatalog = BaseTeste; }
+        SqlConnection cn = new SqlConnection(b.ConnectionString);
+        cn.Open();
+        if (teste)
+        {
+            // confirma no próprio servidor em que base ficou ligado
+            using (SqlCommand c = new SqlCommand("SELECT DB_NAME()", cn))
+            {
+                string db = Convert.ToString(c.ExecuteScalar());
+                if (db.IndexOf("TESTE", StringComparison.OrdinalIgnoreCase) < 0) { cn.Close(); throw new Exception("Ligado a " + db + " em vez da base de testes: recusado."); }
+            }
+        }
+        return cn;
+    }
+
+    // colunas que se podem gravar (sem identity, calculadas ou timestamp)
+    static List<string> Colunas(SqlConnection cn, SqlTransaction tx, string tabela)
+    {
+        List<string> l = new List<string>();
+        using (SqlCommand c = new SqlCommand(
+            "SELECT c.name FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id " +
+            "WHERE c.object_id = OBJECT_ID(@t) AND c.is_identity = 0 AND c.is_computed = 0 AND t.name NOT IN ('timestamp','rowversion') ORDER BY c.column_id", cn, tx))
+        {
+            c.Parameters.AddWithValue("@t", "dbo." + tabela);
+            using (SqlDataReader r = c.ExecuteReader()) while (r.Read()) l.Add(r.GetString(0));
+        }
+        return l;
+    }
+    static List<string> Gatilhos(SqlConnection cn, string tabela)
+    {
+        List<string> l = new List<string>();
+        using (SqlCommand c = new SqlCommand("SELECT name FROM sys.triggers WHERE parent_id = OBJECT_ID(@t)", cn))
+        {
+            c.Parameters.AddWithValue("@t", "dbo." + tabela);
+            using (SqlDataReader r = c.ExecuteReader()) while (r.Read()) l.Add(r.GetString(0));
+        }
+        return l;
+    }
+    static long Contar(SqlConnection cn, string sql)
+    {
+        try { using (SqlCommand c = new SqlCommand(sql, cn)) return Convert.ToInt64(c.ExecuteScalar()); }
+        catch { return -1; }
+    }
+
+    // /teste-ligacao: só leitura
+    public List<string> Ligacao()
+    {
+        List<string> o = new List<string>();
+        using (SqlConnection cn = Abrir(true))
+        {
+            o.Add("Base de testes: " + BaseTeste + " (leitura de producao: " + BaseLeitura + ")");
+            o.Add("Clientes (cl): " + Contar(cn, "SELECT COUNT(*) FROM cl") + " · Artigos (st): " + Contar(cn, "SELECT COUNT(*) FROM st") + " · Equipamentos (ma): " + Contar(cn, "SELECT COUNT(*) FROM ma"));
+            using (SqlCommand c = new SqlCommand("SELECT ndos, nmdos FROM ts ORDER BY ndos", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) o.Add("Dossier configurado: " + r["ndos"] + " " + Convert.ToString(r["nmdos"]).Trim());
+            using (SqlCommand c = new SqlCommand("SELECT ndos, COUNT(*) n, MAX(obrano) m FROM bo GROUP BY ndos ORDER BY ndos", cn))
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read()) o.Add("Documentos da serie " + r["ndos"] + ": " + r["n"] + " (ultimo n.º " + r["m"] + ")");
+        }
+        return o;
+    }
+
+    // /teste-comparar: diferenças de colunas e gatilhos entre a produção e a base de testes (só leitura)
+    public List<string> Comparar()
+    {
+        List<string> o = new List<string>();
+        using (SqlConnection p = Abrir(false))
+        using (SqlConnection t = Abrir(true))
+            foreach (string tab in new string[] { "bo", "bo2", "bo3", "bot", "bi", "bi2", "boma", "ma", "cl", "st", "sa" })
+            {
+                List<string> cp = Colunas(p, null, tab), ct = Colunas(t, null, tab);
+                List<string> soP = cp.FindAll(x => !ct.Exists(y => string.Equals(x, y, StringComparison.OrdinalIgnoreCase)));
+                List<string> soT = ct.FindAll(x => !cp.Exists(y => string.Equals(x, y, StringComparison.OrdinalIgnoreCase)));
+                o.Add(tab + ": " + cp.Count + " colunas em " + BaseLeitura + ", " + ct.Count + " em " + BaseTeste +
+                    (soP.Count > 0 ? " · so em producao: " + string.Join(", ", soP.ToArray()) : "") + (soT.Count > 0 ? " · so em teste: " + string.Join(", ", soT.ToArray()) : "") +
+                    " · gatilhos producao: " + string.Join(", ", Gatilhos(p, tab).ToArray()) + " · teste: " + string.Join(", ", Gatilhos(t, tab).ToArray()));
+            }
+        return o;
+    }
+
+    static readonly Random rnd = new Random();
+    // stamp no formato do PHC (25 caracteres)
+    static string NovoStamp()
+    {
+        const string a = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder sb = new StringBuilder("PTE" + DateTime.Now.ToString("yyMMddHHmmssfff", CultureInfo.InvariantCulture));
+        lock (rnd) while (sb.Length < 25) sb.Append(a[rnd.Next(a.Length)]);
+        return sb.ToString();
+    }
+
+    static DataTable Ler(SqlConnection cn, string sql, string p, object v)
+    {
+        DataTable d = new DataTable();
+        using (SqlCommand c = new SqlCommand(sql, cn))
+        {
+            c.Parameters.AddWithValue(p, v);
+            using (SqlDataAdapter a = new SqlDataAdapter(c)) a.Fill(d);
+        }
+        return d;
+    }
+
+    // /teste-clonar SERIE NUMERO [ANO]: copia um documento real (de producao) para a base de testes, com novos stamps e
+    // o numero seguinte da serie, para confirmar que o PHC abre e trata bem um documento gravado por programa.
+    public List<string> Clonar(int ndos, long obrano, int ano)
+    {
+        List<string> o = new List<string>();
+        Dictionary<string, DataTable> orig = new Dictionary<string, DataTable>();
+        string oldBo;
+        using (SqlConnection p = Abrir(false))
+        {
+            DataTable bo = Ler(p, "SELECT * FROM bo WHERE ndos = " + ndos + " AND obrano = " + obrano + (ano > 0 ? " AND boano = " + ano : "") + " ORDER BY boano DESC", "@x", 0);
+            if (bo.Rows.Count == 0) throw new Exception("Nao encontrei o documento " + ndos + " n.º " + obrano + " em " + BaseLeitura + ".");
+            while (bo.Rows.Count > 1) bo.Rows.RemoveAt(1);
+            oldBo = Convert.ToString(bo.Rows[0]["bostamp"]);
+            orig["bo"] = bo;
+            orig["bo2"] = Ler(p, "SELECT * FROM bo2 WHERE bo2stamp = @s", "@s", oldBo);
+            orig["bo3"] = Ler(p, "SELECT * FROM bo3 WHERE bo3stamp = @s", "@s", oldBo);
+            orig["bot"] = Ler(p, "SELECT * FROM bot WHERE bostamp = @s", "@s", oldBo);
+            orig["bi"] = Ler(p, "SELECT * FROM bi WHERE bostamp = @s ORDER BY lordem", "@s", oldBo);
+            orig["bi2"] = Ler(p, "SELECT * FROM bi2 WHERE bi2stamp IN (SELECT bistamp FROM bi WHERE bostamp = @s)", "@s", oldBo);
+            orig["boma"] = Ler(p, "SELECT * FROM boma WHERE bostamp = @s", "@s", oldBo);
+        }
+        DataRow cab = orig["bo"].Rows[0];
+        int boano = Convert.ToInt32(cab["boano"]);
+        string newBo = NovoStamp();
+        Dictionary<string, string> mapa = new Dictionary<string, string>(StringComparer.Ordinal);
+        mapa[oldBo] = newBo;
+        foreach (DataRow r in orig["bi"].Rows) mapa[Convert.ToString(r["bistamp"])] = NovoStamp();
+
+        using (SqlConnection t = Abrir(true))
+        using (SqlTransaction tx = t.BeginTransaction(IsolationLevel.Serializable))
+        {
+            try
+            {
+                long novo;
+                using (SqlCommand c = new SqlCommand("SELECT ISNULL(MAX(obrano), 0) + 1 FROM bo WITH (UPDLOCK, HOLDLOCK) WHERE ndos = @n AND boano = @a", t, tx))
+                {
+                    c.Parameters.AddWithValue("@n", ndos); c.Parameters.AddWithValue("@a", boano);
+                    novo = Convert.ToInt64(c.ExecuteScalar());
+                }
+                // dados mestre que faltam na base de testes (vazia): o cliente e os artigos das linhas
+                int nCl = CopiarMestre(t, tx, "cl", "no = @a AND estab = @b", cab["no"], cab["estab"]);
+                int nSt = 0;
+                foreach (DataRow r in orig["bi"].Rows)
+                {
+                    string refa = Convert.ToString(r["ref"]).Trim();
+                    if (refa != "") nSt += CopiarMestre(t, tx, "st", "ref = @a", refa, null);
+                }
+                string agora = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+                int linhas = 0;
+                foreach (string tab in TABELAS)
+                {
+                    List<string> cols = Colunas(t, tx, tab);
+                    foreach (DataRow r in orig[tab].Rows)
+                    {
+                        Dictionary<string, object> v = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                        foreach (DataColumn dc in orig[tab].Columns)
+                        {
+                            if (!cols.Exists(x => string.Equals(x, dc.ColumnName, StringComparison.OrdinalIgnoreCase))) continue;
+                            object val = r[dc];
+                            string nome = dc.ColumnName.ToLowerInvariant();
+                            if (nome.EndsWith("stamp") && val is string)
+                            {
+                                string sv = (string)val, nv;
+                                if (mapa.TryGetValue(sv, out nv)) val = nv;
+                                else if (nome == tab + "stamp") val = NovoStamp();   // chave própria (botstamp, bomastamp…)
+                            }
+                            else if (nome == "obrano" && Convert.ToInt64(val) == obrano) val = novo;
+                            else if (nome == "atcodeid") val = "";                     // nunca levar o código AT da guia original
+                            else if (nome == "usrdata" || nome == "ousrdata") val = DateTime.Today;
+                            else if (nome == "usrhora" || nome == "ousrhora") val = agora;
+                            else if (nome == "usrinis" || nome == "ousrinis") val = "PONTE";
+                            v[dc.ColumnName] = val;
+                        }
+                        Inserir(t, tx, tab, v);
+                        linhas++;
+                    }
+                }
+                tx.Commit();
+                o.Add("Criado em " + BaseTeste + ": " + Convert.ToString(cab["nmdos"]).Trim() + " n.º " + novo + "/" + boano + " (copia do n.º " + obrano + " de " + BaseLeitura + ")");
+                o.Add("bostamp " + newBo + " · " + orig["bi"].Rows.Count + " linhas · " + orig["boma"].Rows.Count + " n.º de serie (boma) · " + linhas + " registos gravados");
+                o.Add("Copiados para a base de testes: " + nCl + " cliente(s), " + nSt + " artigo(s).");
+                o.Add("Abra no PHC (empresa " + BaseTeste + ", utilizador sa) e confirme que o documento abre, grava e imprime normalmente.");
+            }
+            catch { tx.Rollback(); throw; }
+        }
+        return o;
+    }
+
+    // copia um registo de cl/st da producao para a base de testes, se lá não existir (mesmo servidor)
+    int CopiarMestre(SqlConnection t, SqlTransaction tx, string tab, string onde, object a, object b)
+    {
+        using (SqlCommand c = new SqlCommand("SELECT COUNT(*) FROM " + tab + " WHERE " + onde, t, tx))
+        {
+            c.Parameters.AddWithValue("@a", a); if (b != null) c.Parameters.AddWithValue("@b", b);
+            if (Convert.ToInt32(c.ExecuteScalar()) > 0) return 0;
+        }
+        List<string> cols = Colunas(t, tx, tab);
+        List<string> origem;
+        using (SqlConnection p = Abrir(false)) origem = Colunas(p, null, tab);
+        List<string> comuns = cols.FindAll(x => origem.Exists(y => string.Equals(x, y, StringComparison.OrdinalIgnoreCase)));
+        string lista = "[" + string.Join("],[", comuns.ToArray()) + "]";
+        using (SqlCommand c = new SqlCommand("INSERT INTO " + tab + " (" + lista + ") SELECT " + lista + " FROM [" + BaseLeitura + "].dbo." + tab + " WHERE " + onde, t, tx))
+        {
+            c.Parameters.AddWithValue("@a", a); if (b != null) c.Parameters.AddWithValue("@b", b);
+            return c.ExecuteNonQuery();
+        }
+    }
+
+    static void Inserir(SqlConnection t, SqlTransaction tx, string tab, Dictionary<string, object> v)
+    {
+        List<string> cols = new List<string>(v.Keys);
+        StringBuilder sql = new StringBuilder("INSERT INTO " + tab + " ([" + string.Join("],[", cols.ToArray()) + "]) VALUES (");
+        for (int i = 0; i < cols.Count; i++) sql.Append(i == 0 ? "" : ",").Append("@p" + i);
+        sql.Append(")");
+        using (SqlCommand c = new SqlCommand(sql.ToString(), t, tx))
+        {
+            for (int i = 0; i < cols.Count; i++) c.Parameters.AddWithValue("@p" + i, v[cols[i]] ?? DBNull.Value);
+            c.ExecuteNonQuery();
+        }
+    }
+}
+
 class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
 {
     Config cfg;
@@ -3261,6 +3521,21 @@ static class Programa
                 else Console.WriteLine("EnviarEmails nao esta a 1 no PontePHC.ini: nada e enviado.");
                 return 0;
             }
+            if (cmd == "/teste-ligacao" || cmd == "/teste-comparar" || cmd == "/teste-clonar")
+            {
+                EscritaTeste et = new EscritaTeste(cfg);
+                List<string> r;
+                if (cmd == "/teste-ligacao") r = et.Ligacao();
+                else if (cmd == "/teste-comparar") r = et.Comparar();
+                else
+                {
+                    if (args.Length < 3) { Console.WriteLine("Uso: PontePHC.exe /teste-clonar SERIE NUMERO [ANO]   (ex.: /teste-clonar 114 1788 2026)"); return 1; }
+                    r = et.Clonar(int.Parse(args[1]), long.Parse(args[2]), args.Length >= 4 ? int.Parse(args[3]) : 0);
+                }
+                foreach (string v in r) Console.WriteLine(v);
+                if (cmd != "/teste-clonar") Console.WriteLine("Nada foi alterado.");
+                return 0;
+            }
             if (cmd == "/estrutura" && args.Length >= 2)
             {
                 PhcSql sql = m.Fonte as PhcSql;
@@ -3298,6 +3573,9 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /emails            emails da plataforma (pendentes, com erro, enviados) e envia os pendentes");
                 Console.WriteLine("  PontePHC.exe /estrutura SERIE   colunas, gatilhos e ultimos documentos de uma serie (preparacao da Fase 5)");
                 Console.WriteLine("  PontePHC.exe /duracoes          calcula ja a duracao real media das intervencoes (normalmente 1 vez por dia)");
+                Console.WriteLine("  PontePHC.exe /teste-ligacao     Fase 5: liga a base de testes (BaseTestePHC, omissao TESTE) e mostra o que tem");
+                Console.WriteLine("  PontePHC.exe /teste-comparar    Fase 5: compara colunas e gatilhos das tabelas dos dossiers entre producao e testes");
+                Console.WriteLine("  PontePHC.exe /teste-clonar SERIE NUMERO [ANO]   Fase 5: copia um documento real para a base de TESTES (so la escreve)");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");

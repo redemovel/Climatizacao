@@ -364,6 +364,13 @@ cod, out = ponte('/duracoes')
 du = BD.get('listas/duracoes', {})
 mt = du.get('porTipo', {}).get('mapValue', {}).get('fields', {}).get('Manutenção', {}).get('mapValue', {}).get('fields', {})
 verifica(cod == 0 and mt.get('h', {}).get('doubleValue') == 6.5 and mt.get('n', {}).get('integerValue') == '2', 'duração real: mediana de 8 h (A) e 5 h (E); 2021 fica de fora: ' + json.dumps(du)[:300] + out[-200:])
+# Fase 5: a escrita só é aceite numa base cujo nome contenha TESTE e diferente da de produção
+ini0 = open(os.path.join(d, 'PontePHC.ini')).read()
+for nome in ('ARPURO', 'PRODUCAO'):
+    open(os.path.join(d, 'PontePHC.ini'), 'w').write(ini0 + '\nBaseTestePHC=' + nome + '\n')
+    cod, out = ponte('/teste-clonar', '114', '1')
+    verifica('recusada' in out and cod != 0, 'escrita recusada na base «' + nome + '»: ' + out[-160:])
+open(os.path.join(d, 'PontePHC.ini'), 'w').write(ini0)
 BD['controlo/sincronizar'] = {'estado': sv('Pedido'), 'pedidoPorNome': sv('Ricardo')}
 cod, out = ponte('/verificar-pedido')
 verifica('atendido' in out and BD['controlo/sincronizar']['estado'] == sv('Concluído') and BD['controlo/sincronizar']['resultado'] == sv('OK'), 'pedido atendido e marcado como concluído ' + out[-200:])
