@@ -919,7 +919,10 @@ class EscritaTeste
                 int n = 0;
                 foreach (string sql in new string[] {
                     "DELETE FROM boma WHERE bostamp = @s", "DELETE FROM bi2 WHERE bi2stamp IN (SELECT bistamp FROM bi WHERE bostamp = @s)", "DELETE FROM bi WHERE bostamp = @s",
-                    "DELETE FROM bot WHERE bostamp = @s", "DELETE FROM bo3 WHERE bo3stamp = @s", "DELETE FROM bo2 WHERE bo2stamp = @s", "DELETE FROM bo WHERE bostamp = @s" })
+                    "DELETE FROM bot WHERE bostamp = @s", "DELETE FROM bo3 WHERE bo3stamp = @s", "DELETE FROM bo2 WHERE bo2stamp = @s", "DELETE FROM bo WHERE bostamp = @s",
+                    // linhas órfãs de cópias anteriores (sem cabeçalho) — só na base de testes
+                    "DELETE FROM boma WHERE bostamp NOT IN (SELECT bostamp FROM bo)", "DELETE FROM bi2 WHERE bi2stamp NOT IN (SELECT bistamp FROM bi) OR bostamp NOT IN (SELECT bostamp FROM bo)",
+                    "DELETE FROM bi WHERE bostamp NOT IN (SELECT bostamp FROM bo)", "DELETE FROM bot WHERE bostamp NOT IN (SELECT bostamp FROM bo)" })
                     using (SqlCommand c = new SqlCommand(sql, t, tx)) { c.Parameters.AddWithValue("@s", s); n += c.ExecuteNonQuery(); }
                 tx.Commit();
                 o.Add("Apagado da base " + BaseTeste + ": serie " + ndos + " n.º " + num + "/" + ano + " (" + n + " registos).");
@@ -980,7 +983,7 @@ class EscritaTeste
             DataTable bo = Ler(p, "SELECT * FROM bo WHERE ndos = " + ndos + " AND obrano = " + obrano + (ano > 0 ? " AND boano = " + ano : "") + " ORDER BY boano DESC", "@x", 0);
             if (bo.Rows.Count == 0) throw new Exception("Nao encontrei o documento " + ndos + " n.º " + obrano + " em " + BaseLeitura + ".");
             while (bo.Rows.Count > 1) bo.Rows.RemoveAt(1);
-            oldBo = Convert.ToString(bo.Rows[0]["bostamp"]);
+            oldBo = Convert.ToString(bo.Rows[0]["bostamp"]).Trim();
             orig["bo"] = bo;
             orig["bo2"] = Ler(p, "SELECT * FROM bo2 WHERE bo2stamp = @s", "@s", oldBo);
             orig["bo3"] = Ler(p, "SELECT * FROM bo3 WHERE bo3stamp = @s", "@s", oldBo);
@@ -994,7 +997,8 @@ class EscritaTeste
         string newBo = NovoStamp();
         Dictionary<string, string> mapa = new Dictionary<string, string>(StringComparer.Ordinal);
         mapa[oldBo] = newBo;
-        foreach (DataRow r in orig["bi"].Rows) mapa[Convert.ToString(r["bistamp"])] = NovoStamp();
+        // os stamps vêm com espaços à direita (char/varchar diferentes entre tabelas): comparar sempre sem eles
+        foreach (DataRow r in orig["bi"].Rows) mapa[Convert.ToString(r["bistamp"]).Trim()] = NovoStamp();
 
         using (SqlConnection t = Abrir(true))
         using (SqlTransaction tx = t.BeginTransaction(IsolationLevel.Serializable))
@@ -1030,9 +1034,11 @@ class EscritaTeste
                             string nome = dc.ColumnName.ToLowerInvariant();
                             if (nome.EndsWith("stamp") && val is string)
                             {
-                                string sv = (string)val, nv;
+                                string sv = ((string)val).Trim(), nv;
                                 if (mapa.TryGetValue(sv, out nv)) val = nv;
                                 else if (nome == tab + "stamp") val = NovoStamp();   // chave própria (botstamp, bomastamp…)
+                                else if (nome == "bostamp" || nome == "bistamp" || nome == tab + "stamp")
+                                    throw new Exception("Ligacao " + tab + "." + nome + " = " + sv + " nao corresponde ao documento: copia cancelada.");
                             }
                             else if (nome == "obrano" && Convert.ToInt64(val) == obrano) val = novo;
                             else if (nome == "atcodeid") val = "";                     // nunca levar o código AT da guia original
