@@ -1017,7 +1017,10 @@ class EscritaTeste
                 foreach (DataRow r in orig["bi"].Rows)
                 {
                     string refa = Convert.ToString(r["ref"]).Trim();
-                    if (refa != "") nSt += CopiarMestre(t, tx, "st", "ref = @a", refa, null);
+                    if (refa == "") continue;
+                    nSt += CopiarMestre(t, tx, "st", "ref = @a", refa, null);
+                    // stock desse artigo no armazém da linha (para as reservas se comportarem como na produção)
+                    if (r.Table.Columns.Contains("armazem")) CopiarMestre(t, tx, "sa", "ref = @a AND armazem = @b", refa, r["armazem"]);
                 }
                 string agora = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                 int linhas = 0;
