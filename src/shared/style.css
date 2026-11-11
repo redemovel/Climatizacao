@@ -285,3 +285,9 @@ body.pagina-proposta #main { padding-top: 12px; padding-bottom: 24px; }
 .orc-num label { font-size: .72rem; color: var(--texto-2); display: flex; flex-direction: column; gap: 2px; }
 .orc-num input { min-height: 38px; padding: 4px 6px; }
 @media (max-width: 480px) { .orc-num { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Rentabilidade */
+.tab-rent { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.tab-rent th, .tab-rent td { padding: 5px 4px; border-bottom: 1px solid var(--linha); text-align: left; }
+.tab-rent .num { text-align: right; white-space: nowrap; }
+.tab-rent tr.tot td { font-weight: 700; border-bottom: 0; }

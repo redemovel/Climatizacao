@@ -92,6 +92,7 @@ function htmlTrabalho(f) {
         : '<p class="muted" style="margin:0">Sem tempos registados.</p>'}
       ${sessao.perfil === 'master' && tempos.length ? '<div id="valorMO" class="valor-mo"><p class="muted" style="margin:0">A calcular o valor…</p></div>' : ''}
     </div>
+    ${sessao.perfil === 'master' && (tempos.length || mats.length) ? '<div class="cartao" id="cartaoRent"><h3 style="margin-top:0">Rentabilidade <span class="muted" style="font-weight:400">· só o Master vê</span></h3><p class="muted" style="margin:0">A calcular…</p></div>' : ''}
     <div class="cartao" id="cartaoMateriais">
       <div class="cab-cartao"><h3>Material aplicado</h3>${pode ? '<button class="btn btn-peq btn-primario" id="btnMaterial">+ Material</button>' : ''}</div>
       ${pode ? `<div class="acoes-mat"><button class="btn btn-peq" id="btnImportarGuia">Importar da guia</button>
@@ -123,6 +124,7 @@ function ligarTrabalho() {
   if ($('#btnMaterial')) $('#btnMaterial').onclick = () => formMaterial();
   if ($('#btnRelatorio')) $('#btnRelatorio').onclick = () => comBotao($('#btnRelatorio'), guardarRelatorio);
   if ($('#valorMO')) mostrarValorMO();   // automático, só para o Master (a tabela de preços nunca chega aos outros perfis)
+  if ($('#cartaoRent')) mostrarRentabilidade();
   $$('[data-apagar-tempo]').forEach((b) => b.onclick = async () => {
     if (!(await confirmar('Apagar este registo de tempo?', { ok: 'Apagar', perigo: true }))) return;
     alterarTrabalho((d) => ({ tempos: (d.tempos || []).filter((t) => t.id !== b.dataset.apagarTempo) }), 'Tempo apagado.');
@@ -496,6 +498,51 @@ async function mostrarValorMO() {
       <p style="text-align:right;margin:8px 0 0"><b id="totalMO">Total: ${esc(eur(total))}</b> <span class="muted">s/IVA</span></p>
       <p class="muted" style="margin:4px 0 0">1.ª hora +${esc(String(tab.primeiraHora ?? 20))}%, 2.ª hora +${esc(String(tab.segundaHora ?? 10))}%, fim de semana +${esc(String(tab.fimDeSemana ?? 100))}%.${falta ? ' Há equipas sem preço na tabela.' : ''}</p>`;
   } catch (e) { toast(erroFirebase(e), 'erro'); }
+}
+
+// ---------- Rentabilidade da obra (só Master): venda e custo da mão de obra e do material ----------
+// Mão de obra: venda pela tabela de preço/hora; custo = horas × custo/hora de cada pessoa (config/custos).
+// Material: venda pelo PVP do PHC e custo pelo preço de custo (artigos/{id}/privado/custo). Deslocação: a acrescentar.
+let custosCache = null;
+async function mostrarRentabilidade() {
+  const eur = (v) => (Number(v) || 0).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+  const box = $('#cartaoRent');
+  try {
+    if (!tabelaPrecosCache) { const s = await getDoc(doc(db, 'config', 'precosHora')); tabelaPrecosCache = s.exists() ? s.data() : { linhas: [] }; }
+    if (!custosCache) { const s = await getDoc(doc(db, 'config', 'custos')); custosCache = s.exists() ? s.data() : { hora: {} }; }
+    const avisos = [];
+    // mão de obra
+    let vMO = 0, cMO = 0;
+    for (const t of atual.tempos || []) {
+      const r = valorTempo(t, atual.tipo, tabelaPrecosCache);
+      if (r) vMO += r.valor; else avisos.push(`tempo de ${fmtData(t.data)} sem preço na tabela`);
+      const h = Number(t.horas) || 0;
+      if ((t.equipa || []).length) {
+        for (const p of t.equipa) {
+          const ch = (custosCache.hora || {})[p.id];
+          if (ch == null) avisos.push(`${p.nome} sem custo/hora`); else cMO += h * ch;
+        }
+      } else avisos.push(`tempo de ${fmtData(t.data)} sem equipa identificada`);
+    }
+    // material
+    let vMat = 0, cMat = 0;
+    const ids = [...new Set((atual.materiais || []).filter((m) => m.artigoId).map((m) => m.artigoId))];
+    const priv = {};
+    await Promise.all(ids.map(async (id) => { try { const s = await getDoc(doc(db, 'artigos', id, 'privado', 'custo')); priv[id] = s.exists() ? s.data() : {}; } catch (e) { priv[id] = {}; } }));
+    for (const m of atual.materiais || []) {
+      const q = Number(m.qtd) || 0;
+      const p = m.artigoId ? priv[m.artigoId] || {} : {};
+      if (p.custo != null) cMat += q * p.custo; else avisos.push(`${m.ref || m.descricao}: sem preço de custo`);
+      if (p.pvp) vMat += q * p.pvp; else avisos.push(`${m.ref || m.descricao}: sem PVP`);
+    }
+    const venda = vMO + vMat, custo = cMO + cMat, margem = venda - custo, pct = venda ? (margem / venda) * 100 : 0;
+    const lin = (n, v, c) => `<tr><td>${n}</td><td class="num">${esc(eur(v))}</td><td class="num">${esc(eur(c))}</td><td class="num">${esc(eur(v - c))}</td></tr>`;
+    box.innerHTML = `<h3 style="margin-top:0">Rentabilidade <span class="muted" style="font-weight:400">· só o Master vê</span></h3>
+      <table class="tab-rent"><tr><th></th><th class="num">Venda</th><th class="num">Custo</th><th class="num">Margem</th></tr>
+        ${lin('Mão de obra', vMO, cMO)}${lin('Material', vMat, cMat)}
+        <tr class="tot"><td>Total</td><td class="num">${esc(eur(venda))}</td><td class="num">${esc(eur(custo))}</td><td class="num" id="rentMargem">${esc(eur(margem))} <span class="${margem < 0 ? 'txt-erro' : ''}">(${esc(pct.toFixed(0))}%)</span></td></tr></table>
+      <p class="muted" style="margin:6px 0 0;font-size:.82rem">Valores s/IVA. Deslocação ainda não incluída.${avisos.length ? ' Incompleto: ' + esc([...new Set(avisos)].slice(0, 6).join('; ')) + '.' : ''}</p>`;
+  } catch (e) { box.innerHTML = `<p class="msg-erro">${esc(erroFirebase(e))}</p>`; }
 }
 
 // ---------- Relatório para o cliente (email pela PontePHC e versão para imprimir/PDF) ----------

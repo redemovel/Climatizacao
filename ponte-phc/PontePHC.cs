@@ -1813,7 +1813,7 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                     for (int k = 0; k < parte.Count; k++) { if (k > 0) ps.Append(','); ps.Append("@r" + k); c.Parameters.AddWithValue("@r" + k, parte[k]); }
                     c.Parameters.AddWithValue("@a", ArmazemAC);
                     c.Parameters.AddWithValue("@dg", DateTime.Today.AddDays(-cfg.GetInt("GuiasDiasAbertas", 30)));
-                    c.CommandText = "SELECT st.ref, st.design, st.unidade, st.faminome, st.inactivo, st.epcusto, " + (StTemNoserie(cn) ? "st.noserie" : "0") + " AS noserie, ISNULL(sa.stock, 0) AS stock, " +
+                    c.CommandText = "SELECT st.ref, st.design, st.unidade, st.faminome, st.inactivo, st.epcusto, st.epv1, " + (StTemNoserie(cn) ? "st.noserie" : "0") + " AS noserie, ISNULL(sa.stock, 0) AS stock, " +
                         "ISNULL((SELECT SUM(bi.qtt) FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
                         "  WHERE bi.ref = st.ref AND bo.ndos = 114 AND bo.fechada = 0 AND bi.armazem = @a), 0) AS reservado, " +
                         // em guias abertas: o que levou (qtt) menos o que ja passou para FO (qtt2), so das guias dos ultimos GuiasDiasAbertas dias
@@ -1826,7 +1826,7 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
                             ArtigoPHC a = new ArtigoPHC();
                             a.Ref = Valor(r["ref"]); a.Design = Valor(r["design"]); a.Unidade = Valor(r["unidade"]); a.Familia = Valor(r["faminome"]);
                             a.Inativo = Valor(r["inactivo"]) == "1" || Valor(r["inactivo"]).ToLower() == "true";
-                            a.Stock = Dec(r["stock"]); a.Reservado = Dec(r["reservado"]); a.EmGuias = Dec(r["emguias"]); a.Custo = Dec(r["epcusto"]);
+                            a.Stock = Dec(r["stock"]); a.Reservado = Dec(r["reservado"]); a.EmGuias = Dec(r["emguias"]); a.Custo = Dec(r["epcusto"]); a.Pvp = Dec(r["epv1"]);
                             a.ComSerie = Valor(r["noserie"]) == "1" || Valor(r["noserie"]).ToLower() == "true";
                             l.Add(a);
                         }
@@ -2371,13 +2371,13 @@ class ArtigoPHC
 {
     public string Ref = "", Design = "", Unidade = "", Familia = "";
     public bool Inativo, ComSerie;
-    public decimal Stock, Reservado, EmGuias, Custo;
+    public decimal Stock, Reservado, EmGuias, Custo, Pvp;
     // Identifica o estado enviado (para so reenviar quando muda).
     public string Assinatura()
     {
         return string.Join("|", new string[] { Design, Unidade, Familia, Inativo ? "1" : "0", ComSerie ? "S" : "",
             Stock.ToString(CultureInfo.InvariantCulture), Reservado.ToString(CultureInfo.InvariantCulture),
-            EmGuias.ToString(CultureInfo.InvariantCulture), Custo.ToString(CultureInfo.InvariantCulture) });
+            EmGuias.ToString(CultureInfo.InvariantCulture), Custo.ToString(CultureInfo.InvariantCulture), Pvp.ToString(CultureInfo.InvariantCulture) });
     }
 }
 
@@ -2414,6 +2414,7 @@ class FonteCsvArtigos : IFonteArtigos
             a.Stock = decimal.Parse(v[5], CultureInfo.InvariantCulture); a.Reservado = decimal.Parse(v[6], CultureInfo.InvariantCulture);
             a.EmGuias = decimal.Parse(v[7], CultureInfo.InvariantCulture); a.Custo = decimal.Parse(v[8], CultureInfo.InvariantCulture);
             if (v.Length > 10) a.ComSerie = v[10] == "1";
+            if (v.Length > 11 && v[11] != "") a.Pvp = decimal.Parse(v[11], CultureInfo.InvariantCulture);
             todos.Add(a);
             alt[a.Ref] = DateTime.ParseExact(v[9], "yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
@@ -3209,6 +3210,7 @@ class Motor
                     Documento p = new Documento();
                     p.Id = d.Id + "/privado/custo";
                     p.Decimal("custo", a.Custo);
+                    p.Decimal("pvp", a.Pvp);   // preço de venda 1 (s/IVA): só o Master vê
                     docs.Add(p);
                 }
                 if (docs.Count == 0) continue;

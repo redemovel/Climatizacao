@@ -291,7 +291,7 @@ verifica(BD['contadores/folhas-2026']['valor'] == {'integerValue': '1800'}, 'con
 
 # 5b) artigos do armazém da climatização (stock, reservado em FO abertas, em guias abertas; custo só no privado)
 arts = ['ref;design;unidade;familia;inactivo;stock;reservado;guias;custo;usrdata',
-        'TC14;Tubo cobre 1/4";m;Ar Condicionado;0;120;10;50;2.77;2026-11-01',
+        'TC14;Tubo cobre 1/4";m;Ar Condicionado;0;120;10;50;2.77;2026-11-01;0;4.5',
         'FTXP35;Ar Condicionado Daikin FTXP35;un;Ar Condicionado;0;3;0;0;400;2026-11-01;1',
         'AB/12;Abraçadeira 12 mm;un;Ar Condicionado;0;30;0;0;0.1;2026-11-01']
 open(os.path.join(d, 'artigos.csv'), 'w', encoding='utf-8').write('\n'.join(arts) + '\n')
@@ -300,7 +300,7 @@ cod, out = ponte('/sincronizar')
 A = BD.get('artigos/TC14', {})
 verifica(BD.get('artigos/FTXP35', {}).get('comSerie') == {'booleanValue': True} and BD['artigos/TC14'].get('comSerie') == {'booleanValue': False}, 'equipamentos com n.º de série marcados')
 verifica('3 artigos com alteracoes' in out and A.get('stock') == {'doubleValue': 120} and A.get('reservadoPHC') == {'doubleValue': 10} and A.get('emGuiasPHC') == {'doubleValue': 50}, 'artigos: stock, reservado e em guias ' + out[-200:])
-verifica('custo' not in json.dumps(A) and BD.get('artigos/TC14/privado/custo', {}).get('custo') == {'doubleValue': 2.77}, 'custo só no documento privado')
+verifica('custo' not in json.dumps(A) and BD.get('artigos/TC14/privado/custo', {}).get('custo') == {'doubleValue': 2.77} and BD['artigos/TC14/privado/custo'].get('pvp') == {'doubleValue': 4.5}, 'custo e PVP só no documento privado')
 verifica('artigos/AB~2F12' in BD and BD['artigos/AB~2F12']['ref'] == {'stringValue': 'AB/12'}, 'referência com «/» fica com id válido')
 verifica('tu' in json.dumps(A.get('pesquisa')) and 'cobre' in json.dumps(A.get('pesquisa')), 'pesquisa por referência e designação')
 n = len(PEDIDOS)

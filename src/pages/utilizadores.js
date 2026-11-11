@@ -187,8 +187,10 @@ $('#btnViaturas').onclick = () => comBotao($('#btnViaturas'), abrirViaturas);
 // ---------- Colaboradores (quem aparece nos registos de tempo) ----------
 const FUNCOES = ['Técnico', 'Ajudante', 'Aprendiz'];
 let colaboradores = [];
+let custos = { hora: {} };   // config/custos (só o Master): custo/hora de cada colaborador, para a rentabilidade das obras
 async function carregarCol() {
   try {
+    try { const sc = await getDoc(doc(db, 'config', 'custos')); custos = sc.exists() ? { hora: {}, ...sc.data() } : { hora: {} }; } catch (e) { /* sem custos */ }
     const snap = await getDocs(query(collection(db, 'colaboradores'), limit(100)));
     colaboradores = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.ativo ? 1 : 0) - (a.ativo ? 1 : 0) || a.nome.localeCompare(b.nome, 'pt'));
     renderCol();
@@ -198,7 +200,8 @@ function renderCol() {
   $('#listaCol').innerHTML = colaboradores.map((p, i) => `
     <div class="lista-item" data-col="${i}" style="${p.ativo ? '' : 'opacity:.55'}">
       <div class="li-topo"><span class="li-titulo">${esc(p.nome)}</span><span class="badge">${esc(p.funcao)}${p.externo ? ' · externo' : ''}</span></div>
-      <div class="li-sub">${p.uid ? 'Utilizador: ' + esc((lista.find((u) => u.uid === p.uid) || {}).nome || p.uid) : '<span class="muted">Sem utilizador associado</span>'}${p.ativo ? '' : ' · Inativo'}</div>
+      <div class="li-sub">${p.uid ? 'Utilizador: ' + esc((lista.find((u) => u.uid === p.uid) || {}).nome || p.uid) : '<span class="muted">Sem utilizador associado</span>'}${p.ativo ? '' : ' · Inativo'}
+        · ${custos.hora[p.id] ? 'custo ' + esc(Number(custos.hora[p.id]).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' })) + '/h' : '<span class="txt-erro">sem custo/hora</span>'}</div>
     </div>`).join('') || `<div class="vazio">Sem colaboradores.<br><button class="btn" id="btnColIniciais" style="margin-top:10px">Criar lista inicial</button></div>`;
   if ($('#btnColIniciais')) $('#btnColIniciais').onclick = () => comBotao($('#btnColIniciais'), criarColIniciais);
 }
@@ -224,6 +227,7 @@ function formCol(p) {
     <label class="campo"><span>Nome *</span><input id="cNome" maxlength="120" value="${esc(p?.nome || '')}" autocomplete="off"></label>
     <label class="campo"><span>Função *</span><select id="cFuncao">${FUNCOES.map((f) => `<option ${p?.funcao === f ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
     <label class="campo"><span>Utilizador da plataforma</span><select id="cUid"><option value="">— nenhum —</option>${lista.filter((u) => u.ativo).map((u) => `<option value="${esc(u.uid)}" ${p?.uid === u.uid ? 'selected' : ''}>${esc(u.nome)}</option>`).join('')}</select></label>
+ <label class="campo"><span>Custo/hora (€, salário com encargos) — só o Master vê</span><input type="number" id="cCusto" min="0" step="0.01" inputmode="decimal" value="${esc(String(p && custos.hora[p.id] != null ? custos.hora[p.id] : ''))}" placeholder="Ex.: 14,50"></label>
     <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cExt" style="width:auto;min-height:0" ${p?.externo ? 'checked' : ''}><span style="margin:0">Equipa externa</span></label>
     <label class="campo" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="cAtivo" style="width:auto;min-height:0" ${!ed || p.ativo ? 'checked' : ''}><span style="margin:0">Ativo</span></label>
     <div class="msg-erro" id="cErro"></div>
@@ -234,8 +238,15 @@ function formCol(p) {
     const dados = { nome, funcao: $('#cFuncao', c).value, uid: $('#cUid', c).value, externo: $('#cExt', c).checked, ativo: $('#cAtivo', c).checked, atualizadoEm: serverTimestamp() };
     comBotao($('#cGuardar', c), async () => {
       try {
-        if (ed) await updateDoc(doc(db, 'colaboradores', p.id), dados);
-        else await setDoc(doc(collection(db, 'colaboradores')), { ...dados, criadoEm: serverTimestamp() });
+        const ref = ed ? doc(db, 'colaboradores', p.id) : doc(collection(db, 'colaboradores'));
+        if (ed) await updateDoc(ref, dados);
+        else await setDoc(ref, { ...dados, criadoEm: serverTimestamp() });
+        const ch = String($('#cCusto', c).value).replace(',', '.');
+        const novo = ch === '' ? null : Math.max(0, Number(ch) || 0);
+        if (novo !== (custos.hora[ref.id] ?? null)) {
+          custos.hora[ref.id] = novo;
+          await setDoc(doc(db, 'config', 'custos'), { hora: { ...custos.hora }, atualizadoEm: serverTimestamp() }, { merge: true });
+        }
         fecharModal();
         toast('Colaborador guardado.', 'ok');
         carregarCol();

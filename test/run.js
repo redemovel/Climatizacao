@@ -532,6 +532,27 @@ teste('fase 2: master define preço/hora e vê o valor da mão de obra; backoffi
   // 51 × (1×1,2 + 1×1,1 + 0,5) = 142,80
   assert((await page.textContent('#totalMO')).includes('142,80'), 'total MO: ' + await page.textContent('#totalMO'));
   await captura(page, 'valor-mo-375');
+  // rentabilidade: custo/hora por pessoa (definido em Colaboradores) + material com custo e PVP
+  await page.goto(BASE + '/utilizadores.html');
+  await page.waitForSelector('[data-col]');
+  for (const [nome, v] of [['João Silva', '15'], ['Pedro Costa', '14'], ['Equipa externa — ajudante', '10']]) {
+    await page.click(`[data-col]:has-text("${nome}")`);
+    await page.fill('#cCusto', v);
+    await page.click('#cGuardar');
+    await page.waitForFunction((n) => !document.querySelector('.modal') && [...document.querySelectorAll('[data-col]')].some((e) => e.textContent.includes(n) && e.textContent.includes('/h')), nome);
+  }
+  igual(JSON.stringify((await fake(page, () => window.__fake.doc('config/custos'))).hora), JSON.stringify({ col1: 15, col2: 14, col4: 10 }), 'custos/hora');
+  await fake(page, () => {
+    window.__fake.set('artigos/TC14/privado/custo', { custo: 2.77, pvp: 6 });
+    const f = window.__fake.doc('folhas/fo006');
+    window.__fake.set('folhas/fo006', { ...f, materiais: [{ id: 'm1', artigoId: 'TC14', ref: 'TC14', descricao: 'Tubo cobre 1/4"', qtd: 10, unidade: 'm' }] });
+  });
+  await page.goto(BASE + '/folhas.html?id=fo006');
+  await page.waitForSelector('#rentMargem');
+  // venda 142,80 + 60 = 202,80; custo 2,5×(15+14+10)=97,50 + 27,70 = 125,20; margem 77,60 (38%)
+  assert((await page.textContent('#rentMargem')).includes('77,60'), 'margem: ' + await page.textContent('#cartaoRent'));
+  await semOverflow(page, 'rentabilidade 375');
+  await captura(page, 'rentabilidade-375');
   await page.click('#btnSair');
   await page.waitForURL(/index\.html/);
   await entrar(page, 'backoffice');
@@ -539,6 +560,7 @@ teste('fase 2: master define preço/hora e vê o valor da mão de obra; backoffi
   await page.waitForSelector('#cartaoTempos');
   await page.waitForTimeout(200);
   igual(await contar(page, '#valorMO'), 0, 'backoffice sem valores');
+  igual(await contar(page, '#cartaoRent'), 0, 'backoffice sem rentabilidade');
   assert(!(await page.textContent('#vDetalhe')).includes('€'), 'backoffice não vê euros');
   const negado = await page.evaluate(async () => {
     try { await window.__fake.lerComoUtilizador('config/precosHora'); return 'lido'; } catch (e) { return e.code; }

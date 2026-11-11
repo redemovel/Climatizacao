@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-11 10:19 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-11 11:31 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -303,6 +303,12 @@ body.pagina-proposta #main { padding-top: 12px; padding-bottom: 24px; }
 .orc-num input { min-height: 38px; padding: 4px 6px; }
 @media (max-width: 480px) { .orc-num { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
+/* Rentabilidade */
+.tab-rent { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.tab-rent th, .tab-rent td { padding: 5px 4px; border-bottom: 1px solid var(--linha); text-align: left; }
+.tab-rent .num { text-align: right; white-space: nowrap; }
+.tab-rent tr.tot td { font-weight: 700; border-bottom: 0; }
+
 </style>
 </head>
 <body class="env-dev pagina-index">
@@ -332,7 +338,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-11 10:19 UTC';
+const BUILD = '2026-11-11 11:31 UTC';
 const PAGINA = 'index';
 
 const FIREBASE_CONFIG = {
