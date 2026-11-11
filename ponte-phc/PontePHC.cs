@@ -932,6 +932,57 @@ class EscritaTeste
         return o;
     }
 
+    // /teste-diferencas SERIE N_TESTE ANO N_ORIGINAL: campos com valores diferentes entre o documento de teste e o original
+    // (cabeçalho, bo2, cada linha pela ordem, bi2) — mostra o que o PHC muda quando grava no ecrã. Só leitura.
+    public List<string> Diferencas(int ndos, long numTeste, int ano, long numOrig)
+    {
+        List<string> o = new List<string>();
+        Dictionary<string, DataTable> t = LerDoc(true, ndos, numTeste, ano), p = LerDoc(false, ndos, numOrig, ano);
+        if (t == null || p == null) { o.Add("Documento nao encontrado (" + (t == null ? BaseTeste : BaseLeitura) + ")."); return o; }
+        foreach (string tab in new string[] { "bo", "bo2", "bo3", "bot", "bi", "bi2" })
+        {
+            DataTable a = t[tab], b = p[tab];
+            int n = Math.Max(a.Rows.Count, b.Rows.Count);
+            if (a.Rows.Count != b.Rows.Count) o.Add(tab + ": " + a.Rows.Count + " registos em " + BaseTeste + ", " + b.Rows.Count + " em " + BaseLeitura);
+            for (int i = 0; i < Math.Min(a.Rows.Count, b.Rows.Count); i++)
+            {
+                List<string> d = new List<string>();
+                foreach (DataColumn c in a.Columns)
+                {
+                    string k = c.ColumnName.ToLowerInvariant();
+                    if (!b.Columns.Contains(c.ColumnName) || k.EndsWith("stamp") || k == "obrano" || k.StartsWith("usr") || k.StartsWith("ousr")) continue;
+                    string va = Convert.ToString(a.Rows[i][c], CultureInfo.InvariantCulture).Trim(), vb = Convert.ToString(b.Rows[i][c.ColumnName], CultureInfo.InvariantCulture).Trim();
+                    if (va != vb) d.Add(c.ColumnName + ": " + BaseTeste + "=" + va + " / " + BaseLeitura + "=" + vb);
+                }
+                if (d.Count > 0)
+                {
+                    o.Add("== " + tab + (tab == "bi" || tab == "bi2" ? " linha " + (i + 1) + (a.Columns.Contains("ref") ? " (" + Convert.ToString(a.Rows[i]["ref"]).Trim() + ")" : "") : ""));
+                    foreach (string x in d) o.Add("   " + x);
+                }
+            }
+        }
+        if (o.Count == 0) o.Add("Sem diferencas (alem de stamps, numero e utilizador).");
+        return o;
+    }
+
+    Dictionary<string, DataTable> LerDoc(bool teste, int ndos, long num, int ano)
+    {
+        using (SqlConnection cn = Abrir(teste))
+        {
+            DataTable bo = Ler(cn, "SELECT * FROM bo WHERE ndos = " + ndos + " AND obrano = " + num + " AND boano = " + ano, "@x", 0);
+            if (bo.Rows.Count == 0) return null;
+            string s = Convert.ToString(bo.Rows[0]["bostamp"]).Trim();
+            Dictionary<string, DataTable> r = new Dictionary<string, DataTable>();
+            r["bo"] = bo;
+            r["bo2"] = Ler(cn, "SELECT * FROM bo2 WHERE bo2stamp = @s", "@s", s);
+            r["bo3"] = Ler(cn, "SELECT * FROM bo3 WHERE bo3stamp = @s", "@s", s);
+            r["bot"] = Ler(cn, "SELECT * FROM bot WHERE bostamp = @s", "@s", s);
+            r["bi"] = Ler(cn, "SELECT * FROM bi WHERE bostamp = @s ORDER BY lordem", "@s", s);
+            r["bi2"] = Ler(cn, "SELECT bi2.* FROM bi2 JOIN bi ON bi.bistamp = bi2.bi2stamp WHERE bi.bostamp = @s ORDER BY bi.lordem", "@s", s);
+            return r;
+        }
+    }
+
     // /teste-gatilhos: o que fazem os gatilhos das tabelas dos dossiers e do stock na base de testes (só leitura)
     public List<string> GatilhosTexto()
     {
@@ -3769,6 +3820,13 @@ static class Programa
                 else Console.WriteLine("EnviarEmails nao esta a 1 no PontePHC.ini: nada e enviado.");
                 return 0;
             }
+            if (cmd == "/teste-diferencas")
+            {
+                if (args.Length < 5) { Console.WriteLine("Uso: PontePHC.exe /teste-diferencas SERIE N_TESTE ANO N_ORIGINAL   (ex.: /teste-diferencas 114 2 2026 1799)"); return 1; }
+                foreach (string v in new EscritaTeste(cfg).Diferencas((int)Numero(args[1]), Numero(args[2]), (int)Numero(args[3]), Numero(args[4]))) Console.WriteLine(v);
+                Console.WriteLine("Nada foi alterado.");
+                return 0;
+            }
             if (cmd == "/teste-gatilhos")
             {
                 foreach (string v in new EscritaTeste(cfg).GatilhosTexto()) Console.WriteLine(v);
@@ -3843,6 +3901,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /teste-ver SERIE N_TESTE ANO [N_ORIGINAL]   Fase 5: mostra o documento de teste e o original lado a lado");
                 Console.WriteLine("  PontePHC.exe /teste-apagar SERIE NUMERO ANO   Fase 5: apaga um documento da base de TESTES");
                 Console.WriteLine("  PontePHC.exe /teste-gatilhos    Fase 5: texto dos gatilhos (triggers) dos dossiers e do stock na base de TESTES");
+                Console.WriteLine("  PontePHC.exe /teste-diferencas SERIE N_TESTE ANO N_ORIGINAL   Fase 5: campos diferentes entre o documento de teste e o original");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
