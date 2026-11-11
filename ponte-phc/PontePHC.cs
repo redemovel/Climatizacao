@@ -847,9 +847,84 @@ class EscritaTeste
             using (SqlCommand c = new SqlCommand("SELECT ndos, nmdos FROM ts ORDER BY ndos", cn))
             using (SqlDataReader r = c.ExecuteReader())
                 while (r.Read()) o.Add("Dossier configurado: " + r["ndos"] + " " + Convert.ToString(r["nmdos"]).Trim());
+            using (SqlConnection p = Abrir(false))
+            {
+                List<string> tp = TabelasU(p), tt = TabelasU(cn);
+                List<string> falta = tp.FindAll(x => !tt.Exists(y => string.Equals(x, y, StringComparison.OrdinalIgnoreCase)));
+                o.Add("Tabelas proprias (U_...) em " + BaseLeitura + ": " + tp.Count + "; em " + BaseTeste + ": " + tt.Count);
+                if (falta.Count > 0) o.Add("  Faltam em " + BaseTeste + ": " + string.Join(", ", falta.ToArray()));
+            }
             using (SqlCommand c = new SqlCommand("SELECT ndos, COUNT(*) n, MAX(obrano) m FROM bo GROUP BY ndos ORDER BY ndos", cn))
             using (SqlDataReader r = c.ExecuteReader())
                 while (r.Read()) o.Add("Documentos da serie " + r["ndos"] + ": " + r["n"] + " (ultimo n.º " + r["m"] + ")");
+        }
+        return o;
+    }
+
+    static List<string> TabelasU(SqlConnection cn)
+    {
+        List<string> l = new List<string>();
+        using (SqlCommand c = new SqlCommand("SELECT name FROM sys.tables WHERE name LIKE 'U[_]%' ORDER BY name", cn))
+        using (SqlDataReader r = c.ExecuteReader()) while (r.Read()) l.Add(r.GetString(0));
+        return l;
+    }
+
+    // /teste-ver SERIE NUMERO ANO: o documento na base de testes e o original lado a lado (só leitura)
+    public List<string> Ver(int ndos, long numTeste, long numOrig, int ano)
+    {
+        List<string> o = new List<string>();
+        string[] cab = { "bostamp", "ndos", "nmdos", "obrano", "boano", "dataobra", "fechada", "no", "estab", "nome", "tabela1", "tabela2", "tecnico", "tecnnm", "etotal", "ousrinis", "usrinis" };
+        string[] lin = { "lordem", "bistamp", "bostamp", "ndos", "obrano", "ref", "design", "qtt", "qtt2", "unidade", "armazem", "epv", "ettdeb", "stns", "fechada", "dataobra", "rdata", "lobs" };
+        foreach (bool teste in new bool[] { true, false })
+        {
+            long num = teste ? numTeste : numOrig;
+            if (num <= 0) continue;
+            using (SqlConnection cn = Abrir(teste))
+            {
+                o.Add("===== " + (teste ? BaseTeste : BaseLeitura) + " · serie " + ndos + " n.º " + num + "/" + ano);
+                DataTable b = Ler(cn, "SELECT * FROM bo WHERE ndos = " + ndos + " AND obrano = " + num + " AND boano = " + ano, "@x", 0);
+                if (b.Rows.Count == 0) { o.Add("(nao existe)"); continue; }
+                foreach (string k in cab) if (b.Columns.Contains(k)) o.Add("  bo." + k + " = " + Convert.ToString(b.Rows[0][k]).Trim());
+                DataTable l = Ler(cn, "SELECT * FROM bi WHERE bostamp = @s ORDER BY lordem", "@s", b.Rows[0]["bostamp"]);
+                o.Add("  linhas (bi): " + l.Rows.Count);
+                foreach (DataRow r in l.Rows)
+                {
+                    List<string> v = new List<string>();
+                    foreach (string k in lin) if (l.Columns.Contains(k)) v.Add(k + "=" + Convert.ToString(r[k]).Trim());
+                    o.Add("   - " + string.Join(" | ", v.ToArray()));
+                }
+                o.Add("  bi2: " + Contar(cn, "SELECT COUNT(*) FROM bi2 WHERE bostamp = '" + Convert.ToString(b.Rows[0]["bostamp"]).Replace("'", "") + "'") +
+                      " · boma: " + Contar(cn, "SELECT COUNT(*) FROM boma WHERE bostamp = '" + Convert.ToString(b.Rows[0]["bostamp"]).Replace("'", "") + "'"));
+            }
+        }
+        return o;
+    }
+
+    // /teste-apagar SERIE NUMERO ANO: apaga um documento de teste (só na base de testes)
+    public List<string> Apagar(int ndos, long num, int ano)
+    {
+        List<string> o = new List<string>();
+        using (SqlConnection t = Abrir(true))
+        using (SqlTransaction tx = t.BeginTransaction())
+        {
+            try
+            {
+                string s;
+                using (SqlCommand c = new SqlCommand("SELECT bostamp FROM bo WHERE ndos = @n AND obrano = @o AND boano = @a", t, tx))
+                {
+                    c.Parameters.AddWithValue("@n", ndos); c.Parameters.AddWithValue("@o", num); c.Parameters.AddWithValue("@a", ano);
+                    s = Convert.ToString(c.ExecuteScalar());
+                }
+                if (string.IsNullOrEmpty(s)) throw new Exception("Nao existe na base de testes.");
+                int n = 0;
+                foreach (string sql in new string[] {
+                    "DELETE FROM boma WHERE bostamp = @s", "DELETE FROM bi2 WHERE bi2stamp IN (SELECT bistamp FROM bi WHERE bostamp = @s)", "DELETE FROM bi WHERE bostamp = @s",
+                    "DELETE FROM bot WHERE bostamp = @s", "DELETE FROM bo3 WHERE bo3stamp = @s", "DELETE FROM bo2 WHERE bo2stamp = @s", "DELETE FROM bo WHERE bostamp = @s" })
+                    using (SqlCommand c = new SqlCommand(sql, t, tx)) { c.Parameters.AddWithValue("@s", s); n += c.ExecuteNonQuery(); }
+                tx.Commit();
+                o.Add("Apagado da base " + BaseTeste + ": serie " + ndos + " n.º " + num + "/" + ano + " (" + n + " registos).");
+            }
+            catch { tx.Rollback(); throw; }
         }
         return o;
     }
@@ -3521,6 +3596,16 @@ static class Programa
                 else Console.WriteLine("EnviarEmails nao esta a 1 no PontePHC.ini: nada e enviado.");
                 return 0;
             }
+            if (cmd == "/teste-ver" || cmd == "/teste-apagar")
+            {
+                if (args.Length < 4) { Console.WriteLine("Uso: PontePHC.exe /teste-ver SERIE N_TESTE ANO [N_ORIGINAL]   ou   /teste-apagar SERIE NUMERO ANO"); return 1; }
+                EscritaTeste et = new EscritaTeste(cfg);
+                List<string> r = cmd == "/teste-ver"
+                    ? et.Ver(int.Parse(args[1]), long.Parse(args[2]), args.Length >= 5 ? long.Parse(args[4]) : 0, int.Parse(args[3]))
+                    : et.Apagar(int.Parse(args[1]), long.Parse(args[2]), int.Parse(args[3]));
+                foreach (string v in r) Console.WriteLine(v);
+                return 0;
+            }
             if (cmd == "/teste-ligacao" || cmd == "/teste-comparar" || cmd == "/teste-clonar")
             {
                 EscritaTeste et = new EscritaTeste(cfg);
@@ -3576,6 +3661,8 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /teste-ligacao     Fase 5: liga a base de testes (BaseTestePHC, omissao TESTE) e mostra o que tem");
                 Console.WriteLine("  PontePHC.exe /teste-comparar    Fase 5: compara colunas e gatilhos das tabelas dos dossiers entre producao e testes");
                 Console.WriteLine("  PontePHC.exe /teste-clonar SERIE NUMERO [ANO]   Fase 5: copia um documento real para a base de TESTES (so la escreve)");
+                Console.WriteLine("  PontePHC.exe /teste-ver SERIE N_TESTE ANO [N_ORIGINAL]   Fase 5: mostra o documento de teste e o original lado a lado");
+                Console.WriteLine("  PontePHC.exe /teste-apagar SERIE NUMERO ANO   Fase 5: apaga um documento da base de TESTES");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
