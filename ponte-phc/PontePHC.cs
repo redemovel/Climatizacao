@@ -893,10 +893,43 @@ class EscritaTeste
                     foreach (string k in lin) if (l.Columns.Contains(k)) v.Add(k + "=" + Convert.ToString(r[k]).Trim());
                     o.Add("   - " + string.Join(" | ", v.ToArray()));
                 }
+                // stock e reservas de cada artigo das linhas (st = total; sa = por armazém)
+                HashSet<string> refs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (DataRow r in l.Rows) { string rf = Convert.ToString(r["ref"]).Trim(); if (rf != "") refs.Add(rf); }
+                foreach (string rf in refs)
+                {
+                    DataTable st = Ler(cn, "SELECT * FROM st WHERE ref = @r", "@r", rf);
+                    List<string> v = new List<string>();
+                    if (st.Rows.Count > 0) foreach (string k in new string[] { "stock", "rescli", "resfor", "qttcli", "qttfor", "stns" }) if (st.Columns.Contains(k)) v.Add(k + "=" + Convert.ToString(st.Rows[0][k]).Trim());
+                    o.Add("  st " + rf + ": " + (st.Rows.Count > 0 ? string.Join(" | ", v.ToArray()) : "(nao existe)"));
+                    DataTable sa = Ler(cn, "SELECT * FROM sa WHERE ref = @r ORDER BY armazem", "@r", rf);
+                    foreach (DataRow r in sa.Rows)
+                    {
+                        List<string> w = new List<string>();
+                        foreach (string k in new string[] { "armazem", "stock", "rescli", "resfor" }) if (sa.Columns.Contains(k)) w.Add(k + "=" + Convert.ToString(r[k]).Trim());
+                        o.Add("     sa " + string.Join(" | ", w.ToArray()));
+                    }
+                }
                 o.Add("  bi2: " + Contar(cn, "SELECT COUNT(*) FROM bi2 WHERE bostamp = '" + Convert.ToString(b.Rows[0]["bostamp"]).Replace("'", "") + "'") +
                       " · boma: " + Contar(cn, "SELECT COUNT(*) FROM boma WHERE bostamp = '" + Convert.ToString(b.Rows[0]["bostamp"]).Replace("'", "") + "'"));
             }
         }
+        return o;
+    }
+
+    // /teste-gatilhos: o que fazem os gatilhos das tabelas dos dossiers e do stock na base de testes (só leitura)
+    public List<string> GatilhosTexto()
+    {
+        List<string> o = new List<string>();
+        using (SqlConnection cn = Abrir(true))
+        using (SqlCommand c = new SqlCommand("SELECT OBJECT_NAME(parent_id) AS tabela, name, OBJECT_DEFINITION(object_id) AS def FROM sys.triggers " +
+            "WHERE OBJECT_NAME(parent_id) IN ('bo','bo2','bo3','bi','bi2','boma','st','sa','sl','ma') ORDER BY 1, 2", cn))
+        using (SqlDataReader r = c.ExecuteReader())
+            while (r.Read())
+            {
+                o.Add("===== " + r["tabela"] + " · " + r["name"]);
+                o.Add(r["def"] == DBNull.Value ? "(texto cifrado ou sem permissao)" : Convert.ToString(r["def"]));
+            }
         return o;
     }
 
@@ -3605,6 +3638,12 @@ static class Programa
                 else Console.WriteLine("EnviarEmails nao esta a 1 no PontePHC.ini: nada e enviado.");
                 return 0;
             }
+            if (cmd == "/teste-gatilhos")
+            {
+                foreach (string v in new EscritaTeste(cfg).GatilhosTexto()) Console.WriteLine(v);
+                Console.WriteLine("Nada foi alterado.");
+                return 0;
+            }
             if (cmd == "/teste-ver" || cmd == "/teste-apagar")
             {
                 if (args.Length < 4) { Console.WriteLine("Uso: PontePHC.exe /teste-ver SERIE N_TESTE ANO [N_ORIGINAL]   ou   /teste-apagar SERIE NUMERO ANO"); return 1; }
@@ -3672,6 +3711,7 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /teste-clonar SERIE NUMERO [ANO]   Fase 5: copia um documento real para a base de TESTES (so la escreve)");
                 Console.WriteLine("  PontePHC.exe /teste-ver SERIE N_TESTE ANO [N_ORIGINAL]   Fase 5: mostra o documento de teste e o original lado a lado");
                 Console.WriteLine("  PontePHC.exe /teste-apagar SERIE NUMERO ANO   Fase 5: apaga um documento da base de TESTES");
+                Console.WriteLine("  PontePHC.exe /teste-gatilhos    Fase 5: texto dos gatilhos (triggers) dos dossiers e do stock na base de TESTES");
                 Console.WriteLine("  PontePHC.exe /valores COLUNA    valores mais frequentes de uma coluna dos clientes (ex.: tipo)");
                 Console.WriteLine("  PontePHC.exe /valores bo.COLUNA SERIE   idem para dossiers (ex.: bo.tabela1 114)");
                 Console.WriteLine("  PontePHC.exe /testar-firebase   testa a ligacao ao Firebase e a chave; nada e enviado");
