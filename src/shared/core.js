@@ -384,6 +384,21 @@ function idSerie(sr) {
 }
 function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
 
+// Procura um n.º de série: onde está a ser usado na plataforma (series/) e, se estiver no armazém AC do PHC
+// (equipamentos/, vindo da tabela MA pela PontePHC), o artigo a que pertence. Só a pedido (2–3 leituras).
+async function procurarSerie(texto) {
+  const t = limparSerie(texto);
+  if (t.length < 3 || /\s/.test(String(texto).trim())) return null;
+  const id = idSerie(t);
+  const [so, se] = await Promise.all([getDoc(doc(db, 'series', id)), getDoc(doc(db, 'equipamentos', id)).catch(() => null)]);
+  const r = { serie: t, uso: so.exists() ? so.data() : null, equip: se && se.exists() ? se.data() : null, artigo: null };
+  if (r.equip) r.serie = r.equip.serie || t;
+  if (r.equip && r.equip.artigoId) {
+    try { const a = await getDoc(doc(db, 'artigos', r.equip.artigoId)); if (a.exists()) r.artigo = { id: a.id, ...a.data() }; } catch (e) { /* sem artigo */ }
+  }
+  return r.uso || r.equip ? r : null;
+}
+
 // Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
 function movLibertarFolha(f) {
   const mov = {};

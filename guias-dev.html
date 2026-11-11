@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 10:03 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-11 10:19 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -345,7 +345,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-09 10:03 UTC';
+const BUILD = '2026-11-11 10:19 UTC';
 const PAGINA = 'guias';
 
 const FIREBASE_CONFIG = {
@@ -718,6 +718,21 @@ function idSerie(sr) {
 }
 function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
 
+// Procura um n.º de série: onde está a ser usado na plataforma (series/) e, se estiver no armazém AC do PHC
+// (equipamentos/, vindo da tabela MA pela PontePHC), o artigo a que pertence. Só a pedido (2–3 leituras).
+async function procurarSerie(texto) {
+  const t = limparSerie(texto);
+  if (t.length < 3 || /\s/.test(String(texto).trim())) return null;
+  const id = idSerie(t);
+  const [so, se] = await Promise.all([getDoc(doc(db, 'series', id)), getDoc(doc(db, 'equipamentos', id)).catch(() => null)]);
+  const r = { serie: t, uso: so.exists() ? so.data() : null, equip: se && se.exists() ? se.data() : null, artigo: null };
+  if (r.equip) r.serie = r.equip.serie || t;
+  if (r.equip && r.equip.artigoId) {
+    try { const a = await getDoc(doc(db, 'artigos', r.equip.artigoId)); if (a.exists()) r.artigo = { id: a.id, ...a.data() }; } catch (e) { /* sem artigo */ }
+  }
+  return r.uso || r.equip ? r : null;
+}
+
 // Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
 function movLibertarFolha(f) {
   const mov = {};
@@ -1086,7 +1101,7 @@ async function formNova(folhaId) {
     </div>
     <div class="cartao">
       <h3 style="margin-top:0">Material (armazém 99)</h3>
-      <div style="display:flex;gap:8px"><input id="gProc" autocomplete="off" placeholder="Procurar referência ou nome"><button class="btn" id="gProcBtn" type="button">Procurar</button></div>
+      <div style="display:flex;gap:8px"><input id="gProc" autocomplete="off" placeholder="Referência, nome ou n.º de série"><button class="btn" id="gProcBtn" type="button">Procurar</button></div>
       <div id="gRes" style="margin-top:8px"></div>
       <div id="gLinhas"></div>
     </div>
@@ -1127,6 +1142,23 @@ async function formNova(folhaId) {
   const procurar = () => comBotao($('#gProcBtn'), async () => {
     const t = $('#gProc').value.trim();
     if (t.length < 2) return;
+    // n.º de série de um equipamento em armazém: acrescenta logo a linha do artigo com esse n.º
+    if (t.length >= 3 && !/\s/.test(t)) {
+      const r = await procurarSerie(t).catch(() => null);
+      if (r && r.uso) { $('#gRes').innerHTML = `<p class="aviso-concl">O n.º de série ${esc(r.uso.serie)} já está ${r.uso.estado === 'guia' ? 'na guia ' + esc(r.uso.guiaNumero || '(por comunicar)') : 'aplicado na ' + esc(r.uso.folhaNumero || 'outra folha')}.</p>`; return; }
+      if (r && r.artigo) {
+        let lin = linhas.find((x) => x.a.id === r.artigo.id);
+        if (!lin) { lin = { a: r.artigo, qtd: 0, series: [] }; linhas.push(lin); }
+        lin.series = (lin.series || []).slice(0, lin.qtd).filter(Boolean);
+        if (lin.series.map(idSerie).includes(idSerie(r.serie))) { toast('Esse n.º de série já está na guia.', 'erro'); return; }
+        lin.series.push(r.serie);
+        lin.qtd = lin.series.length;
+        $('#gRes').innerHTML = ''; $('#gProc').value = '';
+        desenharLinhas();
+        toast(`N.º de série ${r.serie}: ${r.artigo.ref} acrescentado.`, 'ok');
+        return;
+      }
+    }
     const l = await pesquisarArtigos(t).catch((e) => { toast(erroFirebase(e), 'erro'); return []; });
     $('#gRes').innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
       <button type="button" class="artigo-op" data-a="${i}" ${disponivel(x) > 0 ? '' : 'disabled'}><b>${esc(x.ref)}</b> ${esc(x.design)}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`

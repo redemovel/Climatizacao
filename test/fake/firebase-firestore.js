@@ -186,6 +186,7 @@ function regraLer(dbRaw, colecao, id, docRaw, consulta) {
   if (colecao === 'controlo') { if (STAFF.includes(s.perfil)) return; negar('controlo'); }
   if (colecao === 'series') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('series'); }
   if (colecao === 'contratos') { if (STAFF.includes(s.perfil)) return; negar('contratos só staff'); }
+  if (colecao === 'equipamentos') { if (['master', 'backoffice', 'tecnico'].includes(s.perfil)) return; negar('equipamentos'); }
   if (colecao === 'guias' && s.perfil === 'tecnico') {
     if (consulta) { if (consulta.some((c) => c.k === 'where' && c.campo === 'tecnicoUid' && c.op === '==' && c.valor === s.uid)) return; negar('técnico tem de filtrar guias por tecnicoUid'); }
     if (docRaw && docRaw.tecnicoUid === s.uid) return;
@@ -222,6 +223,7 @@ function regraEscrever(dbRaw, path, antes, depois) {
   }
   if (!s.perfil) negar('sem perfil ativo');
   if (colecao === 'orcamentos') { if (s.perfil !== 'master') negar('orçamentos só master'); return; }
+  if (colecao === 'equipamentos') negar('equipamentos: só a PontePHC escreve');
   const staff = STAFF.includes(s.perfil);
   if (colecao === 'utilizadores') {
     if (s.perfil !== 'master') negar('só master gere utilizadores');

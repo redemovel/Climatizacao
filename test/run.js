@@ -1125,6 +1125,35 @@ teste('n.º de série: importar equipamento da guia pelo n.º de série; não se
   semErros(page); await ctx.close();
 });
 
+teste('n.º de série: procurar pelo n.º de um equipamento em armazém (PHC/MA) acrescenta logo o artigo — guia e folha', async () => {
+  for (const vp of MOVEIS) {
+    const { ctx, page } = await contexto({ viewport: vp });
+    await entrar(page, 'tecnico1');
+    await page.goto(BASE + '/folhas.html?id=fo003');
+    await page.click('#btnNovaGuia');
+    await page.waitForSelector('#gViatura');
+    await page.fill('#gProc', 'k777888');
+    await page.click('#gProcBtn');
+    await page.waitForSelector('input[data-sl="0"][data-sk="0"]');
+    igual(await page.inputValue('input[data-sl="0"][data-sk="0"]'), 'K777888', 'n.º de série preenchido');
+    assert((await page.textContent('#gLinhas, .guia-linhas, body')).includes('FTXP35'), 'artigo do n.º de série');
+    await semOverflow(page, 'guia por n.º de série ' + vp.width);
+    await captura(page, 'guia-serie-' + vp.width);
+    semErros(page); await ctx.close();
+  }
+  // na folha (material): o mesmo n.º escolhe o artigo e preenche a série
+  const { ctx, page } = await contexto({ viewport: MOVEIS[0] });
+  await entrar(page, 'master');
+  await page.goto(BASE + '/folhas.html?id=fo003');
+  await page.click('#btnMaterial');
+  await page.fill('#mProc', 'K777888');
+  await page.click('#mProcBtn');
+  await page.waitForSelector('input[data-serie="0"]');
+  igual(await page.inputValue('#mRef'), 'FTXP35', 'artigo escolhido');
+  igual(await page.inputValue('input[data-serie="0"]'), 'K777888', 'série preenchida');
+  semErros(page); await ctx.close();
+});
+
 teste('fase 3: regras — técnico não vê guias de outros nem mexe no stock; custo só Master', async () => {
   const { ctx, page } = await contexto();
   await entrar(page, 'tecnico2');

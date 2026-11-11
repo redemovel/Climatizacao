@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 10:03 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-11 10:19 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -332,7 +332,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'prod';          // 'prod' ou 'dev'
-const BUILD = '2026-11-09 10:03 UTC';
+const BUILD = '2026-11-11 10:19 UTC';
 const PAGINA = 'index';
 
 const FIREBASE_CONFIG = {
@@ -704,6 +704,21 @@ function idSerie(sr) {
   return String(sr || '').toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9._-]/g, (c) => '~' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 }
 function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
+
+// Procura um n.º de série: onde está a ser usado na plataforma (series/) e, se estiver no armazém AC do PHC
+// (equipamentos/, vindo da tabela MA pela PontePHC), o artigo a que pertence. Só a pedido (2–3 leituras).
+async function procurarSerie(texto) {
+  const t = limparSerie(texto);
+  if (t.length < 3 || /\s/.test(String(texto).trim())) return null;
+  const id = idSerie(t);
+  const [so, se] = await Promise.all([getDoc(doc(db, 'series', id)), getDoc(doc(db, 'equipamentos', id)).catch(() => null)]);
+  const r = { serie: t, uso: so.exists() ? so.data() : null, equip: se && se.exists() ? se.data() : null, artigo: null };
+  if (r.equip) r.serie = r.equip.serie || t;
+  if (r.equip && r.equip.artigoId) {
+    try { const a = await getDoc(doc(db, 'artigos', r.equip.artigoId)); if (a.exists()) r.artigo = { id: a.id, ...a.data() }; } catch (e) { /* sem artigo */ }
+  }
+  return r.uso || r.equip ? r : null;
+}
 
 // Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
 function movLibertarFolha(f) {

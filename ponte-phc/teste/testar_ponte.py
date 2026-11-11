@@ -97,6 +97,8 @@ class G(http.server.BaseHTTPRequestHandler):
             if self.headers.get('Authorization') != 'Bearer TOKEN-OK': return self.responder(401, {'error': {'message': 'sem token'}})
             pedido = json.loads(corpo)
             for w in pedido['writes']:
+                if 'delete' in w:
+                    BD.pop(w['delete'].split('/documents/')[1], None); continue
                 nome = w['update']['name'].split('/documents/')[1]
                 doc = BD.setdefault(nome, {})
                 for k in w['updateMask']['fieldPaths']: doc[k] = w['update']['fields'][k]
@@ -308,6 +310,15 @@ arts[1] = arts[1].replace(';120;10;50;', ';100;10;50;').replace('2026-11-01', da
 open(os.path.join(d, 'artigos.csv'), 'w', encoding='utf-8').write('\n'.join(arts) + '\n')
 cod, out = ponte('/sincronizar')
 verifica(BD['artigos/TC14']['stock'] == {'doubleValue': 100} and '1 artigos com alteracoes' in out, 'stock alterado → só esse artigo reenviado')
+
+# 5b2) equipamentos com n.º de série no armazém AC (MA) → equipamentos/{idSerie}; os que saem são retirados
+open(os.path.join(d, 'equipamentos.csv'), 'w', encoding='utf-8').write('serie;ref;design;marca;modelo;armazem\nk 123/45;FTXP35;Ar Condicionado Daikin FTXP35;Daikin;FTXP35M;99\nK999;FTXP35;Ar Condicionado Daikin FTXP35;Daikin;FTXP35M;99\n')
+cod, out = ponte('/sincronizar')
+e = BD.get('equipamentos/K123~2F45', {})
+verifica(e.get('ref') == {'stringValue': 'FTXP35'} and e.get('artigoId') == {'stringValue': 'FTXP35'} and 'equipamentos/K999' in BD, 'equipamentos em armazém pelo n.º de série (id igual ao da plataforma): ' + out[-200:])
+open(os.path.join(d, 'equipamentos.csv'), 'w', encoding='utf-8').write('serie;ref;design;marca;modelo;armazem\nK999;FTXP35;Ar Condicionado Daikin FTXP35;Daikin;FTXP35M;99\n')
+cod, out = ponte('/sincronizar')
+verifica('equipamentos/K123~2F45' not in BD and 'equipamentos/K999' in BD, 'equipamento que saiu do armazém é retirado')
 
 # 5c) emails pedidos pela plataforma (relatório ao cliente), com a assinatura em anexo inline; modo de teste
 try:

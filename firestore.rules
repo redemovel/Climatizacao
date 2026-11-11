@@ -1,5 +1,5 @@
 rules_version = '2';
-// Atualizado: 2026-11-09 — orçamentos (só Master) e propostas públicas (o cliente vê e responde pelo link); agenda Equipa
+// Atualizado: 2026-11-11 — equipamentos em armazém (n.º de série vindos da tabela MA do PHC)
 //
 // Perfis (campo `perfil` em utilizadores/{uid}): master, backoffice, tecnico, comercial (futuro).
 // Só utilizadores com documento de perfil e `ativo == true` acedem a dados.
@@ -266,6 +266,12 @@ service cloud.firestore {
         && request.resource.data.estado in ['guia', 'folha']
         && request.resource.data.uid == request.auth.uid;
       allow delete: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
+    }
+
+    // ---------- Equipamentos com n.º de série no armazém AC (PontePHC, tabela MA): procurar o artigo pelo n.º de série ----------
+    match /equipamentos/{id} {
+      allow read: if ativo() && perfil() in ['master', 'backoffice', 'tecnico'];
+      allow write: if false;
     }
 
     // ---------- Contratos de manutenção ----------

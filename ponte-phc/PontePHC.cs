@@ -608,6 +608,21 @@ class Firestore
         if (r.Estado != 200) throw new Exception("Firestore recusou a gravacao (HTTP " + r.Estado + "): " + ContaServico.Resumir(r.Corpo));
     }
 
+    // Apaga documentos (ids) de uma coleção.
+    public void Apagar(string colecao, List<string> ids)
+    {
+        if (ids.Count == 0) return;
+        StringBuilder sb = new StringBuilder("{\"writes\":[");
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append("{\"delete\":").Append(Json.Texto("projects/" + Projeto + "/databases/(default)/documents/" + colecao + "/" + ids[i])).Append("}");
+        }
+        sb.Append("]}");
+        Resposta r = Https.Pedir(cfg, host, "POST", Base + ":commit", "application/json; charset=utf-8", sb.ToString(), conta.Token());
+        if (r.Estado != 200) throw new Exception("Firestore recusou apagar (HTTP " + r.Estado + "): " + ContaServico.Resumir(r.Corpo));
+    }
+
     // Le varios documentos de uma vez; devolve so os que existem (id -> campos).
     public Dictionary<string, Dictionary<string, object>> LerVarios(string colecao, List<string> ids)
     {
@@ -1597,6 +1612,27 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
     }
 
     // Stock no armazem, reservado em FO abertas (114) e ainda em Guias abertas (111) sem passar para FO.
+    public List<EquipPHC> EquipamentosEmArmazem()
+    {
+        List<EquipPHC> l = new List<EquipPHC>();
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand(
+            "SELECT serie, ref, design, marca, maquina, noarm FROM ma WITH (NOLOCK) WHERE casa = 1 AND noarm = @a AND LTRIM(RTRIM(serie)) <> ''", cn))
+        {
+            c.CommandTimeout = 120;
+            c.Parameters.AddWithValue("@a", ArmazemAC);
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read())
+                {
+                    EquipPHC e = new EquipPHC();
+                    e.Serie = S(r, "serie"); e.Ref = S(r, "ref"); e.Design = S(r, "design"); e.Marca = S(r, "marca"); e.Modelo = S(r, "maquina");
+                    e.Armazem = Convert.ToInt32(r["noarm"]);
+                    l.Add(e);
+                }
+        }
+        return l;
+    }
+
     public List<ArtigoPHC> LerArtigos(List<string> refs)
     {
         List<ArtigoPHC> l = new List<ArtigoPHC>();
@@ -2186,6 +2222,15 @@ interface IFonteArtigos
     // Referencias com alteracoes (ficha, stock ou linhas de FO/guias) desde a data; desde == null: todas as do armazem.
     List<string> ArtigosAlterados(DateTime? desde);
     List<ArtigoPHC> LerArtigos(List<string> refs);
+    // Equipamentos com n.º de série que estão no armazém AC (tabela MA: casa = 1, noarm = ArmazemAC)
+    List<EquipPHC> EquipamentosEmArmazem();
+}
+
+class EquipPHC
+{
+    public string Serie = "", Ref = "", Design = "", Marca = "", Modelo = "";
+    public int Armazem;
+    public string Assinatura() { return string.Join("|", new string[] { Ref, Design, Marca, Modelo, Armazem.ToString(CultureInfo.InvariantCulture) }); }
 }
 
 // So para testes: artigos num CSV (ref;design;unidade;familia;inactivo;stock;reservado;guias;custo;usrdata).
@@ -2219,6 +2264,23 @@ class FonteCsvArtigos : IFonteArtigos
     {
         List<ArtigoPHC> l = new List<ArtigoPHC>();
         foreach (ArtigoPHC a in todos) if (refs.Contains(a.Ref)) l.Add(a);
+        return l;
+    }
+    // equipamentos.csv ao lado dos artigos (serie;ref;design;marca;modelo;armazem)
+    public string FicheiroEquip = "";
+    public List<EquipPHC> EquipamentosEmArmazem()
+    {
+        List<EquipPHC> l = new List<EquipPHC>();
+        if (FicheiroEquip == "" || !File.Exists(FicheiroEquip)) return l;
+        string[] ls = File.ReadAllLines(FicheiroEquip, Encoding.UTF8);
+        for (int i = 1; i < ls.Length; i++)
+        {
+            string[] v = ls[i].Split(';');
+            if (v.Length < 6) continue;
+            EquipPHC e = new EquipPHC();
+            e.Serie = v[0]; e.Ref = v[1]; e.Design = v[2]; e.Marca = v[3]; e.Modelo = v[4]; e.Armazem = int.Parse(v[5]);
+            l.Add(e);
+        }
         return l;
     }
 }
@@ -2867,7 +2929,8 @@ class Motor
             if (fonteArtigos == null)
             {
                 string teste = cfg.Caminho("FonteTesteArtigos");
-                fonteArtigos = teste != "" ? (IFonteArtigos)new FonteCsvArtigos(teste) : (IFonteArtigos)new PhcSql(cfg);
+                if (teste != "") { FonteCsvArtigos fc = new FonteCsvArtigos(teste); fc.FicheiroEquip = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(teste)), "equipamentos.csv"); fonteArtigos = fc; }
+                else fonteArtigos = new PhcSql(cfg);
             }
             return fonteArtigos;
         }
@@ -2882,6 +2945,63 @@ class Motor
             else sb.Append('~').Append(((int)ch).ToString("X2"));
         string id = sb.ToString();
         return id == "." || id == ".." || id == "" ? "~" + id : id;
+    }
+
+    // id do n.º de série igual ao da plataforma (idSerie em core.js): maiúsculas, sem espaços, outros caracteres → ~XX
+    public static string IdSerie(string sr)
+    {
+        StringBuilder b = new StringBuilder();
+        foreach (char ch in (sr ?? "").ToUpperInvariant())
+        {
+            if (char.IsWhiteSpace(ch)) continue;
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-') b.Append(ch);
+            else b.Append('~').Append(((int)ch).ToString("X2"));
+        }
+        return b.ToString();
+    }
+
+    // ---- equipamentos com n.º de série no armazém AC (MA) → equipamentos/{idSerie}: a plataforma encontra o artigo pelo n.º de série
+    public int CicloEquipamentos()
+    {
+        if (!cfg.GetBool("ImportarArtigos", false) || FonteArtigos == null) return 0;
+        bool sim = cfg.Simular || cfg.GetBool("SimularArtigos", false);
+        try
+        {
+            if (fs == null && !sim) fs = new Firestore(cfg);
+            string fCache = Path.Combine(cfg.Pasta, "estado_equipamentos.txt");
+            Dictionary<string, string> cache = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (File.Exists(fCache))
+                foreach (string ln in File.ReadAllLines(fCache, Encoding.UTF8)) { int k = ln.IndexOf('\t'); if (k > 0) cache[ln.Substring(0, k)] = ln.Substring(k + 1); }
+            Dictionary<string, EquipPHC> atuais = new Dictionary<string, EquipPHC>(StringComparer.Ordinal);
+            foreach (EquipPHC e in FonteArtigos.EquipamentosEmArmazem()) { string id = IdSerie(e.Serie); if (id.Length >= 3) atuais[id] = e; }
+            List<Documento> docs = new List<Documento>();
+            foreach (KeyValuePair<string, EquipPHC> kv in atuais)
+            {
+                string ass;
+                if (cache.TryGetValue(kv.Key, out ass) && ass == kv.Value.Assinatura()) continue;
+                EquipPHC e = kv.Value;
+                Documento d = new Documento();
+                d.Id = kv.Key;
+                d.Texto("serie", e.Serie.Trim()); d.Texto("ref", e.Ref); d.Texto("artigoId", IdArtigo(e.Ref)); d.Texto("design", e.Design);
+                d.Texto("marca", e.Marca); d.Texto("modelo", e.Modelo); d.Inteiro("armazem", e.Armazem); d.Bool("emArmazem", true);
+                docs.Add(d);
+            }
+            List<string> sairam = new List<string>();
+            foreach (string id in cache.Keys) if (!atuais.ContainsKey(id)) sairam.Add(id);
+            if (docs.Count + sairam.Count == 0) return 0;
+            int limite = cfg.GetInt("MaxEscritasPorDia", 15000);
+            if (EscritasHoje() + docs.Count + sairam.Count > limite) { Log.Info("Limite diario de escritas atingido; os equipamentos continuam amanha."); return 0; }
+            if (sim) { Log.Info("SIMULACAO: " + docs.Count + " equipamentos em armazem a enviar, " + sairam.Count + " a retirar."); return docs.Count; }
+            for (int i = 0; i < docs.Count; i += 200) fs.Gravar("equipamentos", docs.GetRange(i, Math.Min(200, docs.Count - i)));
+            for (int i = 0; i < sairam.Count; i += 200) fs.Apagar("equipamentos", sairam.GetRange(i, Math.Min(200, sairam.Count - i)));
+            ContarEscritas(docs.Count + sairam.Count);
+            StringBuilder sb = new StringBuilder();
+            foreach (KeyValuePair<string, EquipPHC> kv in atuais) sb.Append(kv.Key).Append('\t').Append(kv.Value.Assinatura()).Append("\r\n");
+            File.WriteAllText(fCache, sb.ToString(), Encoding.UTF8);
+            Log.Info("Equipamentos em armazem: " + docs.Count + " enviados, " + sairam.Count + " retirados (" + atuais.Count + " no armazem " + cfg.GetInt("ArmazemAC", 99) + ").");
+            return docs.Count;
+        }
+        catch (Exception e) { Log.Erro("Falha nos equipamentos (MA): " + e.Message); return 0; }
     }
 
     public int CicloArtigos()
@@ -3029,6 +3149,7 @@ class Motor
         Ciclo();
         CicloFolhas();
         CicloArtigos();
+        CicloEquipamentos();
         CicloEmails();
         CicloPropostas();
         CicloDuracoes(false);
@@ -3456,6 +3577,14 @@ static class Programa
         return 0;
     }
 
+    // aceita «1799», «FO-2026-1799» ou «1799/2026» (fica com o último grupo de algarismos)
+    static long Numero(string x)
+    {
+        MatchCollection m = Regex.Matches(x ?? "", "[0-9]+");
+        if (m.Count == 0) throw new Exception("«" + x + "» nao e um numero. Exemplo: /teste-clonar 114 1799 2026");
+        return long.Parse(m[x.Contains("/") ? 0 : m.Count - 1].Value);
+    }
+
     static int Main(string[] args)
     {
         string pasta = AppDomain.CurrentDomain.BaseDirectory;
@@ -3607,6 +3736,8 @@ static class Programa
                 int n = m.Ciclo();
                 int nf = m.CicloFolhas();
                 int na = m.CicloArtigos();
+                int neq = m.CicloEquipamentos();
+                if (neq > 0) Console.WriteLine(neq + " equipamentos em armazem enviados.");
                 int ne = m.CicloEmails();
                 int np = m.CicloPropostas();
                 if (np > 0) Console.WriteLine(np + " respostas a propostas.");
@@ -3649,8 +3780,8 @@ static class Programa
                 if (args.Length < 4) { Console.WriteLine("Uso: PontePHC.exe /teste-ver SERIE N_TESTE ANO [N_ORIGINAL]   ou   /teste-apagar SERIE NUMERO ANO"); return 1; }
                 EscritaTeste et = new EscritaTeste(cfg);
                 List<string> r = cmd == "/teste-ver"
-                    ? et.Ver(int.Parse(args[1]), long.Parse(args[2]), args.Length >= 5 ? long.Parse(args[4]) : 0, int.Parse(args[3]))
-                    : et.Apagar(int.Parse(args[1]), long.Parse(args[2]), int.Parse(args[3]));
+                    ? et.Ver((int)Numero(args[1]), Numero(args[2]), args.Length >= 5 ? Numero(args[4]) : 0, (int)Numero(args[3]))
+                    : et.Apagar((int)Numero(args[1]), Numero(args[2]), (int)Numero(args[3]));
                 foreach (string v in r) Console.WriteLine(v);
                 return 0;
             }
@@ -3663,7 +3794,7 @@ static class Programa
                 else
                 {
                     if (args.Length < 3) { Console.WriteLine("Uso: PontePHC.exe /teste-clonar SERIE NUMERO [ANO]   (ex.: /teste-clonar 114 1788 2026)"); return 1; }
-                    r = et.Clonar(int.Parse(args[1]), long.Parse(args[2]), args.Length >= 4 ? int.Parse(args[3]) : 0);
+                    r = et.Clonar((int)Numero(args[1]), Numero(args[2]), args.Length >= 4 ? (int)Numero(args[3]) : 0);
                 }
                 foreach (string v in r) Console.WriteLine(v);
                 if (cmd != "/teste-clonar") Console.WriteLine("Nada foi alterado.");

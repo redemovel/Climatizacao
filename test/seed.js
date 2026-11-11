@@ -147,6 +147,8 @@ function gerar() {
   const COD2 = 'Zz3dEf6hJk9mNp2qRs5tUv8wXy4zAb7c';
   db['propostas/' + COD2] = { ...db['propostas/' + COD], orcamentoId: 'o2', numero: `ORC-${ano}-0002`, validade: ts(dia(-1, 0)) };
   db['contadores/orcamentos-' + ano] = { valor: 2 };
+  // equipamentos em armazém (PontePHC, tabela MA)
+  db['equipamentos/K777888'] = { serie: 'K777888', ref: 'FTXP35', artigoId: 'FTXP35', design: 'Ar Condicionado Daikin FTXP35', marca: 'Daikin', modelo: 'FTXP35M', armazem: 99, emArmazem: true };
   // duração real (PontePHC): cli006 em Instalação 3 h (4 intervenções); por tipo AT 1,5 h
   db['listas/duracoes'] = { porTipo: { AT: { h: 1.5, n: 40 }, 'Manutenção': { h: 2, n: 30 }, 'Instalação': { h: 5, n: 12 } },
     porCliente: { cli006: { 'Instalação': { h: 3, n: 4 } } }, folhas: 82 };

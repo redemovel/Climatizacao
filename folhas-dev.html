@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-09 10:03 UTC -->
+<!-- GERADO por build.js a partir de src/ — não editar este ficheiro diretamente. Build 2026-11-11 10:19 UTC -->
 <html lang="pt-PT">
 <head>
 <meta charset="utf-8">
@@ -347,7 +347,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 
 const ENV = 'dev';          // 'prod' ou 'dev'
-const BUILD = '2026-11-09 10:03 UTC';
+const BUILD = '2026-11-11 10:19 UTC';
 const PAGINA = 'folhas';
 
 const FIREBASE_CONFIG = {
@@ -719,6 +719,21 @@ function idSerie(sr) {
   return String(sr || '').toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9._-]/g, (c) => '~' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 }
 function limparSerie(sr) { return String(sr || '').trim().toUpperCase().replace(/\s+/g, ''); }
+
+// Procura um n.º de série: onde está a ser usado na plataforma (series/) e, se estiver no armazém AC do PHC
+// (equipamentos/, vindo da tabela MA pela PontePHC), o artigo a que pertence. Só a pedido (2–3 leituras).
+async function procurarSerie(texto) {
+  const t = limparSerie(texto);
+  if (t.length < 3 || /\s/.test(String(texto).trim())) return null;
+  const id = idSerie(t);
+  const [so, se] = await Promise.all([getDoc(doc(db, 'series', id)), getDoc(doc(db, 'equipamentos', id)).catch(() => null)]);
+  const r = { serie: t, uso: so.exists() ? so.data() : null, equip: se && se.exists() ? se.data() : null, artigo: null };
+  if (r.equip) r.serie = r.equip.serie || t;
+  if (r.equip && r.equip.artigoId) {
+    try { const a = await getDoc(doc(db, 'artigos', r.equip.artigoId)); if (a.exists()) r.artigo = { id: a.id, ...a.data() }; } catch (e) { /* sem artigo */ }
+  }
+  return r.uso || r.equip ? r : null;
+}
 
 // Ao faturar/anular uma folha, o material dela deixa de estar reservado na plataforma.
 function movLibertarFolha(f) {
@@ -1764,7 +1779,7 @@ function formMaterial() {
   let seriesIniciais = [];
   const c = abrirModal('Registar material', `
     <label class="campo"><span>Procurar no stock (referência, nome ou n.º de série)</span>
-      <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Ex.: tubo cobre 1/4"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
+      <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Referência, nome ou n.º de série"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
     <div id="mRes"></div>
     <div id="mEscolhido"></div>
     <label class="campo"><span>Descrição *</span><input id="mDesc" maxlength="200" placeholder="Ou escreva, se não for material do stock"></label>
@@ -1807,16 +1822,17 @@ function formMaterial() {
     const t = $('#mProc', c).value.trim();
     if (t.length < 2) return;
     try {
-      // 1.º: é um n.º de série já conhecido (numa guia ou noutra folha)?
-      if (t.length >= 4 && !/\s/.test(t)) {
-        const sd = await getDoc(doc(db, 'series', idSerie(t)));
-        if (sd.exists()) {
-          const x = sd.data();
+      // 1.º: é um n.º de série? (já usado numa guia/folha, ou em armazém no PHC → artigo encontrado de imediato)
+      if (t.length >= 3 && !/\s/.test(t)) {
+        const r = await procurarSerie(t);
+        if (r && r.uso) {
+          const x = r.uso;
           $('#mRes', c).innerHTML = x.estado === 'guia'
             ? `<p class="aviso-concl">O n.º de série ${esc(x.serie)} está na guia ${esc(x.guiaNumero || '(por comunicar)')}. Use «Importar da guia».</p>`
             : `<p class="aviso-concl">O n.º de série ${esc(x.serie)} já foi aplicado na ${esc(x.folhaNumero || 'outra folha')}.</p>`;
           return;
         }
+        if (r && r.artigo) { escolher(r.artigo, r.serie); toast(`N.º de série ${r.serie}: ${r.artigo.ref} (em armazém).`, 'ok'); return; }
       }
       const l = await pesquisarArtigos(t);
       $('#mRes', c).innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `

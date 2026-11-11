@@ -211,7 +211,7 @@ async function formNova(folhaId) {
     </div>
     <div class="cartao">
       <h3 style="margin-top:0">Material (armazém 99)</h3>
-      <div style="display:flex;gap:8px"><input id="gProc" autocomplete="off" placeholder="Procurar referência ou nome"><button class="btn" id="gProcBtn" type="button">Procurar</button></div>
+      <div style="display:flex;gap:8px"><input id="gProc" autocomplete="off" placeholder="Referência, nome ou n.º de série"><button class="btn" id="gProcBtn" type="button">Procurar</button></div>
       <div id="gRes" style="margin-top:8px"></div>
       <div id="gLinhas"></div>
     </div>
@@ -252,6 +252,23 @@ async function formNova(folhaId) {
   const procurar = () => comBotao($('#gProcBtn'), async () => {
     const t = $('#gProc').value.trim();
     if (t.length < 2) return;
+    // n.º de série de um equipamento em armazém: acrescenta logo a linha do artigo com esse n.º
+    if (t.length >= 3 && !/\s/.test(t)) {
+      const r = await procurarSerie(t).catch(() => null);
+      if (r && r.uso) { $('#gRes').innerHTML = `<p class="aviso-concl">O n.º de série ${esc(r.uso.serie)} já está ${r.uso.estado === 'guia' ? 'na guia ' + esc(r.uso.guiaNumero || '(por comunicar)') : 'aplicado na ' + esc(r.uso.folhaNumero || 'outra folha')}.</p>`; return; }
+      if (r && r.artigo) {
+        let lin = linhas.find((x) => x.a.id === r.artigo.id);
+        if (!lin) { lin = { a: r.artigo, qtd: 0, series: [] }; linhas.push(lin); }
+        lin.series = (lin.series || []).slice(0, lin.qtd).filter(Boolean);
+        if (lin.series.map(idSerie).includes(idSerie(r.serie))) { toast('Esse n.º de série já está na guia.', 'erro'); return; }
+        lin.series.push(r.serie);
+        lin.qtd = lin.series.length;
+        $('#gRes').innerHTML = ''; $('#gProc').value = '';
+        desenharLinhas();
+        toast(`N.º de série ${r.serie}: ${r.artigo.ref} acrescentado.`, 'ok');
+        return;
+      }
+    }
     const l = await pesquisarArtigos(t).catch((e) => { toast(erroFirebase(e), 'erro'); return []; });
     $('#gRes').innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
       <button type="button" class="artigo-op" data-a="${i}" ${disponivel(x) > 0 ? '' : 'disabled'}><b>${esc(x.ref)}</b> ${esc(x.design)}<span class="${disponivel(x) > 0 ? 'disp' : 'disp zero'}">${esc(fmtQtd(disponivel(x)))} ${esc(x.unidade || '')} disp.</span></button>`).join('')}</div>`

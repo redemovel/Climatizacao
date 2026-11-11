@@ -232,7 +232,7 @@ function formMaterial() {
   let seriesIniciais = [];
   const c = abrirModal('Registar material', `
     <label class="campo"><span>Procurar no stock (referência, nome ou n.º de série)</span>
-      <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Ex.: tubo cobre 1/4"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
+      <div style="display:flex;gap:8px"><input id="mProc" autocomplete="off" placeholder="Referência, nome ou n.º de série"><button class="btn" id="mProcBtn" type="button">Procurar</button></div></label>
     <div id="mRes"></div>
     <div id="mEscolhido"></div>
     <label class="campo"><span>Descrição *</span><input id="mDesc" maxlength="200" placeholder="Ou escreva, se não for material do stock"></label>
@@ -275,16 +275,17 @@ function formMaterial() {
     const t = $('#mProc', c).value.trim();
     if (t.length < 2) return;
     try {
-      // 1.º: é um n.º de série já conhecido (numa guia ou noutra folha)?
-      if (t.length >= 4 && !/\s/.test(t)) {
-        const sd = await getDoc(doc(db, 'series', idSerie(t)));
-        if (sd.exists()) {
-          const x = sd.data();
+      // 1.º: é um n.º de série? (já usado numa guia/folha, ou em armazém no PHC → artigo encontrado de imediato)
+      if (t.length >= 3 && !/\s/.test(t)) {
+        const r = await procurarSerie(t);
+        if (r && r.uso) {
+          const x = r.uso;
           $('#mRes', c).innerHTML = x.estado === 'guia'
             ? `<p class="aviso-concl">O n.º de série ${esc(x.serie)} está na guia ${esc(x.guiaNumero || '(por comunicar)')}. Use «Importar da guia».</p>`
             : `<p class="aviso-concl">O n.º de série ${esc(x.serie)} já foi aplicado na ${esc(x.folhaNumero || 'outra folha')}.</p>`;
           return;
         }
+        if (r && r.artigo) { escolher(r.artigo, r.serie); toast(`N.º de série ${r.serie}: ${r.artigo.ref} (em armazém).`, 'ok'); return; }
       }
       const l = await pesquisarArtigos(t);
       $('#mRes', c).innerHTML = l.length ? `<div class="lista-artigos">${l.map((x, i) => `
