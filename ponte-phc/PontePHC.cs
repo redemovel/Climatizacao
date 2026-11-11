@@ -983,6 +983,66 @@ class EscritaTeste
         }
     }
 
+    // /teste-preparar: cria na base de testes as tabelas próprias (U_…) e as colunas que existem na produção e lá faltam.
+    // Só a estrutura (sem dados); só na base de testes; numa transação.
+    public List<string> Preparar()
+    {
+        List<string> o = new List<string>();
+        using (SqlConnection p = Abrir(false))
+        using (SqlConnection t = Abrir(true))
+        using (SqlTransaction tx = t.BeginTransaction())
+        {
+            try
+            {
+                List<string> tp = TabelasU(p);
+                List<string> tt = new List<string>();
+                using (SqlCommand c = new SqlCommand("SELECT name FROM sys.tables WHERE name LIKE 'U[_]%'", t, tx))
+                using (SqlDataReader r = c.ExecuteReader()) while (r.Read()) tt.Add(r.GetString(0));
+                foreach (string tab in tp)
+                {
+                    if (tt.Exists(x => string.Equals(x, tab, StringComparison.OrdinalIgnoreCase))) continue;
+                    using (SqlCommand c = new SqlCommand("SELECT TOP 0 * INTO dbo.[" + tab + "] FROM [" + BaseLeitura + "].dbo.[" + tab + "]", t, tx)) c.ExecuteNonQuery();
+                    o.Add("Tabela criada: " + tab);
+                }
+                foreach (string tab in new string[] { "bo", "bo2", "bo3", "bot", "bi", "bi2", "boma", "ma", "cl", "st", "sa" })
+                {
+                    DataTable cp = Ler(p, "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE, COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t", "@t", tab);
+                    HashSet<string> ct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    using (SqlCommand c = new SqlCommand("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @t", t, tx))
+                    {
+                        c.Parameters.AddWithValue("@t", tab);
+                        using (SqlDataReader r = c.ExecuteReader()) while (r.Read()) ct.Add(r.GetString(0));
+                    }
+                    List<string> novas = new List<string>();
+                    foreach (DataRow r in cp.Rows)
+                    {
+                        string col = Convert.ToString(r["COLUMN_NAME"]);
+                        if (ct.Contains(col)) continue;
+                        string tipo = Convert.ToString(r["DATA_TYPE"]).ToLowerInvariant();
+                        if (tipo == "timestamp" || tipo == "rowversion") continue;
+                        if (tipo.EndsWith("char") || tipo.EndsWith("binary"))
+                        {
+                            int n = r["CHARACTER_MAXIMUM_LENGTH"] == DBNull.Value ? 1 : Convert.ToInt32(r["CHARACTER_MAXIMUM_LENGTH"]);
+                            tipo += "(" + (n < 0 ? "max" : n.ToString(CultureInfo.InvariantCulture)) + ")";
+                        }
+                        else if (tipo == "decimal" || tipo == "numeric") tipo += "(" + r["NUMERIC_PRECISION"] + "," + r["NUMERIC_SCALE"] + ")";
+                        string def = Convert.ToString(r["COLUMN_DEFAULT"]);
+                        bool nulo = Convert.ToString(r["IS_NULLABLE"]) == "YES" || def == "";
+                        string sql = "ALTER TABLE dbo.[" + tab + "] ADD [" + col + "] " + tipo + (nulo ? " NULL" : " NOT NULL") + (def != "" ? " DEFAULT " + def : "");
+                        using (SqlCommand c = new SqlCommand(sql, t, tx)) c.ExecuteNonQuery();
+                        novas.Add(col);
+                    }
+                    if (novas.Count > 0) o.Add(tab + ": " + novas.Count + " colunas acrescentadas (" + string.Join(", ", novas.ToArray()) + ")");
+                }
+                tx.Commit();
+                if (o.Count == 0) o.Add("A base de testes ja tinha todas as tabelas e colunas.");
+                o.Add("So a estrutura foi criada (sem dados). Os separadores e botoes do ecra da FO no PHC continuam a ser configuracao do PHC.");
+            }
+            catch { tx.Rollback(); throw; }
+        }
+        return o;
+    }
+
     // /teste-gatilhos: o que fazem os gatilhos das tabelas dos dossiers e do stock na base de testes (só leitura)
     public List<string> GatilhosTexto()
     {
@@ -1153,7 +1213,39 @@ class EscritaTeste
                         linhas++;
                     }
                 }
+                // tabelas próprias (U_…, ex.: tempos e valores da NetWorker) ligadas ao documento pelo bostamp
+                int nU = 0;
+                List<string> tabsU;
+                using (SqlConnection p = Abrir(false)) tabsU = TabelasU(p);
+                foreach (string tab in tabsU)
+                {
+                    List<string> cols = Colunas(t, tx, tab);
+                    if (cols.Count == 0 || !cols.Exists(x => string.Equals(x, "bostamp", StringComparison.OrdinalIgnoreCase))) continue;
+                    DataTable d;
+                    using (SqlConnection p = Abrir(false)) d = Ler(p, "SELECT * FROM [" + tab + "] WHERE bostamp = @s", "@s", oldBo);
+                    foreach (DataRow r in d.Rows)
+                    {
+                        Dictionary<string, object> v = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                        foreach (DataColumn dc in d.Columns)
+                        {
+                            if (!cols.Exists(x => string.Equals(x, dc.ColumnName, StringComparison.OrdinalIgnoreCase))) continue;
+                            object val = r[dc];
+                            string nome = dc.ColumnName.ToLowerInvariant();
+                            if (nome.EndsWith("stamp") && val is string)
+                            {
+                                string sv = ((string)val).Trim(), nv;
+                                if (mapa.TryGetValue(sv, out nv)) val = nv;
+                                else if (nome == tab.ToLowerInvariant() + "stamp") val = NovoStamp();
+                            }
+                            else if (nome == "obrano" && Convert.ToInt64(val) == obrano) val = novo;
+                            v[dc.ColumnName] = val;
+                        }
+                        Inserir(t, tx, "[" + tab + "]", v);
+                        nU++;
+                    }
+                }
                 tx.Commit();
+                if (nU > 0) o.Add(nU + " registos das tabelas proprias (U_…) copiados (ex.: tempos da NetWorker).");
                 o.Add("Criado em " + BaseTeste + ": " + Convert.ToString(cab["nmdos"]).Trim() + " n.º " + novo + "/" + boano + " (copia do n.º " + obrano + " de " + BaseLeitura + ")");
                 o.Add("bostamp " + newBo + " · " + orig["bi"].Rows.Count + " linhas · " + orig["boma"].Rows.Count + " n.º de serie (boma) · " + linhas + " registos gravados");
                 o.Add("Copiados para a base de testes: " + nCl + " cliente(s), " + nSt + " artigo(s).");
@@ -1216,6 +1308,27 @@ class PhcSql : IFonteClientes, IFonteFolhas, IFonteArtigos
         SqlConnection cn = new SqlConnection(b.ConnectionString);
         cn.Open();
         return cn;
+    }
+
+    // /reservas-fo: linhas das FO abertas por origem (NetWorker ou PHC), armazém, serviço e «rescli» — só leitura
+    public List<string> ReservasFO()
+    {
+        List<string> o = new List<string>();
+        using (SqlConnection cn = Abrir())
+        using (SqlCommand c = new SqlCommand(
+            "SELECT CASE WHEN bi.bistamp LIKE 'NW%' THEN 'NetWorker' ELSE 'PHC/outro' END AS origem, bi.armazem, bi.stns, bi.rescli, COUNT(*) AS n, SUM(bi.qtt) AS q " +
+            "FROM bi WITH (NOLOCK) JOIN bo WITH (NOLOCK) ON bo.bostamp = bi.bostamp " +
+            "WHERE bo.ndos = @n AND bo.fechada = 0 AND LTRIM(RTRIM(bi.ref)) <> '' " +
+            "GROUP BY CASE WHEN bi.bistamp LIKE 'NW%' THEN 'NetWorker' ELSE 'PHC/outro' END, bi.armazem, bi.stns, bi.rescli ORDER BY 1, 2, 3, 4", cn))
+        {
+            c.Parameters.AddWithValue("@n", cfg.GetInt("SerieFolhas", 114));
+            o.Add("Linhas com artigo das FO abertas (serie " + cfg.GetInt("SerieFolhas", 114) + "):");
+            o.Add("origem | armazem | servico | reservada (rescli) | linhas | quantidade");
+            using (SqlDataReader r = c.ExecuteReader())
+                while (r.Read())
+                    o.Add(r["origem"] + " | " + r["armazem"] + " | " + (Convert.ToBoolean(r["stns"]) ? "sim" : "nao") + " | " + (Convert.ToBoolean(r["rescli"]) ? "SIM" : "nao") + " | " + r["n"] + " | " + Convert.ToDecimal(r["q"]).ToString("0.###", CultureInfo.InvariantCulture));
+        }
+        return o;
     }
 
     // Usa so as colunas que existem nesta versao do PHC.
@@ -3820,6 +3933,19 @@ static class Programa
                 else Console.WriteLine("EnviarEmails nao esta a 1 no PontePHC.ini: nada e enviado.");
                 return 0;
             }
+            if (cmd == "/teste-preparar")
+            {
+                foreach (string v in new EscritaTeste(cfg).Preparar()) Console.WriteLine(v);
+                return 0;
+            }
+            if (cmd == "/reservas-fo")
+            {
+                PhcSql sql = m.Fonte as PhcSql;
+                if (sql == null) { Console.WriteLine("So funciona com o SQL do PHC."); return 1; }
+                foreach (string v in sql.ReservasFO()) Console.WriteLine(v);
+                Console.WriteLine("Nada foi alterado.");
+                return 0;
+            }
             if (cmd == "/teste-diferencas")
             {
                 if (args.Length < 5) { Console.WriteLine("Uso: PontePHC.exe /teste-diferencas SERIE N_TESTE ANO N_ORIGINAL   (ex.: /teste-diferencas 114 2 2026 1799)"); return 1; }
@@ -3895,6 +4021,8 @@ static class Programa
                 Console.WriteLine("  PontePHC.exe /emails            emails da plataforma (pendentes, com erro, enviados) e envia os pendentes");
                 Console.WriteLine("  PontePHC.exe /estrutura SERIE   colunas, gatilhos e ultimos documentos de uma serie (preparacao da Fase 5)");
                 Console.WriteLine("  PontePHC.exe /duracoes          calcula ja a duracao real media das intervencoes (normalmente 1 vez por dia)");
+                Console.WriteLine("  PontePHC.exe /reservas-fo       linhas das FO abertas: quais reservam material no PHC (rescli), da NetWorker e do PHC");
+                Console.WriteLine("  PontePHC.exe /teste-preparar    Fase 5: cria na base de TESTES as tabelas U_ e colunas que faltam (so estrutura)");
                 Console.WriteLine("  PontePHC.exe /teste-ligacao     Fase 5: liga a base de testes (BaseTestePHC, omissao TESTE) e mostra o que tem");
                 Console.WriteLine("  PontePHC.exe /teste-comparar    Fase 5: compara colunas e gatilhos das tabelas dos dossiers entre producao e testes");
                 Console.WriteLine("  PontePHC.exe /teste-clonar SERIE NUMERO [ANO]   Fase 5: copia um documento real para a base de TESTES (so la escreve)");
